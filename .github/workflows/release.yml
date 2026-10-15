@@ -29,22 +29,29 @@ jobs:
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
+        id: check
         run: |
-          git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1 && exit 0 || true
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create Git tag
+        if: steps.check.outputs.exists == 'false'
         run: |
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Read README.md
-        id: readme
+        if: steps.check.outputs.exists == 'false'
         run: |
           echo "body<<EOF" >> $GITHUB_ENV
           cat README.md >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
