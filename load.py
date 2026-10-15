@@ -18,8 +18,9 @@ def plugin_start3(plugin_dir):
 
 
 def plugin_app(parent):
-    gui_inst.build_plugin_button(parent)
-    return parent
+    # EDMC grids this widget into the main window. The parent frame is
+    # EDMC's own row; return the button bar that belongs inside it.
+    return gui_inst.build_plugin_button(parent)
 
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:

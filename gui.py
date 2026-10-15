@@ -78,40 +78,41 @@ class SeenCommandersGUI:
     
 
     def build_plugin_button(self, parent):
+        # Leave this frame unmanaged. EDMC grids the widget plugin_app returns.
+        # Packing it here, or raising while it is built, makes EDMC drop the row.
         container = tk.Frame(parent)
-        container.pack(padx=5, pady=5)
-    
+
         btn_show = tk.Button(
             container,
             text="Beep Beep",
             command=lambda: self.open(parent)
         )
-        btn_show.pack(side="left")
-    
+        btn_show.pack(side="left", padx=(5, 0), pady=5)
+
+        mute_btn = tk.Button(container, width=3)
+        mute_btn.pack(side="left", padx=(4, 5), pady=5)
+        # Capture the theme color. The Windows system button color is not valid
+        # on Linux Tk, and that error aborts plugin_app before the row is shown.
+        idle_bg = mute_btn.cget("bg")
+        idle_fg = mute_btn.cget("fg")
+
         def update_mute_button(muted):
             mute_btn.config(
                 text="🔇" if muted else "🔊",
-                bg="lightgrey" if muted else "SystemButtonFace",
-                fg="black",
+                bg="lightgrey" if muted else idle_bg,
+                fg="black" if muted else idle_fg,
                 relief="sunken" if muted else "raised"
             )
-    
+
         def toggle_mute():
             new_value = not config.get_config("mute", False)
             config.set_config("mute", new_value)
             config.save_config()
             update_mute_button(new_value)
-    
-        muted = config.get_config("mute", False)
-    
-        mute_btn = tk.Button(
-            container,
-            width=2,
-            command=toggle_mute
-        )
-        mute_btn.pack(side="left", padx=(4, 0))
-        update_mute_button(muted)
-    
+
+        mute_btn.config(command=toggle_mute)
+        update_mute_button(config.get_config("mute", False))
+
         return container
 
 
