@@ -1,0 +1,16 @@
+name: Linux main window
+
+on:
+  push:
+    branches: [linux-ui-check]
+  workflow_dispatch:
+
+jobs:
+  edmc-row:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux Tk
+        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb
+      - name: Place the Beep Beep row the way EDMC does
+        run: xvfb-run -a python3 tests/linux_main_window.py
