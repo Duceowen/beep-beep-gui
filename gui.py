@@ -14,6 +14,58 @@ try:
 except Exception:
     edmc_theme = None
 
+
+_WIN_DATETIME_FMT = None
+
+
+def _winpattern_to_strftime(pattern):
+    _y = lambda n: "%y"
+    _M = lambda n: {1: "%#m", 2: "%m", 3: "%b", 4: "%B"}.get(n, "%m")
+    _d = lambda n: {1: "%#d", 2: "%d", 3: "%a", 4: "%A"}.get(n, "%d")
+    _H = lambda n: {1: "%#H", 2: "%H"}.get(n, "%H")
+    _h = lambda n: {1: "%#I", 2: "%I"}.get(n, "%I")
+    _m = lambda n: {1: "%#M", 2: "%M"}.get(n, "%M")
+    _s = lambda n: {1: "%#S", 2: "%S"}.get(n, "%S")
+    tokens = {"y": _y, "M": _M, "d": _d, "H": _H, "h": _h, "m": _m, "s": _s, "t": lambda n: "%p"}
+    out = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        j = i
+        while j < n and pattern[j] == ch:
+            j += 1
+        run = j - i
+        if ch in tokens:
+            out.append(tokens[ch](run))
+        elif not ch.isalpha():
+            out.append(pattern[i:j].replace("%", "%%"))
+        i = j
+    return "".join(out)
+
+
+def _win_datetime_format():
+    global _WIN_DATETIME_FMT
+    if _WIN_DATETIME_FMT is not None:
+        return _WIN_DATETIME_FMT
+    pattern = None
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\International") as key:
+                def q(name, default=""):
+                    try:
+                        return winreg.QueryValueEx(key, name)[0]
+                    except OSError:
+                        return default
+                date_fmt = q("sShortDate", "M/d/yyyy")
+                time_fmt = q("sShortTime") or q("sTimeFormat", "h:mm tt")
+            pattern = _winpattern_to_strftime(date_fmt) + " " + _winpattern_to_strftime(time_fmt)
+        except Exception:
+            pattern = None
+    _WIN_DATETIME_FMT = pattern or "%x %X"
+    return _WIN_DATETIME_FMT
+
+
 class ThemedScrollbar(tk.Canvas):
     def __init__(self, master, command=None, background="grey4", foreground="#13ec39",
                  activebackground="#13ec39", width=14, **kw):
@@ -147,26 +199,13 @@ class SeenCommandersGUI:
         self.refresh_gui()
 
 
-    def format_time_ago(self, ts_iso: str) -> str:
+    def format_last_seen(self, ts_iso: str) -> str:
         try:
             ts = datetime.fromisoformat(ts_iso)
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
-            now = datetime.now(timezone.utc)
-            delta = now - ts
-
-            seconds = int(delta.total_seconds())
-            minutes, sec = divmod(seconds, 60)
-            hours, minutes = divmod(minutes, 60)
-            days, hours = divmod(hours, 24)
-
-            if days > 0:
-                return f"{days} d {hours} h ago"
-            if hours > 0:
-                return f"{hours} h {minutes} min ago"
-            if minutes > 0:
-                return f"{minutes} min {sec} s ago"
-            return f"{seconds} s ago"
+            local = ts.astimezone()
+            return local.strftime(_win_datetime_format())
         
         except (ValueError, TypeError):
             return ts_iso            
@@ -868,7 +907,7 @@ class SeenCommandersGUI:
                 self.sound_vars[cmdr_id] = tk.StringVar(value=sound_key)
 
 
-            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.format_time_ago(info.get("last_seen"))))
+            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.format_last_seen(info.get("last_seen"))))
     
             index = 0
             for sid in sorted_ids:
@@ -897,12 +936,12 @@ class SeenCommandersGUI:
     
             self.name_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("name", "unknown"))
             self.sound_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("sound", sound_inst.neutral).lower())
-            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.format_time_ago(info["last_seen"]))
+            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.format_last_seen(info["last_seen"]))
     
             item_id = self.tree_items.get(cmdr_id_str)
             if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
                 if item_id:
-                    self.tree.set(item_id, "last_seen", self.format_time_ago(info["last_seen"]))
+                    self.tree.set(item_id, "last_seen", self.format_last_seen(info["last_seen"]))
                     self.tree.set(item_id, "name", info.get("name", "unknown"))
                     self.tree.set(item_id, "sound", info.get("sound", sound_inst.neutral).capitalize())
                     
@@ -957,7 +996,7 @@ class SeenCommandersGUI:
                 continue
     
             try:
-                new_time = self.format_time_ago(data["last_seen"])
+                new_time = self.format_last_seen(data["last_seen"])
                 self.tree.set(item_id, "last_seen", new_time)
             except Exception:
                 pass
