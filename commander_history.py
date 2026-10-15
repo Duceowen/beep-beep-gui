@@ -14,6 +14,7 @@ class CommanderEntry(TypedDict):
     name: str
     sound: str
     last_seen: str
+    seen_count: int
 
 CommanderDict = Dict[str, CommanderEntry]  
 
@@ -81,7 +82,11 @@ class CommanderHistoryManager:
                 
         for cmdr_id, entry in self.seen_data.items():
             if "sound" in entry:
-                entry["sound"] = os.path.splitext(entry["sound"])[0].lower()      
+                entry["sound"] = os.path.splitext(entry["sound"])[0].lower()
+            try:
+                entry["seen_count"] = int(entry.get("seen_count", 1) or 1)
+            except (TypeError, ValueError):
+                entry["seen_count"] = 1
 
     def save_seen_commanders(self):
         if self.json_file_path is None:
@@ -197,6 +202,7 @@ class CommanderHistoryManager:
                     "name": existing.get("name", "unknown") if existing else "unknown",
                     "sound": existing.get("sound", "neutral") if existing else "neutral",
                     "last_seen": ts.isoformat(),
+                    "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
                 }
         
                 self.seen_data[cmdr_id] = info
@@ -261,13 +267,13 @@ class CommanderHistoryManager:
 
     
             is_wing = "WingMember" in interactions
-            is_departure = False
     
             info: CommanderEntry = {
                 "commander_id": cmdr_id,
                 "name": existing.get("name", "unknown") if existing else "unknown",
                 "sound": existing.get("sound", "neutral") if existing else "neutral",
                 "last_seen": ts.isoformat(),
+                "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
             }
  
     
@@ -286,7 +292,10 @@ class CommanderHistoryManager:
 
             if inst:
                 if interdiction_recent:
-                    inst["here"] = False
+                    # An interdiction carries a commander with you from the
+                    # old instance into the new one; they are still present,
+                    # so don't mark a departure or re-announce them.
+                    inst["here"] = True
                     beep_this_commander = False
                 
                 if pvp_kill_recent:
@@ -310,10 +319,14 @@ class CommanderHistoryManager:
                 was_here = inst.get("here", False)
             
                 if was_here:
-                    # Commander left the instance → this is the "left" edge
-                    inst["here"] = False
+                    # The game refreshes the Epoch for commanders that are still
+                    # present in the instance. Treat this as a refresh, not a
+                    # departure, so we don't re-announce the arrival on the next
+                    # edge while they remain in the same instance. A refresh is
+                    # not a new sighting, so the seen count is left unchanged.
                     beep_this_commander = False
-                    is_departure = True
+                    if existing is not None:
+                        info["seen_count"] = existing.get("seen_count", 1)
                 else:
                     inst["here"] = True
                     beep_this_commander = True
@@ -349,10 +362,6 @@ class CommanderHistoryManager:
 
             if allow_beep and beep_this_commander and interdiction_recent == False:
                 beeps_to_play.append(info)
-
-            if is_departure and self.beep_on_leave and allow_beep and interdiction_recent == False:
-                beeps_to_play.append(info)
-                log.info("BeepBeep: departure sound for %s", info.get("name", "unknown"))
    
             self.seen_data[cmdr_id] = info
             changed_entries.append(info)
@@ -387,6 +396,29 @@ class CommanderHistoryManager:
         self.save_seen_commanders()
 
       
+    def _process_departures(self):
+        departed = location.departed
+        if not departed:
+            return
+
+        location.departed = []
+
+        if not self.beep_on_leave:
+            return
+
+        now_ts = time.time()
+        jump_recent = location.jump_ts is not None and (now_ts - location.jump_ts <= 60)
+        if jump_recent:
+            return
+
+        infos = [self.seen_data[cmdr_id] for cmdr_id in departed if cmdr_id in self.seen_data]
+        if infos and self._sound_listener:
+            self._sound_listener(infos)
+            log.info(
+                "BeepBeep: departure sound for %s",
+                ", ".join(info.get("name", "unknown") for info in infos),
+            )
+
     def trigger(self):
         with self._lock:
             if self._reset_timer and self._reset_timer.is_alive():
@@ -399,6 +431,7 @@ class CommanderHistoryManager:
     def _check_reset(self):
         with self._lock:
             if not self.data_received:
+                location._record_departures()
                 location.instance = {}
 
             self.data_received = False
@@ -424,6 +457,7 @@ class CommanderHistoryManager:
             try:
                 if self.worker_stop_event.wait(1):
                     break
+                self._process_departures()
                 self.aggregated_commanders()
             except Exception:
                 log.exception("Exception in CommanderHistoryManager worker loop, continuing")

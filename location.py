@@ -15,6 +15,12 @@ class Location:
         self.jump_backup = {}
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
+        self.departed = []
+
+    def _record_departures(self):
+        for cmdr_id, info in self.instance.items():
+            if info.get("here", False):
+                self.departed.append(cmdr_id)
 
     def set_wing(self, in_wing: bool):
         self.wing = in_wing
@@ -28,6 +34,7 @@ class Location:
 
             
         if state != self.state and system != self.system:
+            self._record_departures()
             self.instance = {} 
             
         self.prev_system = self.system
@@ -58,6 +65,7 @@ class Location:
     def jump(self):
         if self.prev_system != self.system:
             self.jump_ts = time.time()
+            self._record_departures()
             self.jump_backup = self.instance.copy()
             self.instance.clear()
             

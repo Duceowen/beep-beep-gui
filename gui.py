@@ -166,6 +166,7 @@ class SeenCommandersGUI:
         self.tree = None 
         self.name_vars = {}
         self.last_seen_vars = {}
+        self.seen_count_vars = {}
         self.widgets = {}
         self.sound_vars = {}
         self.window = None
@@ -182,6 +183,7 @@ class SeenCommandersGUI:
         self.ui_cache = {
             "name": {},
             "sound": {},
+            "seen_count": {},
             "last_seen": {},
         }        
 
@@ -312,15 +314,20 @@ class SeenCommandersGUI:
         try:
             name_w = int(saved.get("name"))
         except (TypeError, ValueError):
-            name_w = int(0.45 * width)
+            name_w = int(0.40 * width)
         try:
             sound_w = int(saved.get("sound"))
         except (TypeError, ValueError):
-            sound_w = int(0.30 * width)
+            sound_w = int(0.25 * width)
+        try:
+            count_w = int(saved.get("seen_count"))
+        except (TypeError, ValueError):
+            count_w = int(0.15 * width)
         name_w = max(MIN_COL_WIDTH, name_w)
         sound_w = max(MIN_COL_WIDTH, sound_w)
-        last_w = max(MIN_COL_WIDTH, width - name_w - sound_w)
-        for col, value in (("name", name_w), ("sound", sound_w), ("last_seen", last_w)):
+        count_w = max(MIN_COL_WIDTH, count_w)
+        last_w = max(MIN_COL_WIDTH, width - name_w - sound_w - count_w)
+        for col, value in (("name", name_w), ("sound", sound_w), ("seen_count", count_w), ("last_seen", last_w)):
             try:
                 self.tree.column(col, width=value)
             except Exception:
@@ -333,7 +340,7 @@ class SeenCommandersGUI:
         total_width = self.tree.winfo_width()
         if total_width <= 1:
             return
-        cols = ("name", "sound", "last_seen")
+        cols = ("name", "sound", "seen_count", "last_seen")
         widths = []
         for col in cols:
             try:
@@ -343,14 +350,14 @@ class SeenCommandersGUI:
         total = sum(widths)
         if total > total_width:
             overflow = total - total_width
-            for i in (2, 1, 0):
+            for i in range(len(cols) - 1, -1, -1):
                 if overflow <= 0:
                     break
                 take = min(widths[i] - MIN_COL_WIDTH, overflow)
                 widths[i] -= take
                 overflow -= take
         elif total < total_width:
-            widths[2] += total_width - total
+            widths[-1] += total_width - total
         for col, value in zip(cols, widths):
             try:
                 self.tree.column(col, width=value)
@@ -367,9 +374,10 @@ class SeenCommandersGUI:
         try:
             name_w = int(self.tree.column("name", "width"))
             sound_w = int(self.tree.column("sound", "width"))
+            count_w = int(self.tree.column("seen_count", "width"))
         except Exception:
             return
-        config.set_config("seen_col_widths", {"name": name_w, "sound": sound_w})
+        config.set_config("seen_col_widths", {"name": name_w, "sound": sound_w, "seen_count": count_w})
         config.save_config()
 
     def _on_tree_configure(self, _event=None):
@@ -574,7 +582,7 @@ class SeenCommandersGUI:
             row_height = default_font.metrics("linespace") + 4
             style.configure("Treeview", rowheight=row_height)
     
-            self.tree = ttk.Treeview(parent, columns=("name", "sound", "last_seen"), show="", style="Beep.Treeview")
+            self.tree = ttk.Treeview(parent, columns=("name", "sound", "seen_count", "last_seen"), show="", style="Beep.Treeview")
             self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
 
             self.header_frame = tk.Frame(parent, height=row_height)
@@ -582,7 +590,7 @@ class SeenCommandersGUI:
             self.header_frame.grid_propagate(False)
             self.header_labels = {}
             self.header_handles = {}
-            _cols = (("name", "Name"), ("sound", "Sound"), ("last_seen", "Last Seen"))
+            _cols = (("name", "Name"), ("sound", "Sound"), ("seen_count", "Seen"), ("last_seen", "Last Encounter"))
             for _i, (_col, _label) in enumerate(_cols):
                 _lbl = tk.Label(self.header_frame, text=_label, anchor="w", cursor="hand2")
                 _lbl.bind("<Button-1>", lambda _e, c=_col: self.on_header_click(c))
@@ -596,9 +604,10 @@ class SeenCommandersGUI:
 
             self.tree.column("name", anchor="w")
             self.tree.column("sound", anchor="w")
+            self.tree.column("seen_count", anchor="w")
             self.tree.column("last_seen", anchor="w")
 
-            for _col in ("name", "sound", "last_seen"):
+            for _col in ("name", "sound", "seen_count", "last_seen"):
                 try:
                     self.tree.column(_col, stretch=False, minwidth=MIN_COL_WIDTH)
                 except Exception:
@@ -620,6 +629,7 @@ class SeenCommandersGUI:
             self.sound_vars.clear()
             self.name_vars.clear()
             self.last_seen_vars.clear()
+            self.seen_count_vars.clear()
             self.tree_items = {}
 
         if history_inst.seen_data:
@@ -651,7 +661,7 @@ class SeenCommandersGUI:
         if height <= 1:
             return
         x = 0
-        for col in ("name", "sound", "last_seen"):
+        for col in ("name", "sound", "seen_count", "last_seen"):
             try:
                 width = tree.column(col, "width")
             except Exception:
@@ -667,7 +677,7 @@ class SeenCommandersGUI:
     def _start_col_resize(self, event, col):
         if not getattr(self, "tree", None) or not self.tree.winfo_exists():
             return
-        cols = ("name", "sound", "last_seen")
+        cols = ("name", "sound", "seen_count", "last_seen")
         if col not in cols or cols.index(col) >= len(cols) - 1:
             return
         self._resize_col = col
@@ -974,6 +984,11 @@ class SeenCommandersGUI:
                 return self.name_vars[cmdr_id].get().lower()
             if sort_field == "sound":
                 return self.sound_vars[cmdr_id].get().lower()
+            if sort_field == "seen_count":
+                try:
+                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
+                except (TypeError, ValueError):
+                    return 0
             if sort_field == "last_seen":
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
@@ -1001,6 +1016,7 @@ class SeenCommandersGUI:
 
 
             self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.format_last_seen(info.get("last_seen"))))
+            self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("seen_count", 0))))
     
             index = 0
             for sid in sorted_ids:
@@ -1012,6 +1028,7 @@ class SeenCommandersGUI:
             item = self.tree.insert("", index, values=(
                 self.name_vars[cmdr_id].get(),
                 self.sound_vars[cmdr_id].get().capitalize(),
+                self.seen_count_vars[cmdr_id].get(),
                 self.last_seen_vars[cmdr_id].get()
             ))
             self.tree_items[cmdr_id] = item
@@ -1030,6 +1047,7 @@ class SeenCommandersGUI:
             self.name_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("name", "unknown"))
             self.sound_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("sound", sound_inst.neutral).lower())
             self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.format_last_seen(info["last_seen"]))
+            self.seen_count_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("seen_count", 0)))
     
             item_id = self.tree_items.get(cmdr_id_str)
             if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
@@ -1037,6 +1055,7 @@ class SeenCommandersGUI:
                     self.tree.set(item_id, "last_seen", self.format_last_seen(info["last_seen"]))
                     self.tree.set(item_id, "name", info.get("name", "unknown"))
                     self.tree.set(item_id, "sound", info.get("sound", sound_inst.neutral).capitalize())
+                    self.tree.set(item_id, "seen_count", str(info.get("seen_count", 0)))
                     
                 else:
                     new_cmdr_ids.append(cmdr_id_str)
@@ -1058,6 +1077,11 @@ class SeenCommandersGUI:
                 return self.name_vars[cmdr_id].get().lower()
             if sort_field == "sound":
                 return self.sound_vars[cmdr_id].get().lower()
+            if sort_field == "seen_count":
+                try:
+                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
+                except (TypeError, ValueError):
+                    return 0
             if sort_field == "last_seen":
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
@@ -1091,6 +1115,7 @@ class SeenCommandersGUI:
             try:
                 new_time = self.format_last_seen(data["last_seen"])
                 self.tree.set(item_id, "last_seen", new_time)
+                self.tree.set(item_id, "seen_count", str(data.get("seen_count", 0)))
             except Exception:
                 pass
 

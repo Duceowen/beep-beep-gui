@@ -1,7 +1,6 @@
 import os
 import sys
 import threading
-import time
 
 from logutil import log
 from beep_beep_config import config
@@ -12,10 +11,8 @@ ALERT_SIZE = "huge"
 ALERT_X = 640
 ALERT_Y = 192
 ID_PREFIX = "beepbeep-connect-"
-MESSAGE_ID = f"{ID_PREFIX}roster"
 PLUGIN_NAME = "BeepBeep"
 GROUP_NAME = "BeepBeep Connections"
-REFRESH_INTERVAL = 1.0
 
 _lock = threading.Lock()
 _initialised = False
@@ -23,11 +20,6 @@ _send = None
 _define_group = None
 _group_ready = False
 _missing_logged = False
-
-_recent_lock = threading.Lock()
-_recent = {}
-_refresh_thread = None
-_last_text = None
 
 
 def _import_edmcoverlay():
@@ -116,72 +108,35 @@ def _format_line(entry) -> str:
     return f"Commander {raw_name} has jumped in"
 
 
-def _active_lines():
-    now = time.monotonic()
-    with _recent_lock:
-        for line in [line for line, expiry in _recent.items() if expiry <= now]:
-            del _recent[line]
-        return list(_recent.keys())
+def _message_id(entry) -> str:
+    cmdr_id = str(entry.get("commander_id") or "").strip()
+    if cmdr_id:
+        return f"{ID_PREFIX}{cmdr_id}"
+    raw_name = str(entry.get("name") or "").strip()
+    if raw_name and raw_name.lower() != "unknown":
+        slug = "".join(ch if ch.isalnum() else "_" for ch in raw_name.lower())
+        return f"{ID_PREFIX}{slug}"
+    return f"{ID_PREFIX}unknown"
 
 
-def _send_payload(text: str, ttl: int) -> None:
+def _send_message(item_id: str, text: str) -> None:
     payload = {
         "event": "LegacyOverlay",
         "type": "message",
-        "id": MESSAGE_ID,
+        "id": item_id,
         "plugin": PLUGIN_NAME,
         "text": text,
         "color": ALERT_COLOR,
         "size": ALERT_SIZE,
         "x": ALERT_X,
         "y": ALERT_Y,
-        "ttl": ttl,
+        "ttl": ALERT_TTL,
     }
     try:
         _send(payload)
+        log.info("Overlay announce sent: %s", text)
     except Exception:
         log.exception("Failed to send overlay connection announcement")
-
-
-def _send_block(lines) -> None:
-    global _last_text
-    text = "\n".join(lines)
-    _send_payload(text, ALERT_TTL)
-    if text != _last_text:
-        log.info("Overlay announce sent: %s", text.replace("\n", " | "))
-        _last_text = text
-
-
-def _send_clear() -> None:
-    global _last_text
-    _send_payload("", 0)
-    _last_text = None
-
-
-def _refresh_loop() -> None:
-    last_active = False
-    while True:
-        time.sleep(REFRESH_INTERVAL)
-        try:
-            lines = _active_lines()
-            if lines:
-                _send_block(lines)
-                last_active = True
-            elif last_active:
-                _send_clear()
-                last_active = False
-        except Exception:
-            log.exception("Overlay announcement refresher error")
-
-
-def _ensure_refresher() -> None:
-    global _refresh_thread
-    if _refresh_thread is not None and _refresh_thread.is_alive():
-        return
-    _refresh_thread = threading.Thread(
-        target=_refresh_loop, name="beepbeep-overlay-refresher", daemon=True
-    )
-    _refresh_thread.start()
 
 
 def announce_connected(entries) -> None:
@@ -194,10 +149,5 @@ def announce_connected(entries) -> None:
 
     _ensure_group()
 
-    now = time.monotonic()
-    with _recent_lock:
-        for entry in entries:
-            _recent[_format_line(entry)] = now + ALERT_TTL
-
-    _ensure_refresher()
-    _send_block(_active_lines())
+    for entry in entries:
+        _send_message(_message_id(entry), _format_line(entry))
