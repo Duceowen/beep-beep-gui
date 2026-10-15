@@ -3,11 +3,107 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
 import os
-import myNotebook as nb # noqa
+import sys
 from beep_beep_config import config
 from commander_history import history_inst
 from beep_beep import beep_inst
 from sound_loader import sound_inst
+
+try:
+    import theme as edmc_theme
+except Exception:
+    edmc_theme = None
+
+class ThemedScrollbar(tk.Canvas):
+    def __init__(self, master, command=None, background="grey4", foreground="#13ec39",
+                 activebackground="#13ec39", width=14, **kw):
+        kw.setdefault("highlightthickness", 0)
+        kw.setdefault("bd", 0)
+        super().__init__(master, width=width, background=background, **kw)
+        self.command = command
+        self._trough = background
+        self._thumb = foreground
+        self._thumb_active = activebackground
+        self._first = 0.0
+        self._last = 1.0
+        self._drag = False
+        self._offset = 0
+        self._top = 0
+        self._bottom = 0
+        self.bind("<Configure>", lambda _e: self._redraw())
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<B1-Motion>", self._on_move)
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    def apply_theme(self, palette):
+        bg = palette.get("background")
+        fg = palette.get("foreground")
+        abg = palette.get("activebackground") or fg
+        if bg:
+            self._trough = bg
+            try:
+                self.configure(background=bg)
+            except Exception:
+                pass
+        if fg:
+            self._thumb = fg
+        if abg:
+            self._thumb_active = abg
+        self._redraw()
+
+    def set(self, first, last):
+        try:
+            self._first = float(first)
+            self._last = float(last)
+        except Exception:
+            return
+        self._redraw()
+
+    def _redraw(self):
+        self.delete("thumb")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if h <= 1 or w <= 1:
+            return
+        if self._last - self._first >= 0.999:
+            self._top = 0
+            self._bottom = h
+            return
+        top = int(self._first * h)
+        bottom = int(self._last * h)
+        if bottom - top < 8:
+            bottom = min(h, top + 8)
+        self._top = top
+        self._bottom = bottom
+        color = self._thumb_active if self._drag else self._thumb
+        self.create_rectangle(2, top + 1, w - 2, bottom - 1, fill=color, outline="", tags="thumb")
+
+    def _on_press(self, event):
+        h = self.winfo_height() or 1
+        if self._top <= event.y <= self._bottom:
+            self._drag = True
+            self._offset = event.y - self._top
+        else:
+            self._drag = True
+            self._offset = max(0, (self._bottom - self._top) // 2)
+            self._move_to(event.y - self._offset, h)
+        self._redraw()
+
+    def _on_move(self, event):
+        if not self._drag:
+            return
+        self._move_to(event.y - self._offset, self.winfo_height() or 1)
+
+    def _on_release(self, _event):
+        self._drag = False
+        self._redraw()
+
+    def _move_to(self, top, height):
+        if not self.command:
+            return
+        frac = max(0.0, min(1.0, top / height))
+        self.command("moveto", frac)
+
 
 class SeenCommandersGUI:
     def __init__(self):
@@ -149,24 +245,29 @@ class SeenCommandersGUI:
         self.attach_resize_listener()
         
         
-        def enforce_column_limits(_event):
-            total_width = self.tree.winfo_width()
+        self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits)
+        self.window.after(50, self._enforce_column_limits)
 
-            limits = {
-                "name": (int(0.2 * total_width), int(0.5 * total_width)),
-                "sound": (int(0.15 * total_width), int(0.4 * total_width)),
-                "last_seen": (int(0.1 * total_width), int(0.3 * total_width))
-            }
-            
-            for col, (min_w, max_w) in limits.items():
+    def _enforce_column_limits(self, _event=None):
+        if not getattr(self, "tree", None) or not self.tree.winfo_exists():
+            return
+        total_width = self.tree.winfo_width()
+        limits = {
+            "name": (int(0.2 * total_width), int(0.5 * total_width)),
+            "sound": (int(0.15 * total_width), int(0.4 * total_width)),
+            "last_seen": (int(0.1 * total_width), int(0.3 * total_width)),
+        }
+        for col, (min_w, max_w) in limits.items():
+            try:
                 width = self.tree.column(col, "width")
-                if width < min_w:
-                    self.tree.column(col, width=min_w)
-                elif width > max_w:
-                    self.tree.column(col, width=max_w)
-        
-        self.tree.bind("<ButtonRelease-1>", enforce_column_limits)         
-        enforce_column_limits(None)
+            except Exception:
+                continue
+            if width < min_w:
+                self.tree.column(col, width=min_w)
+            elif width > max_w:
+                self.tree.column(col, width=max_w)
+        if getattr(self, "header_frame", None) and self.header_frame.winfo_exists():
+            self.header_frame.after_idle(self._layout_tree_header)
         
         
     def attach_resize_listener(self):
@@ -282,12 +383,12 @@ class SeenCommandersGUI:
         sound_key = info.get("sound", "neutral").lower()
         sound_var = tk.StringVar(value=sound_key.capitalize())
         
-        combo = ttk.Combobox(
+        combo = tk.OptionMenu(
             popup,
-            textvariable=sound_var,
-            values=[s.capitalize() for s in sound_inst.sound_files],
-            state="readonly"
+            sound_var,
+            *[s.capitalize() for s in sound_inst.sound_files]
         )
+        combo.configure(width=14, anchor="w")
         combo.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         
         tk.Button(
@@ -321,9 +422,16 @@ class SeenCommandersGUI:
   
         tk.Button(popup, text="Save", command=save_popup_changes).grid(row=2, column=0, columnspan=2, pady=10)
     
+        def open_sound_menu(_event=None):
+            try:
+                menu = combo["menu"]
+                menu.post(combo.winfo_rootx(), combo.winfo_rooty() + combo.winfo_height())
+            except Exception:
+                pass
+
         def on_name_enter(_event):
             combo.focus_set()
-            combo.event_generate('<Down>')
+            open_sound_menu()
             return "break"
     
         name_entry.bind("<Return>", on_name_enter)
@@ -333,13 +441,17 @@ class SeenCommandersGUI:
             return "break"
     
         combo.bind("<Return>", on_combo_enter)
+        combo.bind("<KP_Enter>", on_combo_enter)
+
+        popup.transient(self.window)
+        self.apply_edmc_theme(popup)
 
     def build_ui(self, parent):
         sort_field = config.get_config("sort_field", "last_seen")
         sort_asc = config.get_config("sort_asc", False)
     
         if not hasattr(self, "tree") or not self.tree or not self.tree.winfo_exists() or self.tree.master != parent:
-            for attr in ["scrollbar", "tree"]:
+            for attr in ["scrollbar", "tree", "header_frame"]:
                 if hasattr(self, attr) and getattr(self, attr) and getattr(self, attr).winfo_exists():
                     getattr(self, attr).destroy()
                     
@@ -348,24 +460,40 @@ class SeenCommandersGUI:
             row_height = default_font.metrics("linespace") + 4
             style.configure("Treeview", rowheight=row_height)
     
-            self.tree = ttk.Treeview(parent, columns=("name", "sound", "last_seen"), show="headings")
+            self.tree = ttk.Treeview(parent, columns=("name", "sound", "last_seen"), show="", style="Beep.Treeview")
             self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
-            
-            self.tree.heading("name", text="Name", anchor="w", command=lambda: self.on_header_click("name"))
-            self.tree.heading("sound", text="Sound", anchor="w", command=lambda: self.on_header_click("sound"))
-            self.tree.heading("last_seen", text="Last Seen", anchor="w", command=lambda: self.on_header_click("last_seen"))
-            
+
+            self.header_frame = tk.Frame(parent, height=row_height)
+            self.header_frame.grid(row=0, column=0, columnspan=3, sticky="ew")
+            self.header_frame.grid_propagate(False)
+            self.header_labels = {}
+            self.header_handles = {}
+            _cols = (("name", "Name"), ("sound", "Sound"), ("last_seen", "Last Seen"))
+            for _i, (_col, _label) in enumerate(_cols):
+                _lbl = tk.Label(self.header_frame, text=_label, anchor="w", cursor="hand2")
+                _lbl.bind("<Button-1>", lambda _e, c=_col: self.on_header_click(c))
+                self.header_labels[_col] = _lbl
+                if _i < len(_cols) - 1:
+                    _handle = tk.Frame(self.header_frame, width=6, cursor="sb_h_double_arrow")
+                    _handle.bind("<ButtonPress-1>", lambda _e, c=_col: self._start_col_resize(_e, c))
+                    _handle.bind("<B1-Motion>", self._do_col_resize)
+                    _handle.bind("<ButtonRelease-1>", self._end_col_resize)
+                    self.header_handles[_col] = _handle
+
             self.tree.column("name", anchor="w")
             self.tree.column("sound", anchor="w")
             self.tree.column("last_seen", anchor="w")
-            
-            self.scrollbar = ttk.Scrollbar(parent, orient="vertical", command=self.tree.yview)
+
+            self.scrollbar = ThemedScrollbar(parent, command=self.tree.yview)
             self.tree.configure(yscroll=self.scrollbar.set)
             self.scrollbar.grid(row=1, column=3, sticky="ns")
-    
+
             parent.grid_rowconfigure(1, weight=1)
             for col in range(3):
                 parent.grid_columnconfigure(col, weight=1)
+
+            self.tree.bind("<Configure>", lambda _e: self.header_frame.after_idle(self._layout_tree_header), add="+")
+            self.header_frame.after_idle(self._layout_tree_header)
     
             self.widgets.clear()
             self.sound_vars.clear()
@@ -380,15 +508,94 @@ class SeenCommandersGUI:
     
         self.sort_rows(sort_field, sort_asc)
         
-        self.options_button = ttk.Button(
+        self.options_button = tk.Button(
             parent,
             text="Options",
             command=self.open_options_popup
         )
         self.options_button.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(5, 5))
         
-        parent.grid_rowconfigure(2, weight=0)        
-       
+        parent.grid_rowconfigure(2, weight=0)
+
+        self.apply_edmc_theme_to_window(parent)
+
+    def _layout_tree_header(self, _event=None):
+        tree = getattr(self, "tree", None)
+        header = getattr(self, "header_frame", None)
+        if not tree or not tree.winfo_exists():
+            return
+        if not header or not header.winfo_exists():
+            return
+        height = header.winfo_height()
+        if height <= 1:
+            return
+        x = 0
+        for col in ("name", "sound", "last_seen"):
+            try:
+                width = tree.column(col, "width")
+            except Exception:
+                width = 100
+            label = self.header_labels.get(col)
+            if label and label.winfo_exists():
+                label.place(x=x, y=0, width=width, height=height)
+            handle = self.header_handles.get(col)
+            if handle and handle.winfo_exists():
+                handle.place(x=x + width - 3, y=0, width=6, height=height)
+            x += width
+
+    def _start_col_resize(self, event, col):
+        if not getattr(self, "tree", None) or not self.tree.winfo_exists():
+            return
+        self._resize_col = col
+        self._resize_x0 = event.x_root
+        try:
+            self._resize_w0 = self.tree.column(col, "width")
+        except Exception:
+            self._resize_w0 = 100
+
+    def _do_col_resize(self, event):
+        col = getattr(self, "_resize_col", None)
+        if not col or not getattr(self, "tree", None) or not self.tree.winfo_exists():
+            return
+        new_width = max(30, self._resize_w0 + (event.x_root - self._resize_x0))
+        try:
+            self.tree.column(col, width=new_width)
+        except Exception:
+            return
+        self._layout_tree_header()
+
+    def _end_col_resize(self, _event=None):
+        self._resize_col = None
+        self._enforce_column_limits()
+
+    def apply_edmc_theme_to_window(self, parent):
+        palette = self._edmc_palette()
+        if not palette.get("background") and not palette.get("foreground"):
+            return
+        background = palette.get("background")
+        foreground = palette.get("foreground")
+        activebackground = palette.get("activebackground") or background
+        activeforeground = palette.get("activeforeground") or foreground
+        try:
+            parent.configure(background=background)
+        except Exception:
+            pass
+        style = ttk.Style(parent)
+        style.configure("Beep.Treeview", background=background, fieldbackground=background, foreground=foreground)
+        style.map(
+            "Beep.Treeview",
+            background=[("selected", activebackground)],
+            foreground=[("selected", activeforeground)],
+        )
+        style.configure("Beep.Treeview.Heading", background=background, foreground=foreground)
+        if getattr(self, "tree", None) and self.tree.winfo_exists():
+            try:
+                self.tree.configure(style="Beep.Treeview")
+            except Exception:
+                pass
+        self.apply_edmc_theme(parent)
+
+   
     def open_options_popup(self):
         popup = tk.Toplevel(self.window)
         popup.title("Options")
@@ -399,14 +606,213 @@ class SeenCommandersGUI:
         self.restore_options_geometry(popup)
 
     
-        options_frame = self.options_menu(popup)
-    
-        options_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.options_menu(popup)
+        self.apply_edmc_theme(popup)
     
         popup.grid_rowconfigure(0, weight=1)
         popup.grid_columnconfigure(0, weight=1)
         
         self.attach_options_resize_listener(popup)
+
+    def _edmc_palette(self):
+        palette = {
+            "background": None,
+            "foreground": None,
+            "activebackground": None,
+            "activeforeground": None,
+            "disabledforeground": None,
+        }
+        theme_obj = getattr(edmc_theme, "theme", None) if edmc_theme is not None else None
+        current = getattr(theme_obj, "current", None)
+        if isinstance(current, dict):
+            for key in palette:
+                value = current.get(key)
+                if value:
+                    palette[key] = value
+        return palette
+
+    def _walk_widgets(self, widget):
+        yield widget
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            children = []
+        for child in children:
+            yield from self._walk_widgets(child)
+
+    def _theme_widget(self, widget, palette):
+        if isinstance(widget, ThemedScrollbar):
+            widget.apply_theme(palette)
+            return
+        if isinstance(widget, ttk.Combobox):
+            self._theme_combobox(widget, palette)
+            return
+        try:
+            keys = widget.keys()
+        except Exception:
+            return
+        background = palette.get("background")
+        foreground = palette.get("foreground")
+        config_dict = {}
+        is_container = isinstance(widget, (tk.Frame, tk.LabelFrame, tk.Toplevel, tk.Canvas))
+        is_text = isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton, tk.Menubutton))
+        is_scale = isinstance(widget, tk.Scale)
+        is_scrollbar = isinstance(widget, tk.Scrollbar)
+
+        if background:
+            if (is_container or is_text or is_scale or is_scrollbar) and "background" in keys:
+                config_dict["background"] = background
+            if (is_container or is_text or is_scale or is_scrollbar) and "highlightbackground" in keys:
+                config_dict["highlightbackground"] = background
+            if (is_text or is_scale) and palette.get("activebackground") and "activebackground" in keys:
+                config_dict["activebackground"] = palette["activebackground"]
+            if (is_scale or is_scrollbar) and "troughcolor" in keys:
+                config_dict["troughcolor"] = background
+
+        if foreground:
+            if (is_text or is_scale) and "foreground" in keys:
+                config_dict["foreground"] = foreground
+            if (is_text or is_scale) and palette.get("activeforeground") and "activeforeground" in keys:
+                config_dict["activeforeground"] = palette["activeforeground"]
+            if (is_text or is_scale) and palette.get("disabledforeground") and "disabledforeground" in keys:
+                config_dict["disabledforeground"] = palette["disabledforeground"]
+            if isinstance(widget, tk.LabelFrame) and "foreground" in keys:
+                config_dict["foreground"] = foreground
+
+        if isinstance(widget, (tk.Entry, tk.Spinbox)):
+            if background:
+                config_dict["background"] = background
+                if "highlightbackground" in keys:
+                    config_dict["highlightbackground"] = background
+                if "highlightcolor" in keys:
+                    config_dict["highlightcolor"] = foreground or background
+                if "insertbackground" in keys:
+                    config_dict["insertbackground"] = foreground or background
+            if foreground:
+                config_dict["foreground"] = foreground
+            if "selectbackground" in keys:
+                config_dict["selectbackground"] = palette.get("activebackground") or background
+            if "selectforeground" in keys:
+                config_dict["selectforeground"] = palette.get("activeforeground") or foreground
+
+        if isinstance(widget, tk.Menubutton):
+            try:
+                menu = widget["menu"]
+                menu_keys = menu.keys()
+                if background and "background" in menu_keys:
+                    menu.configure(background=background)
+                    if "activebackground" in menu_keys and palette.get("activebackground"):
+                        menu.configure(activebackground=palette["activebackground"])
+                if foreground and "foreground" in menu_keys:
+                    menu.configure(foreground=foreground)
+                    if "activeforeground" in menu_keys and palette.get("activeforeground"):
+                        menu.configure(activeforeground=palette["activeforeground"])
+                if "bd" in menu_keys:
+                    menu.configure(bd=0)
+                if "activeborderwidth" in menu_keys:
+                    menu.configure(activeborderwidth=0)
+            except Exception:
+                pass
+
+        check_items = getattr(widget, "_beep_check_items", None)
+        if isinstance(widget, tk.Canvas) and check_items:
+            try:
+                box_id, tick_id = check_items
+                if foreground:
+                    widget.itemconfigure(box_id, outline=foreground)
+                    widget.itemconfigure(tick_id, fill=foreground)
+                if background:
+                    widget.itemconfigure(box_id, fill=background)
+            except Exception:
+                pass
+
+        if config_dict:
+            try:
+                widget.configure(**config_dict)
+            except Exception:
+                pass
+
+    def _theme_combobox(self, combo, palette):
+        background = palette.get("background")
+        foreground = palette.get("foreground")
+        activebackground = palette.get("activebackground") or background
+        activeforeground = palette.get("activeforeground") or foreground
+        try:
+            style = ttk.Style(combo)
+            style.configure(
+                "Beep.TCombobox",
+                fieldbackground=background,
+                background=background,
+                foreground=foreground,
+                arrowcolor=foreground,
+                bordercolor=background,
+                lightcolor=background,
+                darkcolor=background,
+                selectbackground=activebackground,
+                selectforeground=activeforeground,
+            )
+            style.map(
+                "Beep.TCombobox",
+                fieldbackground=[("readonly", background), ("disabled", background)],
+                background=[("readonly", background), ("disabled", background)],
+                foreground=[("readonly", foreground), ("disabled", foreground)],
+                arrowcolor=[("readonly", foreground), ("disabled", foreground)],
+                selectbackground=[("readonly", activebackground)],
+                selectforeground=[("readonly", activeforeground)],
+            )
+            combo.configure(style="Beep.TCombobox")
+        except Exception:
+            pass
+        try:
+            combo.option_add("*TCombobox*Listbox.background", background)
+            combo.option_add("*TCombobox*Listbox.foreground", foreground)
+            combo.option_add("*TCombobox*Listbox.selectBackground", activebackground)
+            combo.option_add("*TCombobox*Listbox.selectForeground", activeforeground)
+        except Exception:
+            pass
+
+    def apply_edmc_theme(self, popup):
+        palette = self._edmc_palette()
+        if not palette.get("background") and not palette.get("foreground"):
+            return
+        for widget in self._walk_widgets(popup):
+            self._theme_widget(widget, palette)
+        self._theme_titlebar(popup)
+        try:
+            popup.after(150, lambda: self._theme_titlebar(popup))
+        except Exception:
+            pass
+
+    def _theme_titlebar(self, window):
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            handle = window.winfo_id()
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetAncestor(handle, 2)
+            if not hwnd:
+                hwnd = handle
+            dark = ctypes.c_int(1)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
+            palette = self._edmc_palette()
+            background = palette.get("background")
+            foreground = palette.get("foreground")
+            if background:
+                value = ctypes.c_uint(self._colorref(window, background))
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(value), ctypes.sizeof(value))
+            if foreground:
+                value = ctypes.c_uint(self._colorref(window, foreground))
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(value), ctypes.sizeof(value))
+        except Exception:
+            pass
+
+    def _colorref(self, window, color):
+        try:
+            r, g, b = window.winfo_rgb(color)
+        except Exception:
+            return 0
+        return ((b >> 8) & 0xFF) << 16 | ((g >> 8) & 0xFF) << 8 | ((r >> 8) & 0xFF)
 
     
     def on_header_click(self, field):
@@ -628,8 +1034,8 @@ class SeenCommandersGUI:
         if width is None or height is None or x is None or y is None:
             screen_width = popup.winfo_screenwidth()
             screen_height = popup.winfo_screenheight()
-            width = screen_width * 75 // 100
-            height = screen_height * 75 // 100
+            width = min(600, screen_width - 100)
+            height = min(800, screen_height - 100)
             x = (screen_width - width) // 2   
             y = (screen_height - height) // 2 
 
@@ -644,15 +1050,46 @@ class SeenCommandersGUI:
 
     def add_checkbox(self, frame, row, text, var, *, target=None, attr=None):
         def on_toggle():
-            v = var.get()
+            v = bool(var.get())
             if target and attr:
                 setattr(target, attr, v)
             if attr:
                 config.set_config(attr, v)
                 config.save_config()
-    
-        chk = tk.Checkbutton(frame, text=text, variable=var, command=on_toggle)
-        chk.grid(row=row, column=0, padx=5, pady=5, sticky="w")
+
+        holder = tk.Frame(frame)
+        holder.grid(row=row, column=0, columnspan=2, padx=5, pady=6, sticky="w")
+
+        size = 22
+        canvas = tk.Canvas(holder, width=size, height=size,
+                           highlightthickness=0, bd=0, takefocus=0)
+        canvas.pack(side="left")
+        label = tk.Label(holder, text=text)
+        label.pack(side="left", padx=(10, 0))
+
+        box = canvas.create_rectangle(3, 3, size - 3, size - 3, width=2,
+                                      outline="#13ec39")
+        tick = canvas.create_line(
+            size * 0.26, size * 0.52,
+            size * 0.44, size * 0.72,
+            size * 0.76, size * 0.28,
+            width=3, capstyle="round", joinstyle="round", fill="#13ec39",
+        )
+        canvas._beep_check_items = (box, tick)
+
+        def redraw():
+            canvas.itemconfigure(tick, state=("normal" if bool(var.get()) else "hidden"))
+
+        def toggle(_event=None):
+            var.set(not bool(var.get()))
+            redraw()
+            on_toggle()
+            return "break"
+
+        for widget in (canvas, label):
+            widget.bind("<Button-1>", toggle)
+
+        redraw()
         return row + 1
     
 
@@ -660,14 +1097,14 @@ class SeenCommandersGUI:
         tk.Label(frame, text=label).grid(row=row, column=0, padx=5, pady=5, sticky="w")
         slider = tk.Scale(frame, from_=from_, to=to, orient=tk.HORIZONTAL, variable=var)
         slider.grid(row=row, column=1, padx=5, pady=5, sticky="we")
-    
+
         def on_change(*_):
             if attr:
                 config.set_config(attr, var.get())
-    
+
         def on_save(_event):
             config.save_config()
-    
+
         var.trace_add("write", on_change)
         slider.bind("<ButtonRelease-1>", on_save)
         return row + 1
@@ -677,6 +1114,7 @@ class SeenCommandersGUI:
 
     def add_info_box(self, frame, row, text, *, title="Info", columnspan=2):
         info_frame = tk.LabelFrame(frame, text=title, bd=2, relief="groove")
+
         info_frame.grid(
             row=row,
             column=0,
@@ -685,7 +1123,7 @@ class SeenCommandersGUI:
             pady=(2, 8),
             sticky="ew"
         )
-    
+
         label = tk.Label(
             info_frame,
             text=text,
@@ -705,17 +1143,17 @@ class SeenCommandersGUI:
 
     def options_menu(self, parent):
         # Use parent directly
-        frame_container = parent  # this is the nb.Frame passed from plugin_prefs
+        frame_container = parent  # the frame passed from plugin_prefs
         frame_container.grid_rowconfigure(0, weight=1)
         frame_container.grid_columnconfigure(0, weight=1)
-    
-        canvas = tk.Canvas(frame_container)
-        scrollbar = tk.Scrollbar(frame_container, orient="vertical", command=canvas.yview)
+
+        canvas = tk.Canvas(frame_container, highlightthickness=2)
+        scrollbar = ThemedScrollbar(frame_container, command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
-    
+
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-    
+
         frame = tk.Frame(canvas)
         frame.columnconfigure(0, weight=1)
         canvas_window = canvas.create_window((0,0), window=frame, anchor="nw")
@@ -743,11 +1181,11 @@ class SeenCommandersGUI:
         )
                 
         tk.Button(
-            frame, 
+            frame,
             text="Open Sounds Folder",
             command=self.open_sounds_folder
         ).grid(row=row, column=0, padx=5, sticky="w")
-    
+
         tk.Button(
             frame,
             text="▶ Play",
@@ -847,6 +1285,28 @@ class SeenCommandersGUI:
             title="Wing Notify"
         )
     
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Announce connections in Modern Overlay",
+            tk.BooleanVar(value=config.get_config("overlay_announce", False)),
+            attr="overlay_announce"
+        )
+
+        row = self.add_info_box(
+            frame,
+            row,
+            (
+                "When enabled, a \"Commander <name> has jumped in\" message is shown at the center "
+                "of the screen (raised slightly above center) through the EDMC Modern "
+                "Overlay plugin whenever a "
+                "new commander enters your instance. The name is taken from the Seen "
+                "Commanders list (rename a commander there to change what is shown). "
+                "Requires the EDMC Modern Overlay plugin to be installed and running."
+            ),
+            title="Modern Overlay announcements"
+        )
+    
         row = self.add_info_box(
             frame,
             row,
@@ -859,6 +1319,23 @@ class SeenCommandersGUI:
             ),
             title="General Notes"
         )
+
+        def _on_mousewheel(event):
+            num = getattr(event, "num", None)
+            if num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif num == 5:
+                canvas.yview_scroll(1, "units")
+            else:
+                delta = getattr(event, "delta", 0) or 0
+                if delta:
+                    canvas.yview_scroll(int(-delta / 120), "units")
+            return "break"
+
+        for _w in self._walk_widgets(frame_container):
+            _w.bind("<MouseWheel>", _on_mousewheel, add="+")
+            _w.bind("<Button-4>", _on_mousewheel, add="+")
+            _w.bind("<Button-5>", _on_mousewheel, add="+")
 
         return frame_container
 

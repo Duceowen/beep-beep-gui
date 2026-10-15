@@ -28,7 +28,8 @@ class CommanderHistoryManager:
         self.last_modified_timestamp: datetime.datetime = datetime.datetime.min
         self.listeners: list[Callable[[list[CommanderEntry]], None]] = []
         self._gui_listener: Callable[[dict], None] | None = None
-        self._sound_listener: Callable[[dict], None] | None = None        
+        self._sound_listener: Callable[[dict], None] | None = None
+        self._overlay_listener: Callable[[list], None] | None = None        
         self.worker_thread: threading.Thread | None = None
         self.worker_stop_event = threading.Event()
         self.changed = False
@@ -62,6 +63,9 @@ class CommanderHistoryManager:
     
     def subscribe_sound(self, cb: Callable[[dict], None]):
         self._sound_listener = cb
+    
+    def subscribe_overlay(self, cb: Callable[[list], None]):
+        self._overlay_listener = cb
     
     def load_seen_commanders(self):
         if not os.path.isfile(self.json_file_path) or os.path.getsize(self.json_file_path) == 0:
@@ -214,6 +218,7 @@ class CommanderHistoryManager:
         frontier_epoch = datetime.datetime(1601, 1, 1)
     
         beeps_to_play = []
+        connected_entries: list[CommanderEntry] = []
         changed_entries: list[CommanderEntry] = []
     
         now_ts = time.time()
@@ -256,6 +261,7 @@ class CommanderHistoryManager:
 
     
             is_wing = "WingMember" in interactions
+            is_departure = False
     
             info: CommanderEntry = {
                 "commander_id": cmdr_id,
@@ -304,14 +310,14 @@ class CommanderHistoryManager:
                 was_here = inst.get("here", False)
             
                 if was_here:
-                    # Seen again → reset flag so next detection will beep
+                    # Commander left the instance → this is the "left" edge
                     inst["here"] = False
                     beep_this_commander = False
+                    is_departure = True
                 else:
                     inst["here"] = True
                     beep_this_commander = True
-                    
-            
+
                 inst["state"] = location.state
                 inst["system"] = location.system
 
@@ -338,8 +344,15 @@ class CommanderHistoryManager:
                     allow_beep = True
                   
     
+            if beep_this_commander and not interdiction_recent:
+                connected_entries.append(info)
+
             if allow_beep and beep_this_commander and interdiction_recent == False:
                 beeps_to_play.append(info)
+
+            if is_departure and self.beep_on_leave and allow_beep and interdiction_recent == False:
+                beeps_to_play.append(info)
+                log.info("BeepBeep: departure sound for %s", info.get("name", "unknown"))
    
             self.seen_data[cmdr_id] = info
             changed_entries.append(info)
@@ -354,6 +367,9 @@ class CommanderHistoryManager:
     
         if self._gui_listener and changed_entries:
             self._gui_listener(changed_entries)
+
+        if connected_entries and self._overlay_listener:
+            self._overlay_listener(connected_entries)
     
     
     

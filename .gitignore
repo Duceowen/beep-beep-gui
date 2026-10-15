@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.pyo
+seen_commanders.json
+beepbeep_config.json

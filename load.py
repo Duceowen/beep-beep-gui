@@ -1,10 +1,9 @@
-from typing import Optional
 from commander_history import history_inst
 from beep_beep import beep_inst
+from overlay_announcer import announce_connected
 from location import location
 from gui import gui_inst
 from logutil import log
-import tkinter as tk
 import myNotebook as nb  # noqa
 
 def plugin_start3(plugin_dir):
@@ -12,6 +11,7 @@ def plugin_start3(plugin_dir):
     history_inst.load_seen_commanders()
     history_inst.subscribe_sound(beep_inst.handle_event)       
     history_inst.subscribe_gui(gui_inst.add_or_update_commander)
+    history_inst.subscribe_overlay(announce_connected)
     history_inst.aggregated_commanders_load()
     history_inst.start_worker()
     return "Beep Beep"
