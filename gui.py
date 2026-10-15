@@ -17,6 +17,8 @@ except Exception:
 
 _WIN_DATETIME_FMT = None
 
+MIN_COL_WIDTH = 50
+
 
 def _winpattern_to_strftime(pattern):
     _y = lambda n: "%y"
@@ -258,7 +260,9 @@ class SeenCommandersGUI:
     
         width = max(100, width)
         height = max(100, height)
-    
+
+        self._pending_width = width
+
         if self.window and self.window.winfo_exists():
             self.window.lift()
             self.build_ui(self.window)
@@ -286,25 +290,98 @@ class SeenCommandersGUI:
         self.window.after(50, self._enforce_column_limits)
 
     def _enforce_column_limits(self, _event=None):
+        self._fit_columns()
+
+    def _apply_initial_col_widths(self, parent):
+        try:
+            width = parent.winfo_width()
+        except Exception:
+            width = 1
+        if width <= 1:
+            width = getattr(self, "_pending_width", None)
+        if not width or width <= 1:
+            try:
+                width = int(config.get_config("seen_window_width", 800))
+            except (TypeError, ValueError):
+                width = 800
+        if width <= 1:
+            width = 800
+        saved = config.get_config("seen_col_widths", None)
+        if not isinstance(saved, dict):
+            saved = {}
+        try:
+            name_w = int(saved.get("name"))
+        except (TypeError, ValueError):
+            name_w = int(0.45 * width)
+        try:
+            sound_w = int(saved.get("sound"))
+        except (TypeError, ValueError):
+            sound_w = int(0.30 * width)
+        name_w = max(MIN_COL_WIDTH, name_w)
+        sound_w = max(MIN_COL_WIDTH, sound_w)
+        last_w = max(MIN_COL_WIDTH, width - name_w - sound_w)
+        for col, value in (("name", name_w), ("sound", sound_w), ("last_seen", last_w)):
+            try:
+                self.tree.column(col, width=value)
+            except Exception:
+                pass
+        self._layout_tree_header()
+
+    def _fit_columns(self, persist=False):
         if not getattr(self, "tree", None) or not self.tree.winfo_exists():
             return
         total_width = self.tree.winfo_width()
-        limits = {
-            "name": (int(0.2 * total_width), int(0.5 * total_width)),
-            "sound": (int(0.15 * total_width), int(0.4 * total_width)),
-            "last_seen": (int(0.1 * total_width), int(0.3 * total_width)),
-        }
-        for col, (min_w, max_w) in limits.items():
+        if total_width <= 1:
+            return
+        cols = ("name", "sound", "last_seen")
+        widths = []
+        for col in cols:
             try:
-                width = self.tree.column(col, "width")
+                widths.append(max(MIN_COL_WIDTH, int(self.tree.column(col, "width"))))
             except Exception:
-                continue
-            if width < min_w:
-                self.tree.column(col, width=min_w)
-            elif width > max_w:
-                self.tree.column(col, width=max_w)
+                widths.append(MIN_COL_WIDTH)
+        total = sum(widths)
+        if total > total_width:
+            overflow = total - total_width
+            for i in (2, 1, 0):
+                if overflow <= 0:
+                    break
+                take = min(widths[i] - MIN_COL_WIDTH, overflow)
+                widths[i] -= take
+                overflow -= take
+        elif total < total_width:
+            widths[2] += total_width - total
+        for col, value in zip(cols, widths):
+            try:
+                self.tree.column(col, width=value)
+            except Exception:
+                pass
         if getattr(self, "header_frame", None) and self.header_frame.winfo_exists():
             self.header_frame.after_idle(self._layout_tree_header)
+        if persist:
+            self._save_col_widths()
+
+    def _save_col_widths(self):
+        if not getattr(self, "tree", None) or not self.tree.winfo_exists():
+            return
+        try:
+            name_w = int(self.tree.column("name", "width"))
+            sound_w = int(self.tree.column("sound", "width"))
+        except Exception:
+            return
+        config.set_config("seen_col_widths", {"name": name_w, "sound": sound_w})
+        config.save_config()
+
+    def _on_tree_configure(self, _event=None):
+        if not getattr(self, "tree", None) or not self.tree.winfo_exists():
+            return
+        after_id = getattr(self, "_fit_after_id", None)
+        if after_id:
+            try:
+                self.tree.after_cancel(after_id)
+            except Exception:
+                pass
+        self._fit_after_id = self.tree.after(120, self._fit_columns)
         
         
     def attach_resize_listener(self):
@@ -521,6 +598,13 @@ class SeenCommandersGUI:
             self.tree.column("sound", anchor="w")
             self.tree.column("last_seen", anchor="w")
 
+            for _col in ("name", "sound", "last_seen"):
+                try:
+                    self.tree.column(_col, stretch=False, minwidth=MIN_COL_WIDTH)
+                except Exception:
+                    pass
+            self._apply_initial_col_widths(parent)
+
             self.scrollbar = ThemedScrollbar(parent, command=self.tree.yview)
             self.tree.configure(yscroll=self.scrollbar.set)
             self.scrollbar.grid(row=1, column=3, sticky="ns")
@@ -529,7 +613,7 @@ class SeenCommandersGUI:
             for col in range(3):
                 parent.grid_columnconfigure(col, weight=1)
 
-            self.tree.bind("<Configure>", lambda _e: self.header_frame.after_idle(self._layout_tree_header), add="+")
+            self.tree.bind("<Configure>", self._on_tree_configure, add="+")
             self.header_frame.after_idle(self._layout_tree_header)
     
             self.widgets.clear()
@@ -583,27 +667,38 @@ class SeenCommandersGUI:
     def _start_col_resize(self, event, col):
         if not getattr(self, "tree", None) or not self.tree.winfo_exists():
             return
+        cols = ("name", "sound", "last_seen")
+        if col not in cols or cols.index(col) >= len(cols) - 1:
+            return
         self._resize_col = col
+        self._resize_next_col = cols[cols.index(col) + 1]
         self._resize_x0 = event.x_root
         try:
             self._resize_w0 = self.tree.column(col, "width")
+            self._resize_next_w0 = self.tree.column(self._resize_next_col, "width")
         except Exception:
             self._resize_w0 = 100
+            self._resize_next_w0 = 100
 
     def _do_col_resize(self, event):
         col = getattr(self, "_resize_col", None)
-        if not col or not getattr(self, "tree", None) or not self.tree.winfo_exists():
+        next_col = getattr(self, "_resize_next_col", None)
+        if not col or not next_col or not getattr(self, "tree", None) or not self.tree.winfo_exists():
             return
-        new_width = max(30, self._resize_w0 + (event.x_root - self._resize_x0))
+        combined = self._resize_w0 + self._resize_next_w0
+        new_width = self._resize_w0 + (event.x_root - self._resize_x0)
+        new_width = max(MIN_COL_WIDTH, min(new_width, combined - MIN_COL_WIDTH))
         try:
-            self.tree.column(col, width=new_width)
+            self.tree.column(col, width=int(new_width))
+            self.tree.column(next_col, width=int(combined - new_width))
         except Exception:
             return
         self._layout_tree_header()
 
     def _end_col_resize(self, _event=None):
         self._resize_col = None
-        self._enforce_column_limits()
+        self._resize_next_col = None
+        self._fit_columns(persist=True)
 
     def apply_edmc_theme_to_window(self, parent):
         palette = self._edmc_palette()
