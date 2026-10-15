@@ -1,12 +1,15 @@
 # BeepBeep — EDMarketConnector Plugin
 
-Initial release of **BeepBeep GUI plugin** for EDMarketConnector.
+## 1.0.10
+- Opacity support for the Seen Commanders window
+- Quality of life enhancements to the Options menu
 
 ## Features
 - Plays a configurable sound for each commander detected in your instance
 - Option to disable wingman sounds
 - Sounds are only played when a commander arrives in your instance (some edge cases may not be covered)
 - Optional setting to play sounds when commanders leave
+- Seen Commanders window opacity, from the Options menu
 - Configurable alert settings
 
 ## How it works
@@ -18,16 +21,16 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI.
 
-Sound playback requires the included .dll, as the version of Python packaged with EDMC has very basic sound support and does not allow volume adjustment.
+On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux and macOS use the system sound player.
 
 ## Installation
-1. Copy the `BeepBeep` folder into your **EDMarketConnector `plugins` directory**
+1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
 2. Launch EDMarketConnector
 
 ## Notes
 - Only tested with the latest version of EDMarketConnector
 - Includes default sounds; you can add your own `.wav` or `.mp3` files in the `sounds` folder
-- Windows only: requires a DLL to allow per-sound volume control
+- Windows volume control uses the included DLL. Linux and macOS play sounds with the system player
 - Does not require python to be installed.
 
 ## License

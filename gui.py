@@ -20,6 +20,14 @@ _WIN_DATETIME_FMT = None
 MIN_COL_WIDTH = 50
 
 
+def set_always_on_top(window, enabled):
+    """Keep a window above others so a fullscreen game cannot cover it."""
+    try:
+        window.wm_attributes("-topmost", bool(enabled))
+    except Exception:
+        pass
+
+
 def _winpattern_to_strftime(pattern):
     _y = lambda n: "%y"
     _M = lambda n: {1: "%#m", 2: "%m", 3: "%b", 4: "%B"}.get(n, "%m")
@@ -262,16 +270,21 @@ class SeenCommandersGUI:
 
         self._pending_width = width
 
+        self.topmost_var = tk.BooleanVar(value=bool(config.get_config("stay_on_top", False)))
+
         if self.window and self.window.winfo_exists():
             self.window.lift()
             self.build_ui(self.window)
+            self._apply_topmost()
+            self.apply_seen_opacity()
             return
     
         self.window = tk.Toplevel(parent)
         self.window.title("Seen Commanders")
     
         self.window.geometry(f"{width}x{height}+{x}+{y}")
-        self.window.minsize(100, 100)  
+        self.window.minsize(100, 100)
+        self.apply_seen_opacity()  
     
         self.window.grid_rowconfigure(1, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
@@ -287,6 +300,27 @@ class SeenCommandersGUI:
         
         self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits)
         self.window.after(50, self._enforce_column_limits)
+
+        self._apply_topmost()
+        self.apply_seen_opacity()
+        self.window.after(150, self._apply_topmost)
+        self.window.after(150, self.apply_seen_opacity)
+
+    def _apply_topmost(self, window=None):
+        """Apply the saved "stay on top" preference to a window."""
+        win = window if window is not None else self.window
+        if not win:
+            return
+        try:
+            if not win.winfo_exists():
+                return
+        except Exception:
+            return
+        set_always_on_top(win, bool(config.get_config("stay_on_top", False)))
+
+    def _on_topmost_toggle(self, value):
+        self._apply_topmost()
+        self._apply_topmost(getattr(self, "options_popup", None))
 
     def _enforce_column_limits(self, _event=None):
         self._fit_columns()
@@ -436,6 +470,23 @@ class SeenCommandersGUI:
         self.resize_after_id = None
 
 
+    def apply_seen_opacity(self, value=None):
+        if value is None:
+            value = config.get_config("seen_window_opacity", 100)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            value = 100
+        value = max(10, min(100, value))
+        window = self.window
+        if not window or not window.winfo_exists():
+            return
+        try:
+            window.attributes("-alpha", value / 100.0)
+        except tk.TclError:
+            pass
+
+
     def make_tree_editable(self):
         self.tree.bind("<Double-1>", self.on_tree_double_click_popup)
         self.tree.bind("<Return>", self.on_tree_enter_pressed)
@@ -485,6 +536,7 @@ class SeenCommandersGUI:
         popup.title(f"Edit Commander {info.get('name', 'unknown')}")
         popup.geometry(f"+{event.x_root}+{event.y_root}")
         popup.grab_set()
+        self._apply_topmost(popup)
 
         popup.bind("<Escape>", lambda e: popup.destroy())
     
@@ -740,8 +792,10 @@ class SeenCommandersGUI:
         popup.title("Options")
         popup.transient(self.window)
         popup.grab_set()
-    
-    
+
+        self.options_popup = popup
+        self._apply_topmost(popup)
+
         self.restore_options_geometry(popup)
 
     
@@ -1210,7 +1264,7 @@ class SeenCommandersGUI:
             subprocess.Popen(["xdg-open", folder])
     
 
-    def add_checkbox(self, frame, row, text, var, *, target=None, attr=None):
+    def add_checkbox(self, frame, row, text, var, *, target=None, attr=None, callback=None):
         def on_toggle():
             v = bool(var.get())
             if target and attr:
@@ -1218,16 +1272,21 @@ class SeenCommandersGUI:
             if attr:
                 config.set_config(attr, v)
                 config.save_config()
+            if callback:
+                try:
+                    callback(v)
+                except Exception:
+                    pass
 
         holder = tk.Frame(frame)
-        holder.grid(row=row, column=0, columnspan=2, padx=5, pady=6, sticky="w")
+        holder.grid(row=row, column=0, columnspan=2, padx=5, pady=(8, 2), sticky="w")
 
         size = 22
         canvas = tk.Canvas(holder, width=size, height=size,
                            highlightthickness=0, bd=0, takefocus=0)
-        canvas.pack(side="left")
+        canvas.grid(row=0, column=0, sticky="")
         label = tk.Label(holder, text=text)
-        label.pack(side="left", padx=(10, 0))
+        label.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
         box = canvas.create_rectangle(3, 3, size - 3, size - 3, width=2,
                                       outline="#13ec39")
@@ -1255,14 +1314,17 @@ class SeenCommandersGUI:
         return row + 1
     
 
-    def add_slider(self, frame, row, label, var, *, attr=None, from_=0, to=100):
+    def add_slider(self, frame, row, label, var, *, attr=None, from_=0, to=100, command=None):
         tk.Label(frame, text=label).grid(row=row, column=0, padx=5, pady=5, sticky="w")
         slider = tk.Scale(frame, from_=from_, to=to, orient=tk.HORIZONTAL, variable=var)
         slider.grid(row=row, column=1, padx=5, pady=5, sticky="we")
 
         def on_change(*_):
+            value = var.get()
             if attr:
-                config.set_config(attr, var.get())
+                config.set_config(attr, value)
+            if command:
+                command(value)
 
         def on_save(_event):
             config.save_config()
@@ -1317,7 +1379,7 @@ class SeenCommandersGUI:
         scrollbar.grid(row=0, column=1, sticky="ns")
 
         frame = tk.Frame(canvas)
-        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
         canvas_window = canvas.create_window((0,0), window=frame, anchor="nw")
     
         def on_canvas_configure(event):
@@ -1341,21 +1403,43 @@ class SeenCommandersGUI:
             to=100,
             attr="volume"
         )
-                
-        tk.Button(
+
+        try:
+            seen_opacity = int(config.get_config("seen_window_opacity", 100))
+        except (TypeError, ValueError):
+            seen_opacity = 100
+        seen_opacity = max(10, min(100, seen_opacity))
+
+        row = self.add_slider(
             frame,
+            row,
+            "Seen Commanders opacity (%)",
+            tk.IntVar(value=seen_opacity),
+            from_=10,
+            to=100,
+            attr="seen_window_opacity",
+            command=self.apply_seen_opacity
+        )
+                
+        actions = tk.Frame(frame)
+        actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 6), sticky="w")
+        tk.Button(
+            actions,
             text="Open Sounds Folder",
             command=self.open_sounds_folder
-        ).grid(row=row, column=0, padx=5, sticky="w")
-
+        ).pack(side="left", padx=(0, 8))
         tk.Button(
-            frame,
-            text="▶ Play",
+            actions,
+            text="Play",
             command=lambda: beep_inst.play_sound(sound_inst.neutral)
-        ).grid(row=row, column=1, padx=5, sticky="e")
-        
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            actions,
+            text="Reload Sounds",
+            command=sound_inst.reload
+        ).pack(side="left")
         row += 1
-    
+
         row = self.add_info_box(
             frame,
             row,
@@ -1366,26 +1450,17 @@ class SeenCommandersGUI:
                 "should not be modified. To override a default sound, simply add a file "
                 "with the same name in the main 'sounds' folder (ext does not matter). "
                 "The plugin automatically loads the newest file for each name. "
-                "Use the 'Reload Sounds' button to update the list immediately."
+                "Use Reload Sounds to update the list immediately."
             ),
             title="Sound Files"
         )
 
-        tk.Button(
-            frame,
-            text="Reload sounds",
-            command=sound_inst.reload
-        ).grid(row=row, column=1, padx=5, sticky="e")
-        
-        row += 1
-    
         row = self.add_info_box(
             frame,
             row,
             (
-                "Click the 'Reload Sounds' button to re-scan the 'sounds' folder "
-                "and update available sound files. This allows you to add new sounds "
-                "or replace existing ones without restarting EDMC."
+                "Reload Sounds re-scans the sounds folder and updates the available "
+                "files, so new sounds can be added without restarting EDMC."
             ),
             title="Reload Sounds"
         )
@@ -1398,8 +1473,8 @@ class SeenCommandersGUI:
             from_=1,
             to=10,
             attr="sounds"
-        )        
-        
+        )
+
         row = self.add_info_box(
             frame,
             row,
@@ -1408,9 +1483,7 @@ class SeenCommandersGUI:
             ),
             title="Multiple sounds"
         )
-        
-        row += 1
-        
+
         row = self.add_checkbox(
             frame,
             row,
@@ -1427,7 +1500,27 @@ class SeenCommandersGUI:
                 "For example, if you are in Supercruise and someone leaves, the sound will play."
             ),
             title="Beep on leaving"
-        )        
+        )
+
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Keep Seen Commanders on top of the game",
+            tk.BooleanVar(value=bool(config.get_config("stay_on_top", False))),
+            attr="stay_on_top",
+            callback=self._on_topmost_toggle
+        )
+
+        row = self.add_info_box(
+            frame,
+            row,
+            (
+                "Keeps the Seen Commanders window above Elite Dangerous and other "
+                "windows. Only works when the game runs in windowed or borderless "
+                "mode; exclusive fullscreen always paints over everything."
+            ),
+            title="Stay on top"
+        )
     
         row = self.add_checkbox(
             frame,
@@ -1477,7 +1570,7 @@ class SeenCommandersGUI:
                 "already in your instance may trigger sounds in reverse — for example, "
                 "alerts may play when they leave instead of when they arrive. \n\n"
                 "Going to any EMPTY instance (Normal Space, Supercruise, or Hyperspace) and "
-                "waiting ~5 seconds, or simply , will reset this."
+                "waiting about 5 seconds will reset this."
             ),
             title="General Notes"
         )

@@ -4,6 +4,7 @@ from overlay_announcer import announce_connected
 from location import location
 from gui import gui_inst
 from logutil import log
+from version import __version__  # noqa: F401
 import myNotebook as nb  # noqa
 
 def plugin_start3(plugin_dir):
