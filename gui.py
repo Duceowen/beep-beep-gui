@@ -226,8 +226,6 @@ class SeenCommandersGUI:
         def update_mute_button(muted):
             mute_btn.config(
                 text="🔇" if muted else "🔊",
-                bg="lightgrey" if muted else "SystemButtonFace",
-                fg="black",
                 relief="sunken" if muted else "raised"
             )
     
