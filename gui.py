@@ -637,9 +637,17 @@ class SeenCommandersGUI:
         popup.geometry(f"{width}x{height}+{x}+{y}")
         
     def open_sounds_folder(self):
+        import subprocess
+        import platform
         folder = os.path.join(self.plugin_dir, "sounds")
-        os.makedirs(folder, exist_ok=True) 
-        os.startfile(folder) 
+        os.makedirs(folder, exist_ok=True)
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(folder)
+        elif system == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
     
 
     def add_checkbox(self, frame, row, text, var, *, target=None, attr=None):

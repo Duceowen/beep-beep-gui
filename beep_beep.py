@@ -1,6 +1,8 @@
 import datetime
 import os
-import ctypes
+import subprocess
+import platform
+import shutil
 import threading
 from logutil import log
 from beep_beep_config import config
@@ -24,6 +26,52 @@ class BeepBeep:
     def sounds(self) -> int:
         return config.get_config("sounds", 1)
 
+    def _play_sound_cross_platform(self, full_path: str, vol: float):
+        system = platform.system()
+        try:
+            if system == "Windows":
+                dll_path = os.path.join(self.plugin_dir, "BeepBeepPlay.dll")
+                if os.path.isfile(dll_path):
+                    import ctypes
+                    dll = ctypes.CDLL(dll_path)
+                    dll.BeepBeepPlay.argtypes = [ctypes.c_char_p, ctypes.c_float]
+                    dll.BeepBeepPlay.restype = ctypes.c_int
+                    dll.BeepBeepPlay(full_path.encode("utf-8"), vol)
+                    return
+                else:
+                    log.warning("BeepBeepPlay.dll not found, using fallback")
+                    import winsound
+                    winsound.PlaySound(full_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    return
+            elif system == "Darwin":
+                subprocess.Popen(["afplay", "-v", str(vol), full_path],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            else:
+                ext = os.path.splitext(full_path)[1].lower()
+                if ext == ".wav":
+                    for player in ["paplay", "aplay", "ffplay", "play"]:
+                        if shutil.which(player):
+                            if player == "ffplay":
+                                cmd = [player, "-nodisp", "-autoexit", "-af", f"volume={vol}", full_path]
+                            elif player == "play":
+                                cmd = [player, "-q", full_path]
+                            else:
+                                cmd = [player, full_path]
+                            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            return
+                elif ext == ".mp3":
+                    for player in ["mpg123", "ffplay", "cvlc"]:
+                        if shutil.which(player):
+                            if player == "ffplay":
+                                cmd = [player, "-nodisp", "-autoexit", "-af", f"volume={vol}", full_path]
+                            else:
+                                cmd = [player, full_path]
+                            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                log.error("No suitable sound player found for %s", full_path)
+        except Exception as e:
+            log.error("Failed to play sound %s: %s", full_path, e)
 
     def play_sound(self, base_name: str):
         if self.mute or base_name.lower() == "none":
@@ -38,11 +86,6 @@ class BeepBeep:
                 return
     
         full_path = os.path.join(self.plugin_dir, "sounds", file_to_play)
-        dll_path = os.path.join(self.plugin_dir, "BeepBeepPlay.dll")
-    
-        if not os.path.isfile(dll_path):
-            log.info("Cannot find BeepBeepPlay.dll in %s", dll_path)
-            return
     
         if not os.path.isfile(full_path):
             log.info("Cannot find sound %s, trying neutral instead", full_path)
@@ -53,13 +96,7 @@ class BeepBeep:
     
         vol = self.volume / 100.0
     
-        try:
-            dll = ctypes.CDLL(dll_path)
-            dll.BeepBeepPlay.argtypes = [ctypes.c_char_p, ctypes.c_float]
-            dll.BeepBeepPlay.restype = ctypes.c_int
-            dll.BeepBeepPlay(full_path.encode("utf-8"), vol)
-        except (OSError, AttributeError, TypeError) as e:
-            log.error("Failed to play sound %s: %s", full_path, e)
+        self._play_sound_cross_platform(full_path, vol)
 
         
     def handle_event(self, info: dict | list[dict]):

@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import platform
 import re
 import threading
 import time
@@ -21,8 +22,14 @@ class CommanderHistoryManager:
     def __init__(self):
         self.plugin_dir = os.path.dirname(__file__)
         self.seen_data: CommanderDict = {}
+        if platform.system() == "Windows":
+            base_dir = os.getenv("LOCALAPPDATA", "")
+        elif platform.system() == "Darwin":
+            base_dir = os.path.expanduser("~/Library/Application Support")
+        else:
+            base_dir = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
         self.commander_history_dir = os.path.join(
-            os.getenv("LOCALAPPDATA", ""), "Frontier Developments", "Elite Dangerous", "CommanderHistory"
+            base_dir, "Frontier Developments", "Elite Dangerous", "CommanderHistory"
         )
         self.json_file_path = os.path.join(self.plugin_dir, "seen_commanders.json")
         self.last_modified_timestamp: datetime.datetime = datetime.datetime.min
