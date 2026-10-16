@@ -50,7 +50,7 @@ class BeepBeep:
             else:
                 ext = os.path.splitext(full_path)[1].lower()
                 if ext == ".wav":
-                    for player in ["paplay", "aplay", "ffplay", "play"]:
+                    for player in ["paplay", "pw-play", "aplay", "ffplay", "play"]:
                         if shutil.which(player):
                             if player == "ffplay":
                                 cmd = [player, "-nodisp", "-autoexit", "-af", f"volume={vol}", full_path]

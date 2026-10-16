@@ -74,20 +74,26 @@ def edmc_journal_dir() -> str | None:
     return expanded or None
 
 
-def platform_default_history_dir(system: str | None = None) -> str:
+def platform_default_history_dir(system: str | None = None, home: str | None = None) -> str:
     system = system or platform.system()
     if system == "Windows":
         base_dir = os.getenv("LOCALAPPDATA", "")
     elif system == "Darwin":
         base_dir = os.path.expanduser("~/Library/Application Support")
+    elif home is not None:
+        base_dir = os.path.join(home, ".local", "share")
     else:
         base_dir = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
     return os.path.join(base_dir, *_HISTORY_TAIL)
 
 
-def steam_library_roots() -> list[str]:
-    home = os.path.expanduser("~")
+def steam_library_roots(home: str | None = None) -> list[str]:
+    home = home or os.path.expanduser("~")
+    # Linux Mint installs Steam from the Ubuntu/Debian package. That package
+    # uses ~/.steam/debian-installation, usually with ~/.steam/steam linked to
+    # it. The Valve .deb and the path Tom reported use ~/.local/share/Steam.
     seeds = [
+        os.path.join(home, ".steam", "debian-installation"),
         os.path.join(home, ".steam", "steam"),
         os.path.join(home, ".steam", "root"),
         os.path.join(home, ".local", "share", "Steam"),
@@ -101,11 +107,15 @@ def steam_library_roots() -> list[str]:
         if not path:
             return
         expanded = os.path.expanduser(path)
-        key = os.path.normcase(os.path.normpath(expanded))
+        try:
+            real = os.path.realpath(expanded)
+        except OSError:
+            real = expanded
+        key = os.path.normcase(os.path.normpath(real))
         if key in seen:
             return
         seen.add(key)
-        roots.append(expanded)
+        roots.append(real)
 
     for seed in seeds:
         if os.path.isdir(seed):
@@ -123,25 +133,28 @@ def steam_library_roots() -> list[str]:
     return roots
 
 
-def proton_history_dirs() -> list[str]:
+def proton_history_dirs(home: str | None = None) -> list[str]:
     found: list[str] = []
     tail = os.path.join("AppData", "Local", *_HISTORY_TAIL)
-    for root in steam_library_roots():
-        users_root = os.path.join(
-            root, "steamapps", "compatdata", _ELITE_APP_ID, "pfx", "drive_c", "users"
-        )
-        if not os.path.isdir(users_root):
-            continue
-        try:
-            names = os.listdir(users_root)
-        except OSError:
-            continue
-        for name in names:
-            found.append(os.path.join(users_root, name, tail))
+    for root in steam_library_roots(home):
+        # Mint's ext4 filesystem is case-sensitive. Current Steam uses
+        # steamapps; older installs used SteamApps.
+        for steamapps_name in ("steamapps", "SteamApps"):
+            users_root = os.path.join(
+                root, steamapps_name, "compatdata", _ELITE_APP_ID, "pfx", "drive_c", "users"
+            )
+            if not os.path.isdir(users_root):
+                continue
+            try:
+                names = os.listdir(users_root)
+            except OSError:
+                continue
+            for name in names:
+                found.append(os.path.join(users_root, name, tail))
     return found
 
 
-def commander_history_candidates(journal_dir: str | None = None, system: str | None = None) -> list[str]:
+def commander_history_candidates(journal_dir: str | None = None, system: str | None = None, home: str | None = None) -> list[str]:
     journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
     ordered: list[str] = []
     if journal_dir:
@@ -150,8 +163,8 @@ def commander_history_candidates(journal_dir: str | None = None, system: str | N
             ordered.append(derived)
         ordered.append(os.path.join(os.path.expanduser(journal_dir), "CommanderHistory"))
     if (system or platform.system()) != "Windows":
-        ordered.extend(proton_history_dirs())
-    ordered.append(platform_default_history_dir(system))
+        ordered.extend(proton_history_dirs(home))
+    ordered.append(platform_default_history_dir(system, home))
 
     unique: list[str] = []
     seen: set[str] = set()

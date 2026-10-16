@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.19
+- Linux Mint finds CommanderHistory in the Steam Proton prefix, including ~/.local/share/Steam and ~/.steam/debian-installation
+
 ## 1.0.18
 - Linux looks for CommanderHistory in the Proton prefix, using the same EDMC journal folder, instead of ~/.local/share
 
