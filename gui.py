@@ -26,15 +26,16 @@ COLUMN_LABELS = (
     ("last_seen", "Last Encounter"),
 )
 COLUMN_BUFFER = 24
-DIVIDER_RESIZE = 10
-DIVIDER_MARK = 4
+DIVIDER_HIT = 8
+DIVIDER_LINE = 1
 
 
 def layout_seen_columns(available, visible, locked, name_share, min_name, min_sound):
     """Width for each Seen Commanders column.
 
-    Seen and Last Encounter keep the space their text needs. Name and Sound
-    share whatever is left. A very narrow window still fits on screen.
+    Seen and Last Encounter keep the widths in ``locked`` (the text they
+    need, or a width the user dragged). Name and Sound share whatever is
+    left. A very narrow window still fits on screen.
     """
     order = [col for col in SEEN_COLUMNS if col in visible]
     if not order:
@@ -263,31 +264,43 @@ class ThemedScrollbar(tk.Canvas):
         self.command("moveto", frac)
 
 
-class HeaderDivider(tk.Frame):
-    """Visible column boundary. Resize handles are wider than marker lines."""
+class HeaderDivider(tk.Canvas):
+    """Grab strip in the header color with a single theme-colored line."""
 
-    def __init__(self, master, resizable=False):
-        width = DIVIDER_RESIZE if resizable else DIVIDER_MARK
+    def __init__(self, master):
         super().__init__(
             master,
-            width=width,
+            width=DIVIDER_HIT,
             height=8,
-            cursor="sb_h_double_arrow" if resizable else "",
-            background="#3a3a3a",
+            cursor="sb_h_double_arrow",
+            background="#2a2a2a",
             highlightthickness=0,
             bd=0,
         )
-        self.resizable = resizable
-        self.grip_width = width
-        self.line = tk.Frame(self, width=2, background="#f2f2f2", highlightthickness=0, bd=0)
-        self.line.place(relx=0.5, rely=0, relheight=1, anchor="n", width=2)
+        self.resizable = True
+        self.grip_width = DIVIDER_HIT
+        self.line = self.create_line(
+            DIVIDER_HIT // 2, 0, DIVIDER_HIT // 2, 8,
+            width=DIVIDER_LINE, fill="#f2f2f2",
+        )
+        self.bind("<Configure>", self._place_line, add="+")
+
+    def _place_line(self, _event=None):
+        width = max(1, self.winfo_width())
+        height = max(1, self.winfo_height())
+        x = width // 2
+        try:
+            self.coords(self.line, x, 0, x, height)
+            self.itemconfigure(self.line, width=DIVIDER_LINE)
+        except Exception:
+            pass
 
     def apply_theme(self, palette):
         foreground = palette.get("foreground") or "#f2f2f2"
         background = palette.get("background") or "#2a2a2a"
         try:
-            self.configure(background=foreground)
-            self.line.configure(background=background)
+            self.configure(background=background)
+            self.itemconfigure(self.line, fill=foreground, width=DIVIDER_LINE)
         except Exception:
             pass
 
@@ -503,6 +516,50 @@ class SeenCommandersGUI:
             return 0.62
         return name / total
 
+    def _user_fixed_widths(self):
+        cached = getattr(self, "_user_fixed", None)
+        if isinstance(cached, dict):
+            return cached
+        saved = config.get_config("seen_col_widths", None)
+        fixed = {}
+        if isinstance(saved, dict):
+            for col in ("seen_count", "last_seen"):
+                if col not in saved:
+                    continue
+                try:
+                    fixed[col] = max(1, int(saved[col]))
+                except (TypeError, ValueError):
+                    continue
+        self._user_fixed = fixed
+        return fixed
+
+    def _set_user_fixed(self, col, width):
+        fixed = dict(self._user_fixed_widths())
+        try:
+            fixed[col] = max(1, int(width))
+        except (TypeError, ValueError):
+            return
+        self._user_fixed = fixed
+
+    def _preferred_fixed(self):
+        """Widths Seen and Last Encounter keep until the window is too narrow.
+
+        Seen starts at the count width and then follows a drag. Last Encounter
+        stays at least as wide as the full date and time, and can be dragged wider.
+        """
+        content = self._locked_widths()
+        user = self._user_fixed_widths()
+        seen = user.get("seen_count", content.get("seen_count", 0))
+        last_floor = int(content.get("last_seen", 0))
+        last_user = user.get("last_seen")
+        last = last_floor if last_user is None else max(last_floor, int(last_user))
+        return {"seen_count": int(seen), "last_seen": int(last)}
+
+    def _fixed_floor(self, col):
+        if col == "last_seen":
+            return max(1, int(self._locked_widths().get("last_seen", self._min_label_width(col))))
+        return max(1, self._min_label_width(col))
+
     def _text_px(self, text):
         try:
             font = tkFont.nametofont("TkDefaultFont")
@@ -551,12 +608,12 @@ class SeenCommandersGUI:
         return max(36, self._text_px(label) + 12)
 
     def _layout_signature(self, available):
-        locked = self._locked_widths()
+        preferred = self._preferred_fixed()
         return (
             available,
             tuple(self._visible_columns()),
-            locked.get("seen_count"),
-            locked.get("last_seen"),
+            preferred.get("seen_count"),
+            preferred.get("last_seen"),
             round(self._name_share(), 4),
         )
 
@@ -597,7 +654,7 @@ class SeenCommandersGUI:
         widths = layout_seen_columns(
             width,
             self._visible_columns(),
-            self._locked_widths(),
+            self._preferred_fixed(),
             self._flex_ratio,
             self._min_label_width("name"),
             self._min_label_width("sound"),
@@ -621,7 +678,7 @@ class SeenCommandersGUI:
         widths = layout_seen_columns(
             available,
             self._visible_columns(),
-            self._locked_widths(),
+            self._preferred_fixed(),
             self._name_share(),
             self._min_label_width("name"),
             self._min_label_width("sound"),
@@ -640,7 +697,10 @@ class SeenCommandersGUI:
         share = self._name_share()
         name = max(1, int(round(share * 1000)))
         sound = max(1, 1000 - name)
-        config.set_config("seen_col_widths", {"name": name, "sound": sound})
+        payload = {"name": name, "sound": sound}
+        for col, width in self._user_fixed_widths().items():
+            payload[col] = max(1, int(width))
+        config.set_config("seen_col_widths", payload)
         config.save_config()
 
     def _sync_column_vars(self):
@@ -668,38 +728,180 @@ class SeenCommandersGUI:
         self._fitted_sig = None
         self._fit_columns()
 
+    def _menu_palette(self):
+        palette = dict(self._edmc_palette())
+        background = palette.get("background")
+        foreground = palette.get("foreground")
+        if not background or not foreground:
+            header = getattr(self, "header_frame", None)
+            label = None
+            labels = getattr(self, "header_labels", None) or {}
+            if labels:
+                label = next(iter(labels.values()))
+            try:
+                background = background or header.cget("background")
+            except Exception:
+                background = background or "#1c1c1c"
+            try:
+                foreground = foreground or (label.cget("foreground") if label is not None else None)
+            except Exception:
+                foreground = foreground or "#f2f2f2"
+        palette["background"] = background or "#1c1c1c"
+        palette["foreground"] = foreground or "#f2f2f2"
+        palette["activebackground"] = palette.get("activebackground") or palette["foreground"]
+        palette["activeforeground"] = palette.get("activeforeground") or palette["background"]
+        return palette
+
+    def _close_column_menu(self):
+        popup = getattr(self, "_column_menu", None)
+        self._column_menu = None
+        self._column_menu_redraws = []
+        if popup is None:
+            return
+        try:
+            if popup.winfo_exists():
+                popup.destroy()
+        except Exception:
+            pass
+
+    def _dismiss_column_menu(self, event):
+        popup = getattr(self, "_column_menu", None)
+        if popup is None:
+            return
+        try:
+            if not popup.winfo_exists():
+                self._column_menu = None
+                return
+            widget = getattr(event, "widget", None)
+            if widget is not None and widget.winfo_toplevel() is popup:
+                return
+        except Exception:
+            return
+        self._close_column_menu()
+
+    def _redraw_column_menu(self):
+        for redraw in list(getattr(self, "_column_menu_redraws", []) or []):
+            try:
+                redraw()
+            except Exception:
+                pass
+
+    def _add_column_menu_row(self, parent, col, label, palette):
+        background = palette["background"]
+        foreground = palette["foreground"]
+        active = palette["activebackground"]
+        active_foreground = palette["activeforeground"]
+        row = tk.Frame(parent, background=background, highlightthickness=0, bd=0)
+        row.pack(fill="x")
+        size = 16
+        canvas = tk.Canvas(
+            row,
+            width=size,
+            height=size,
+            background=background,
+            highlightthickness=0,
+            bd=0,
+        )
+        canvas.pack(side="left", padx=(8, 4), pady=3)
+        box = canvas.create_rectangle(
+            2, 2, size - 2, size - 2, width=1, outline=foreground, fill=background,
+        )
+        tick = canvas.create_line(
+            size * 0.28, size * 0.52,
+            size * 0.44, size * 0.70,
+            size * 0.74, size * 0.32,
+            width=2, capstyle="round", joinstyle="round", fill=foreground,
+        )
+        canvas._beep_check_items = (box, tick)
+        text = tk.Label(
+            row,
+            text=label,
+            anchor="w",
+            background=background,
+            foreground=foreground,
+            highlightthickness=0,
+            bd=0,
+        )
+        text.pack(side="left", fill="x", expand=True, padx=(0, 14), pady=2)
+
+        def redraw():
+            checked = bool(self._column_vars[col].get())
+            canvas.itemconfigure(tick, state=("normal" if checked else "hidden"))
+
+        def toggle(_event=None):
+            var = self._column_vars[col]
+            var.set(not bool(var.get()))
+            self._on_column_toggle(col)
+            self._redraw_column_menu()
+            return "break"
+
+        def enter(_event=None):
+            row.configure(background=active)
+            canvas.configure(background=active)
+            text.configure(background=active, foreground=active_foreground)
+            canvas.itemconfigure(box, fill=active)
+
+        def leave(_event=None):
+            row.configure(background=background)
+            canvas.configure(background=background)
+            text.configure(background=background, foreground=foreground)
+            canvas.itemconfigure(box, fill=background)
+
+        for widget in (row, canvas, text):
+            widget.bind("<Button-1>", toggle)
+            widget.bind("<Enter>", enter)
+            widget.bind("<Leave>", leave)
+        redraw()
+        self._column_menu_redraws.append(redraw)
+
     def _popup_column_menu(self, event):
         if not getattr(self, "window", None) or not self.window.winfo_exists():
             return "break"
+        self._close_column_menu()
         self._sync_column_vars()
-        menu = tk.Menu(self.window, tearoff=0)
-        palette = self._edmc_palette()
-        background = palette.get("background")
-        foreground = palette.get("foreground")
-        if background and foreground:
-            try:
-                menu.configure(
-                    background=background,
-                    foreground=foreground,
-                    activebackground=palette.get("activebackground") or foreground,
-                    activeforeground=palette.get("activeforeground") or background,
-                    borderwidth=1,
-                )
-            except Exception:
-                pass
-        for col, label in COLUMN_LABELS:
-            menu.add_checkbutton(
-                label=label,
-                variable=self._column_vars[col],
-                command=lambda c=col: self._on_column_toggle(c),
-            )
+        palette = self._menu_palette()
+        popup = tk.Toplevel(self.window)
+        popup.overrideredirect(True)
+        popup.configure(background=palette["foreground"], highlightthickness=0, bd=0)
         try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            try:
-                menu.grab_release()
-            except Exception:
-                pass
+            popup.transient(self.window)
+        except Exception:
+            pass
+        try:
+            popup.attributes("-topmost", bool(self.window.attributes("-topmost")))
+        except Exception:
+            pass
+        inner = tk.Frame(popup, background=palette["background"], highlightthickness=0, bd=0)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        self._column_menu = popup
+        self._column_menu_redraws = []
+        for col, label in COLUMN_LABELS:
+            self._add_column_menu_row(inner, col, label, palette)
+        self.apply_edmc_theme(popup)
+        try:
+            popup.configure(background=palette["foreground"])
+        except Exception:
+            pass
+        popup.update_idletasks()
+        width = max(1, popup.winfo_reqwidth())
+        height = max(1, popup.winfo_reqheight())
+        x = int(getattr(event, "x_root", 0))
+        y = int(getattr(event, "y_root", 0))
+        try:
+            x = max(0, min(x, popup.winfo_screenwidth() - width))
+            y = max(0, min(y, popup.winfo_screenheight() - height))
+        except Exception:
+            pass
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+        popup.lift()
+        if not getattr(self, "_column_menu_bound", False):
+            self.window.bind_all("<Button-1>", self._dismiss_column_menu, add="+")
+            self._column_menu_bound = True
+        popup.bind("<Escape>", lambda _e: self._close_column_menu())
+        try:
+            popup.focus_set()
+        except Exception:
+            pass
         return "break"
 
     def _on_tree_configure(self, event=None):
@@ -940,13 +1142,21 @@ class SeenCommandersGUI:
             self.header_labels = {}
             self.header_handles = {}
             for _col, _label in COLUMN_LABELS:
-                _lbl = tk.Label(self.header_frame, text=_label, anchor="w", cursor="hand2")
+                _lbl = tk.Label(
+                    self.header_frame,
+                    text=_label,
+                    anchor="w",
+                    cursor="hand2",
+                    bd=0,
+                    highlightthickness=0,
+                    padx=0,
+                )
                 _lbl.bind("<Button-1>", lambda _e, c=_col: self.on_header_click(c))
                 _lbl.bind("<Button-3>", self._popup_column_menu)
                 _lbl.bind("<Control-Button-1>", self._popup_column_menu)
                 self.header_labels[_col] = _lbl
-            for _col in ("name", "sound", "seen_count"):
-                _handle = HeaderDivider(self.header_frame, resizable=_col in ("name", "sound"))
+            for _col in SEEN_COLUMNS:
+                _handle = HeaderDivider(self.header_frame)
                 self._bind_divider(_handle, _col)
                 self.header_handles[_col] = _handle
 
@@ -1000,20 +1210,24 @@ class SeenCommandersGUI:
         self.apply_edmc_theme_to_window(parent)
 
     def _bind_divider(self, divider, col):
-        widgets = [divider, getattr(divider, "line", None)]
-        for widget in widgets:
-            if widget is None:
-                continue
-            if divider.resizable:
-                widget.bind("<ButtonPress-1>", lambda _e, c=col: self._start_col_resize(_e, c))
-                widget.bind("<B1-Motion>", self._do_col_resize)
-                widget.bind("<ButtonRelease-1>", self._end_col_resize)
-                try:
-                    widget.configure(cursor="sb_h_double_arrow")
-                except Exception:
-                    pass
-            widget.bind("<Button-3>", self._popup_column_menu)
-            widget.bind("<Control-Button-1>", self._popup_column_menu)
+        if divider.resizable:
+            divider.bind("<ButtonPress-1>", lambda _e, c=col: self._start_col_resize(_e, c))
+            divider.bind("<B1-Motion>", self._do_col_resize)
+            divider.bind("<ButtonRelease-1>", self._end_col_resize)
+            try:
+                divider.configure(cursor="sb_h_double_arrow")
+            except Exception:
+                pass
+        divider.bind("<Button-3>", self._popup_column_menu)
+        divider.bind("<Control-Button-1>", self._popup_column_menu)
+
+    def _divider_can_resize(self, col, shown):
+        shown = set(shown)
+        if col not in shown:
+            return False
+        if col in ("name", "sound"):
+            return "name" in shown and "sound" in shown
+        return any(other in shown for other in SEEN_COLUMNS if other != col)
 
     def _layout_tree_header(self, widths=None, _event=None):
         tree = getattr(self, "tree", None)
@@ -1061,78 +1275,126 @@ class SeenCommandersGUI:
                     label.place(x=x + inset, y=0, width=max(1, width - inset), height=height)
             next_col = shown[index + 1] if index + 1 < len(shown) else None
             handle = self.header_handles.get(col)
-            if handle and handle.winfo_exists() and next_col and width > 0:
-                grip = getattr(handle, "grip_width", DIVIDER_MARK)
-                can_resize = (
-                    handle.resizable
-                    and "name" in shown
-                    and "sound" in shown
-                    and col in ("name", "sound")
-                )
-                if handle.resizable != can_resize:
-                    handle.resizable = can_resize
-                    handle.configure(cursor="sb_h_double_arrow" if can_resize else "")
-                    if getattr(handle, "line", None):
-                        handle.line.configure(cursor="sb_h_double_arrow" if can_resize else "")
-                hx = x + width - grip // 2
+            show_handle = bool(next_col) or col in ("seen_count", "last_seen")
+            if handle and handle.winfo_exists() and show_handle and width > 0:
+                grip = getattr(handle, "grip_width", DIVIDER_HIT)
+                can_resize = self._divider_can_resize(col, shown)
+                handle.configure(cursor="sb_h_double_arrow" if can_resize else "")
+                if next_col:
+                    hx = x + width - grip // 2
+                else:
+                    hx = x + width - grip
                 if limit > 1:
                     hx = min(max(0, hx), max(0, limit - grip))
                 handle.place(x=hx, y=0, width=grip, height=height)
-                handle.lift()
+                tk.Misc.lift(handle)
             x += width
         for col, label in self.header_labels.items():
             if col not in shown and label and label.winfo_exists():
                 label.place_forget()
 
     def _start_col_resize(self, event, col):
-        if col not in ("name", "sound"):
-            return
-        visible = self._visible_columns()
-        if "name" not in visible or "sound" not in visible:
+        shown = [c for c in self._visible_columns() if int((getattr(self, "_applied_widths", None) or {}).get(c, 0)) > 0]
+        if not self._divider_can_resize(col, shown):
             return
         applied = getattr(self, "_applied_widths", None) or {}
+        visible = set(self._visible_columns())
         self._resize_col = col
         self._resize_x0 = event.x_root
-        self._resize_name0 = int(applied.get("name", 0))
-        self._resize_sound0 = int(applied.get("sound", 0))
-        self._resize_seen = int(applied.get("seen_count", 0))
-        self._resize_last = int(applied.get("last_seen", 0))
-        self._resize_flex = self._resize_name0 + self._resize_sound0
+        self._resize_start = {
+            c: int(applied.get(c, 0)) if c in visible else 0
+            for c in SEEN_COLUMNS
+        }
+
+    def _resize_widths(self, start, col, delta):
+        widths = {c: int(start.get(c, 0)) for c in SEEN_COLUMNS}
+        total = sum(widths.values())
+        if total <= 0:
+            return widths
+        if col in ("name", "sound"):
+            flex = widths["name"] + widths["sound"]
+            if flex <= 1:
+                return widths
+            min_name = self._min_label_width("name")
+            min_sound = self._min_label_width("sound")
+            if flex < min_name + min_sound:
+                min_name = min_sound = 1
+            if col == "name":
+                name_w = widths["name"] + delta
+            else:
+                name_w = flex - (widths["sound"] + delta)
+            name_w = int(max(min_name, min(name_w, flex - min_sound)))
+            widths["name"] = name_w
+            widths["sound"] = flex - name_w
+            return widths
+
+        requested = int(start.get(col, 0)) + int(delta)
+        floor = self._fixed_floor(col)
+        other_fixed = [c for c in ("seen_count", "last_seen") if c != col and widths[c] > 0]
+        flex_cols = [c for c in ("name", "sound") if widths[c] > 0]
+        reserved = sum(widths[c] for c in other_fixed)
+        if flex_cols:
+            min_flex = sum(self._min_label_width(c) for c in flex_cols)
+            if reserved + min_flex + floor > total:
+                min_flex = len(flex_cols)
+            cap = max(1, total - reserved - min_flex)
+            low = floor if floor <= cap else 1
+            chosen = int(min(max(requested, low), cap))
+            widths[col] = chosen
+            for other in other_fixed:
+                widths[other] = int(start.get(other, 0))
+            flex_room = total - chosen - reserved
+            mins = {c: self._min_label_width(c) for c in flex_cols}
+            if flex_room < sum(mins.values()):
+                mins = {c: 1 for c in flex_cols}
+            split = _split_flex(max(0, flex_room), flex_cols, self._name_share(), mins)
+            for flex_col in ("name", "sound"):
+                widths[flex_col] = split.get(flex_col, 0)
+        elif other_fixed:
+            other = other_fixed[0]
+            other_floor = self._fixed_floor(other) if other == "last_seen" else 1
+            cap = max(1, total - min(other_floor, total - 1))
+            low = floor if floor <= cap else 1
+            chosen = int(min(max(requested, low), cap))
+            widths[col] = chosen
+            widths[other] = total - chosen
+            widths["name"] = 0
+            widths["sound"] = 0
+        else:
+            widths[col] = total
+        gap = total - sum(widths.values())
+        if gap:
+            target = next((c for c in ("sound", "name", col) if widths.get(c, 0) > 0), col)
+            widths[target] = max(0, widths[target] + gap)
+        return widths
 
     def _do_col_resize(self, event):
         col = getattr(self, "_resize_col", None)
-        if col not in ("name", "sound"):
+        start = getattr(self, "_resize_start", None)
+        if col not in SEEN_COLUMNS or not start:
             return
-        flex = getattr(self, "_resize_flex", 0)
-        if flex <= 1:
-            return
-        delta = event.x_root - self._resize_x0
-        min_name = self._min_label_width("name")
-        min_sound = self._min_label_width("sound")
-        if flex < min_name + min_sound:
-            min_name = min_sound = 1
-        if col == "name":
-            name_w = self._resize_name0 + delta
-        else:
-            name_w = flex - (self._resize_sound0 + delta)
-        name_w = int(max(min_name, min(name_w, flex - min_sound)))
-        sound_w = flex - name_w
-        widths = [
-            name_w,
-            sound_w,
-            self._resize_seen if "seen_count" in self._visible_columns() else 0,
-            self._resize_last if "last_seen" in self._visible_columns() else 0,
-        ]
-        self._apply_column_widths(widths)
-        self._layout_tree_header(widths)
+        delta = int(event.x_root - self._resize_x0)
+        widths = self._resize_widths(start, col, delta)
+        ordered = [widths[c] for c in SEEN_COLUMNS]
+        self._apply_column_widths(ordered)
+        self._layout_tree_header(ordered)
 
     def _end_col_resize(self, _event=None):
+        col = getattr(self, "_resize_col", None)
+        if not col:
+            return
         applied = getattr(self, "_applied_widths", None) or {}
+        start = getattr(self, "_resize_start", None) or {}
         name_w = int(applied.get("name", 0))
         sound_w = int(applied.get("sound", 0))
         if name_w + sound_w > 0:
             self._flex_ratio = name_w / (name_w + sound_w)
+        if col in ("seen_count", "last_seen"):
+            new_w = int(applied.get(col, 0))
+            if abs(new_w - int(start.get(col, new_w))) >= 2:
+                self._set_user_fixed(col, new_w)
         self._resize_col = None
+        self._resize_start = None
         self._fitted_sig = None
         self._fit_columns(persist=True)
 

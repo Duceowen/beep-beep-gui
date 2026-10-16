@@ -1,5 +1,11 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.13
+- Last Encounter stays wide enough for the full date and time, and the line on its right can resize it
+- The line on the right of Seen resizes Seen. Seen still starts wide enough for the count
+- Header dividers are a single line
+- Right-click column check marks use the EDMC theme
+
 ## 1.0.12
 - Seen Commanders header dividers are visible. Drag the bar on Name to resize Name, and the bar on Sound to resize Sound
 - Seen stays wide enough for the count, and Last Encounter stays wide enough for the full date and time
