@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.11
+- Seen Commanders column headers stay inside the window when it is resized, and grow back when the window is expanded
+
 ## 1.0.10
 - Opacity support for the Seen Commanders window
 - Quality of life enhancements to the Options menu
