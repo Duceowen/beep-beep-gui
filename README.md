@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.16
+- The column checkbox menu opens next to the right-click, including when the window is on another monitor
+
 ## 1.0.15
 - Seen Commanders measures its columns once, then resizes from those widths, so the window and EDMC stay responsive
 

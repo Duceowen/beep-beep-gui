@@ -901,6 +901,53 @@ class SeenCommandersGUI:
         redraw()
         self._column_menu_redraws.append(redraw)
 
+    def _pointer_root(self, event):
+        try:
+            return int(event.x_root), int(event.y_root)
+        except Exception:
+            pass
+        widget = getattr(event, "widget", None)
+        if widget is not None:
+            try:
+                return (
+                    int(widget.winfo_rootx()) + int(getattr(event, "x", 0)),
+                    int(widget.winfo_rooty()) + int(getattr(event, "y", 0)),
+                )
+            except Exception:
+                pass
+        return 0, 0
+
+    def _screen_bounds(self, widget):
+        """Left, top, right, bottom of the whole desktop, including other monitors."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                left = int(user32.GetSystemMetrics(76))
+                top = int(user32.GetSystemMetrics(77))
+                span_w = int(user32.GetSystemMetrics(78))
+                span_h = int(user32.GetSystemMetrics(79))
+                if span_w > 0 and span_h > 0:
+                    return left, top, left + span_w, top + span_h
+            except Exception:
+                pass
+        try:
+            left = int(widget.winfo_vrootx())
+            top = int(widget.winfo_vrooty())
+            return left, top, left + int(widget.winfo_vrootwidth()), top + int(widget.winfo_vrootheight())
+        except Exception:
+            return 0, 0, int(widget.winfo_screenwidth()), int(widget.winfo_screenheight())
+
+    def _move_popup(self, popup, x, y):
+        popup.update_idletasks()
+        width = max(1, popup.winfo_reqwidth())
+        height = max(1, popup.winfo_reqheight())
+        left, top, right, bottom = self._screen_bounds(popup)
+        x = min(max(int(x), left), max(left, right - width))
+        y = min(max(int(y), top), max(top, bottom - height))
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+        return x, y
+
     def _popup_column_menu(self, event):
         if not getattr(self, "window", None) or not self.window.winfo_exists():
             return "break"
@@ -908,12 +955,11 @@ class SeenCommandersGUI:
         self._sync_column_vars()
         palette = self._menu_palette()
         popup = tk.Toplevel(self.window)
+        # Keep it hidden until it has a position. A borderless window on
+        # Windows otherwise opens at the top-right of the screen.
+        popup.withdraw()
         popup.overrideredirect(True)
         popup.configure(background=palette["foreground"], highlightthickness=0, bd=0)
-        try:
-            popup.transient(self.window)
-        except Exception:
-            pass
         try:
             popup.attributes("-topmost", bool(self.window.attributes("-topmost")))
         except Exception:
@@ -924,22 +970,9 @@ class SeenCommandersGUI:
         self._column_menu_redraws = []
         for col, label in COLUMN_LABELS:
             self._add_column_menu_row(inner, col, label, palette)
-        self.apply_edmc_theme(popup)
-        try:
-            popup.configure(background=palette["foreground"])
-        except Exception:
-            pass
-        popup.update_idletasks()
-        width = max(1, popup.winfo_reqwidth())
-        height = max(1, popup.winfo_reqheight())
-        x = int(getattr(event, "x_root", 0))
-        y = int(getattr(event, "y_root", 0))
-        try:
-            x = max(0, min(x, popup.winfo_screenwidth() - width))
-            y = max(0, min(y, popup.winfo_screenheight() - height))
-        except Exception:
-            pass
-        popup.geometry(f"{width}x{height}+{x}+{y}")
+        x, y = self._pointer_root(event)
+        x, y = self._move_popup(popup, x, y)
+        popup.deiconify()
         popup.lift()
         if not getattr(self, "_column_menu_bound", False):
             self.window.bind_all("<Button-1>", self._dismiss_column_menu, add="+")
@@ -949,6 +982,8 @@ class SeenCommandersGUI:
             popup.focus_set()
         except Exception:
             pass
+        # Windows drops the first position when the borderless window is shown.
+        self._move_popup(popup, x, y)
         return "break"
 
     def _on_tree_configure(self, event=None):
