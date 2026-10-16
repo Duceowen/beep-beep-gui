@@ -87,4 +87,6 @@ No warranty is provided. For full license details, see [GNU GPL v3](https://www.
 
 Credit goes to the other BeepBeep implementations, which provided the initial inspiration and general concept.
 
+CMDR Kiranos tested Beep Beep on Linux and reported the bugs found there.
+
 If you enjoy this plugin and want to support my work, you can buy me a coffee here: [Ko-fi](https://ko-fi.com/rhaged)
