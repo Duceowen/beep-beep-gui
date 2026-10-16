@@ -1,5 +1,10 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.12
+- Seen Commanders header dividers are visible. Drag the bar on Name to resize Name, and the bar on Sound to resize Sound
+- Seen stays wide enough for the count, and Last Encounter stays wide enough for the full date and time
+- Right-click the header to show or hide Name, Sound, Seen, and Last Encounter
+
 ## 1.0.11
 - Seen Commanders column headers stay inside the window when it is resized, and grow back when the window is expanded
 
