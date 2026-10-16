@@ -1,5 +1,11 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.14
+- Name stays on the left and takes whatever width is left in the header
+- The line on the left of Sound resizes Sound, the line on the left of Seen resizes Seen, and the line on the left of Last Encounter resizes Last Encounter
+- There is no resize line on Name and no resize line on the right of Last Encounter
+- An older saved Sound width stays fixed, so making the window wider only widens Name
+
 ## 1.0.13
 - Last Encounter stays wide enough for the full date and time, and the line on its right can resize it
 - The line on the right of Seen resizes Seen. Seen still starts wide enough for the count

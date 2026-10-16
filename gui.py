@@ -30,91 +30,67 @@ DIVIDER_HIT = 8
 DIVIDER_LINE = 1
 
 
-def layout_seen_columns(available, visible, locked, name_share, min_name, min_sound):
+def layout_seen_columns(available, visible, fixed, mins):
     """Width for each Seen Commanders column.
 
-    Seen and Last Encounter keep the widths in ``locked`` (the text they
-    need, or a width the user dragged). Name and Sound share whatever is
-    left. A very narrow window still fits on screen.
+    Name stays on the left and takes whatever space is left. Sound, Seen,
+    and Last Encounter keep the widths in ``fixed``. A very narrow window
+    shrinks Name first, then those columns, so the row still fits.
     """
     order = [col for col in SEEN_COLUMNS if col in visible]
     if not order:
         return [0, 0, 0, 0]
     available = max(len(order), int(available))
-    seen_w = int(locked.get("seen_count", 0)) if "seen_count" in order else 0
-    last_w = int(locked.get("last_seen", 0)) if "last_seen" in order else 0
-    flex = [col for col in ("name", "sound") if col in order]
-    mins = {}
-    if "name" in flex:
-        mins["name"] = max(1, int(min_name))
-    if "sound" in flex:
-        mins["sound"] = max(1, int(min_sound))
-    fixed = seen_w + last_w
-    min_flex = sum(mins.values())
-
-    if flex and available >= fixed + max(min_flex, len(flex)):
-        flex_widths = _split_flex(available - fixed, flex, name_share, mins)
-    elif flex and available > fixed:
-        flex_widths = _split_flex(available - fixed, flex, name_share, {col: 1 for col in flex})
+    held = [col for col in ("sound", "seen_count", "last_seen") if col in order]
+    slack = "name" if "name" in order else order[0]
+    if slack in held:
+        held = [col for col in held if col != slack]
+    widths = {col: 0 for col in SEEN_COLUMNS}
+    for col in held:
+        widths[col] = max(0, int(fixed.get(col, 0)))
+    held_sum = sum(widths[col] for col in held)
+    slack_min = max(1, int(mins.get(slack, 1))) if slack else 0
+    if not slack:
+        scaled = _scale_parts([widths[col] for col in held], available)
+        for col, width in zip(held, scaled):
+            widths[col] = width
+    elif available >= held_sum + slack_min:
+        widths[slack] = available - held_sum
+    elif available > held_sum:
+        widths[slack] = available - held_sum
     else:
-        flex_budget = len(flex) if flex and available > len(flex) else 0
-        locked_budget = available - flex_budget
-        seen_w, last_w = _fit_locked(seen_w, last_w, locked_budget, order)
-        flex_widths = {col: 1 for col in flex} if flex_budget else {col: 0 for col in flex}
-        if flex and sum(flex_widths.values()) == 0 and available >= len(order):
-            flex_widths = {col: 1 for col in flex}
-            seen_w, last_w = _fit_locked(seen_w, last_w, available - len(flex), order)
-
-    widths = {
-        "name": flex_widths.get("name", 0),
-        "sound": flex_widths.get("sound", 0),
-        "seen_count": seen_w if "seen_count" in order else 0,
-        "last_seen": last_w if "last_seen" in order else 0,
-    }
+        slack_w = slack_min if available > slack_min + len(held) else 1
+        scaled = _scale_parts([widths[col] for col in held], available - slack_w)
+        for col, width in zip(held, scaled):
+            widths[col] = width
+        widths[slack] = max(0, available - sum(widths[col] for col in held))
     total = sum(widths[col] for col in order)
     if total != available:
-        target = next((col for col in flex if widths.get(col, 0) > 0), order[-1])
-        widths[target] = max(0, widths[target] + available - total)
+        widths[slack] = max(0, widths.get(slack, 0) + available - total)
     return [widths[col] for col in SEEN_COLUMNS]
 
 
-def _split_flex(remain, flex, name_share, mins):
-    remain = max(0, int(remain))
-    if len(flex) == 1:
-        return {flex[0]: remain}
-    min_name = mins.get("name", 1)
-    min_sound = mins.get("sound", 1)
-    if remain <= 1:
-        return {"name": remain, "sound": 0}
-    if remain < min_name + min_sound:
-        min_name = min_sound = 1
-    try:
-        share = float(name_share)
-    except (TypeError, ValueError):
-        share = 0.62
-    share = min(0.9, max(0.1, share))
-    name_w = int(round(share * remain))
-    name_w = max(min_name, min(name_w, remain - min_sound))
-    return {"name": name_w, "sound": remain - name_w}
-
-
-def _fit_locked(seen_w, last_w, budget, order):
-    parts = []
-    keys = []
-    if "seen_count" in order:
-        keys.append("seen_count")
-        parts.append(max(0, int(seen_w)))
-    if "last_seen" in order:
-        keys.append("last_seen")
-        parts.append(max(0, int(last_w)))
-    if not keys:
-        return 0, 0
-    budget = max(len(keys), int(budget))
-    total = sum(parts) or len(keys)
-    scaled = [max(1, int(round(part * budget / total))) if part else max(1, budget // len(keys)) for part in parts]
+def _scale_parts(parts, budget):
+    if not parts:
+        return []
+    budget = max(len(parts), int(budget))
+    cleaned = [max(0, int(part)) for part in parts]
+    total = sum(cleaned) or len(cleaned)
+    scaled = [
+        max(1, int(round((part or (total / len(cleaned))) * budget / total)))
+        for part in cleaned
+    ]
     scaled[-1] += budget - sum(scaled)
-    values = dict(zip(keys, scaled))
-    return values.get("seen_count", 0), values.get("last_seen", 0)
+    if scaled[-1] < 1:
+        scaled[-1] = 1
+        overflow = sum(scaled) - budget
+        for index in range(len(scaled) - 1, -1, -1):
+            if overflow <= 0:
+                break
+            give = min(overflow, max(0, scaled[index] - 1))
+            scaled[index] -= give
+            overflow -= give
+    return scaled
 
 
 def set_always_on_top(window, enabled):
@@ -499,37 +475,33 @@ class SeenCommandersGUI:
             enabled["name"] = True
         return enabled
 
-    def _name_share(self):
-        share = getattr(self, "_flex_ratio", None)
-        if share:
-            return share
+    def _saved_col_widths(self):
         saved = config.get_config("seen_col_widths", None)
-        if not isinstance(saved, dict):
-            saved = {}
+        return saved if isinstance(saved, dict) else {}
+
+    def _legacy_share_save(self, saved):
+        """Older builds stored Name and Sound as parts of 1000, not pixels."""
         try:
-            name = int(saved.get("name", 62))
-            sound = int(saved.get("sound", 38))
-        except (TypeError, ValueError):
-            name, sound = 62, 38
-        total = name + sound
-        if total <= 0:
-            return 0.62
-        return name / total
+            return int(saved["name"]) + int(saved["sound"]) == 1000
+        except (KeyError, TypeError, ValueError):
+            return False
 
     def _user_fixed_widths(self):
         cached = getattr(self, "_user_fixed", None)
         if isinstance(cached, dict):
             return cached
-        saved = config.get_config("seen_col_widths", None)
+        saved = self._saved_col_widths()
+        keys = ("seen_count", "last_seen")
+        if not self._legacy_share_save(saved):
+            keys = ("sound",) + keys
         fixed = {}
-        if isinstance(saved, dict):
-            for col in ("seen_count", "last_seen"):
-                if col not in saved:
-                    continue
-                try:
-                    fixed[col] = max(1, int(saved[col]))
-                except (TypeError, ValueError):
-                    continue
+        for col in keys:
+            if col not in saved:
+                continue
+            try:
+                fixed[col] = max(1, int(saved[col]))
+            except (TypeError, ValueError):
+                continue
         self._user_fixed = fixed
         return fixed
 
@@ -541,19 +513,63 @@ class SeenCommandersGUI:
             return
         self._user_fixed = fixed
 
-    def _preferred_fixed(self):
-        """Widths Seen and Last Encounter keep until the window is too narrow.
+    def _migrate_legacy_sound(self, available):
+        """Turn the old Name/Sound ratio into one Sound width.
 
-        Seen starts at the count width and then follows a drag. Last Encounter
-        stays at least as wide as the full date and time, and can be dragged wider.
+        Name then keeps every new pixel when the window changes size.
+        """
+        if getattr(self, "_sound_migrated", False):
+            return
+        user = self._user_fixed_widths()
+        if "sound" in user:
+            self._sound_migrated = True
+            return
+        saved = self._saved_col_widths()
+        if not self._legacy_share_save(saved):
+            return
+        try:
+            saved_window = int(config.get_config("seen_window_width", 0) or 0)
+        except (TypeError, ValueError):
+            saved_window = 0
+        # The first layout pass can run before the window has its real width.
+        if saved_window > int(available) + 80:
+            return
+        try:
+            share = int(saved["sound"]) / 1000.0
+        except (TypeError, ValueError):
+            return
+        content = self._locked_widths()
+        seen = int(user.get("seen_count", content.get("seen_count", 0)))
+        last_floor = int(content.get("last_seen", 0))
+        last_user = user.get("last_seen")
+        last = last_floor if last_user is None else max(last_floor, int(last_user))
+        flex = int(available) - seen - last
+        sound = int(round(share * flex))
+        name_min = self._min_label_width("name")
+        sound_min = self._min_label_width("sound")
+        if sound < sound_min or flex - sound < name_min:
+            return
+        self._set_user_fixed("sound", sound)
+        self._sound_migrated = True
+        try:
+            self._save_col_widths()
+        except Exception:
+            self._sound_migrated = False
+
+    def _preferred_fixed(self):
+        """Widths Sound, Seen, and Last Encounter keep until the window is too narrow.
+
+        Name is not included. It stays on the left and fills the remaining space.
+        Last Encounter never starts narrower than the full date and time.
         """
         content = self._locked_widths()
         user = self._user_fixed_widths()
+        sound = user.get("sound", content.get("sound", 0))
         seen = user.get("seen_count", content.get("seen_count", 0))
         last_floor = int(content.get("last_seen", 0))
         last_user = user.get("last_seen")
         last = last_floor if last_user is None else max(last_floor, int(last_user))
-        return {"seen_count": int(seen), "last_seen": int(last)}
+        return {"sound": int(sound), "seen_count": int(seen), "last_seen": int(last)}
 
     def _fixed_floor(self, col):
         if col == "last_seen":
@@ -588,7 +604,7 @@ class SeenCommandersGUI:
         tree = getattr(self, "tree", None)
         tree_ok = tree is not None and tree.winfo_exists()
         for col, label in COLUMN_LABELS:
-            if col not in ("seen_count", "last_seen"):
+            if col == "name":
                 continue
             widest = self._text_px(label)
             if col == "last_seen":
@@ -612,9 +628,9 @@ class SeenCommandersGUI:
         return (
             available,
             tuple(self._visible_columns()),
+            preferred.get("sound"),
             preferred.get("seen_count"),
             preferred.get("last_seen"),
-            round(self._name_share(), 4),
         )
 
     def _apply_column_widths(self, widths):
@@ -625,7 +641,7 @@ class SeenCommandersGUI:
         for col, width in zip(SEEN_COLUMNS, widths):
             width = 0 if col not in visible else max(1, int(width))
             applied[col] = width
-            floor = width if col in ("seen_count", "last_seen") else min(MIN_COL_WIDTH, width)
+            floor = width
             if width == 0:
                 floor = 0
             try:
@@ -650,14 +666,11 @@ class SeenCommandersGUI:
                 width = int(config.get_config("seen_window_width", 800))
             except (TypeError, ValueError):
                 width = 800
-        self._flex_ratio = self._name_share()
         widths = layout_seen_columns(
             width,
             self._visible_columns(),
             self._preferred_fixed(),
-            self._flex_ratio,
-            self._min_label_width("name"),
-            self._min_label_width("sound"),
+            {col: self._min_label_width(col) for col in SEEN_COLUMNS},
         )
         self._apply_column_widths(widths)
         self._layout_tree_header(widths)
@@ -671,6 +684,7 @@ class SeenCommandersGUI:
         available = self._seen_row_width()
         if available <= 1:
             return
+        self._migrate_legacy_sound(available)
         signature = self._layout_signature(available)
         if not persist and signature == getattr(self, "_fitted_sig", None):
             self._layout_tree_header()
@@ -679,9 +693,7 @@ class SeenCommandersGUI:
             available,
             self._visible_columns(),
             self._preferred_fixed(),
-            self._name_share(),
-            self._min_label_width("name"),
-            self._min_label_width("sound"),
+            {col: self._min_label_width(col) for col in SEEN_COLUMNS},
         )
         self._fitting = True
         try:
@@ -694,10 +706,7 @@ class SeenCommandersGUI:
             self._save_col_widths()
 
     def _save_col_widths(self):
-        share = self._name_share()
-        name = max(1, int(round(share * 1000)))
-        sound = max(1, 1000 - name)
-        payload = {"name": name, "sound": sound}
+        payload = {}
         for col, width in self._user_fixed_widths().items():
             payload[col] = max(1, int(width))
         config.set_config("seen_col_widths", payload)
@@ -1155,7 +1164,7 @@ class SeenCommandersGUI:
                 _lbl.bind("<Button-3>", self._popup_column_menu)
                 _lbl.bind("<Control-Button-1>", self._popup_column_menu)
                 self.header_labels[_col] = _lbl
-            for _col in SEEN_COLUMNS:
+            for _col in ("sound", "seen_count", "last_seen"):
                 _handle = HeaderDivider(self.header_frame)
                 self._bind_divider(_handle, _col)
                 self.header_handles[_col] = _handle
@@ -1222,12 +1231,9 @@ class SeenCommandersGUI:
         divider.bind("<Control-Button-1>", self._popup_column_menu)
 
     def _divider_can_resize(self, col, shown):
-        shown = set(shown)
-        if col not in shown:
+        if col not in shown or col == "name":
             return False
-        if col in ("name", "sound"):
-            return "name" in shown and "sound" in shown
-        return any(other in shown for other in SEEN_COLUMNS if other != col)
+        return shown.index(col) > 0
 
     def _layout_tree_header(self, widths=None, _event=None):
         tree = getattr(self, "tree", None)
@@ -1273,17 +1279,12 @@ class SeenCommandersGUI:
                 else:
                     inset = min(6, max(0, width // 6))
                     label.place(x=x + inset, y=0, width=max(1, width - inset), height=height)
-            next_col = shown[index + 1] if index + 1 < len(shown) else None
             handle = self.header_handles.get(col)
-            show_handle = bool(next_col) or col in ("seen_count", "last_seen")
-            if handle and handle.winfo_exists() and show_handle and width > 0:
+            if handle and handle.winfo_exists() and index > 0 and width > 0:
                 grip = getattr(handle, "grip_width", DIVIDER_HIT)
                 can_resize = self._divider_can_resize(col, shown)
                 handle.configure(cursor="sb_h_double_arrow" if can_resize else "")
-                if next_col:
-                    hx = x + width - grip // 2
-                else:
-                    hx = x + width - grip
+                hx = x - grip // 2
                 if limit > 1:
                     hx = min(max(0, hx), max(0, limit - grip))
                 handle.place(x=hx, y=0, width=grip, height=height)
@@ -1307,65 +1308,31 @@ class SeenCommandersGUI:
         }
 
     def _resize_widths(self, start, col, delta):
+        """Drag the line on the left of ``col``.
+
+        Moving right shrinks that column. Name stays on the left and takes the
+        space. The other columns keep their widths, so a line further right
+        stays on that column's edge.
+        """
         widths = {c: int(start.get(c, 0)) for c in SEEN_COLUMNS}
         total = sum(widths.values())
-        if total <= 0:
+        order = [c for c in SEEN_COLUMNS if widths[c] > 0]
+        if total <= 0 or col not in order or order.index(col) == 0:
             return widths
-        if col in ("name", "sound"):
-            flex = widths["name"] + widths["sound"]
-            if flex <= 1:
-                return widths
-            min_name = self._min_label_width("name")
-            min_sound = self._min_label_width("sound")
-            if flex < min_name + min_sound:
-                min_name = min_sound = 1
-            if col == "name":
-                name_w = widths["name"] + delta
-            else:
-                name_w = flex - (widths["sound"] + delta)
-            name_w = int(max(min_name, min(name_w, flex - min_sound)))
-            widths["name"] = name_w
-            widths["sound"] = flex - name_w
+        absorber = "name" if widths.get("name", 0) > 0 else order[order.index(col) - 1]
+        if absorber == col:
             return widths
-
-        requested = int(start.get(col, 0)) + int(delta)
+        requested = int(start[col]) - int(delta)
         floor = self._fixed_floor(col)
-        other_fixed = [c for c in ("seen_count", "last_seen") if c != col and widths[c] > 0]
-        flex_cols = [c for c in ("name", "sound") if widths[c] > 0]
-        reserved = sum(widths[c] for c in other_fixed)
-        if flex_cols:
-            min_flex = sum(self._min_label_width(c) for c in flex_cols)
-            if reserved + min_flex + floor > total:
-                min_flex = len(flex_cols)
-            cap = max(1, total - reserved - min_flex)
-            low = floor if floor <= cap else 1
-            chosen = int(min(max(requested, low), cap))
-            widths[col] = chosen
-            for other in other_fixed:
-                widths[other] = int(start.get(other, 0))
-            flex_room = total - chosen - reserved
-            mins = {c: self._min_label_width(c) for c in flex_cols}
-            if flex_room < sum(mins.values()):
-                mins = {c: 1 for c in flex_cols}
-            split = _split_flex(max(0, flex_room), flex_cols, self._name_share(), mins)
-            for flex_col in ("name", "sound"):
-                widths[flex_col] = split.get(flex_col, 0)
-        elif other_fixed:
-            other = other_fixed[0]
-            other_floor = self._fixed_floor(other) if other == "last_seen" else 1
-            cap = max(1, total - min(other_floor, total - 1))
-            low = floor if floor <= cap else 1
-            chosen = int(min(max(requested, low), cap))
-            widths[col] = chosen
-            widths[other] = total - chosen
-            widths["name"] = 0
-            widths["sound"] = 0
-        else:
-            widths[col] = total
-        gap = total - sum(widths.values())
-        if gap:
-            target = next((c for c in ("sound", "name", col) if widths.get(c, 0) > 0), col)
-            widths[target] = max(0, widths[target] + gap)
+        absorb_floor = self._min_label_width(absorber) if absorber == "name" else self._fixed_floor(absorber)
+        others = total - int(start[col]) - int(start[absorber])
+        cap = total - others - max(1, absorb_floor)
+        if cap < 1:
+            cap = 1
+        low = floor if floor <= cap else 1
+        chosen = int(min(max(requested, low), cap))
+        widths[col] = chosen
+        widths[absorber] = total - others - chosen
         return widths
 
     def _do_col_resize(self, event):
@@ -1385,11 +1352,7 @@ class SeenCommandersGUI:
             return
         applied = getattr(self, "_applied_widths", None) or {}
         start = getattr(self, "_resize_start", None) or {}
-        name_w = int(applied.get("name", 0))
-        sound_w = int(applied.get("sound", 0))
-        if name_w + sound_w > 0:
-            self._flex_ratio = name_w / (name_w + sound_w)
-        if col in ("seen_count", "last_seen"):
+        if col in ("sound", "seen_count", "last_seen"):
             new_w = int(applied.get(col, 0))
             if abs(new_w - int(start.get(col, new_w))) >= 2:
                 self._set_user_fixed(col, new_w)
