@@ -14,7 +14,7 @@ jobs:
       - name: Install Linux audio players
         run: |
           sudo apt-get update
-          sudo apt-get install -y pulseaudio pulseaudio-utils alsa-utils ffmpeg sox pipewire pipewire-pulse pipewire-bin wireplumber libasound2-plugins
+          sudo apt-get install -y pulseaudio pulseaudio-utils alsa-utils libasound2-plugins
 
       - name: Measure alert loudness
         run: python3 .github/linux_volume_play.py

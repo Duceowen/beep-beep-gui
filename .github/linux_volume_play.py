@@ -4,6 +4,7 @@ Runs on a GitHub Ubuntu runner. The plugin must not import wave; this test may.
 """
 import math
 import os
+import signal
 import struct
 import subprocess
 import sys
@@ -53,36 +54,50 @@ def rms(path: str) -> float:
     return math.sqrt(sum(sample * sample for sample in audible) / len(audible))
 
 
-def start_pipewire() -> bool:
-    runtime = "/tmp/beep-runtime"
-    os.makedirs(runtime, mode=0o700, exist_ok=True)
-    os.environ["XDG_RUNTIME_DIR"] = runtime
-    subprocess.run(["pulseaudio", "-k"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for cmd in (["pipewire"], ["wireplumber"], ["pipewire-pulse"]):
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.8)
-    info = subprocess.run(["pactl", "info"], capture_output=True, text=True)
-    print(info.stdout)
-    print(info.stderr)
-    return info.returncode == 0 and "PipeWire" in info.stdout
+def server_name(info: str) -> str:
+    for line in info.splitlines():
+        if line.lower().startswith("server name:"):
+            return line.split(":", 1)[1].strip()
+    return ""
 
 
 def start_pulse() -> bool:
+    """Start a private PulseAudio daemon.
+
+    pactl prints ``Server Name: pulseaudio`` for that daemon. A PipeWire
+    socket prints ``PulseAudio (on PipeWire ...)``, and playback to its null
+    sink times out. The old check looked for the capitalised word PulseAudio,
+    so a running daemon was reported as not started.
+    """
     runtime = "/tmp/beep-runtime"
     os.makedirs(runtime, mode=0o700, exist_ok=True)
     os.environ["XDG_RUNTIME_DIR"] = runtime
+    os.environ.pop("PULSE_SERVER", None)
+    socket = os.path.join(runtime, "pulse", "native")
     subprocess.run(["pulseaudio", "-k"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     started = subprocess.run(
         ["pulseaudio", "-D", "--exit-idle-time=-1"],
         capture_output=True,
         text=True,
     )
-    time.sleep(0.5)
-    info = subprocess.run(["pactl", "info"], capture_output=True, text=True)
-    print(info.stdout)
-    print(started.stderr)
-    print(info.stderr)
-    return info.returncode == 0 and "PulseAudio" in info.stdout and "PipeWire" not in info.stdout
+    print(started.stderr, flush=True)
+    info = None
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        info = subprocess.run(["pactl", "info"], capture_output=True, text=True)
+        if info.returncode == 0 and server_name(info.stdout):
+            break
+        time.sleep(0.4)
+    print(info.stdout if info else "", flush=True)
+    print(info.stderr if info else "", flush=True)
+    if info is None or info.returncode != 0:
+        return False
+    name = server_name(info.stdout)
+    print("server", name, flush=True)
+    if name.lower() != "pulseaudio":
+        return False
+    os.environ["PULSE_SERVER"] = "unix:" + socket
+    return True
 
 
 def sink_names() -> list[str]:
@@ -99,37 +114,21 @@ def sink_names() -> list[str]:
 
 def prepare_sink() -> str:
     loaded = subprocess.run(
-        ["pactl", "load-module", "module-null-sink", "sink_name=beepvol", "channels=2", "rate=48000"],
+        ["pactl", "load-module", "module-null-sink", "sink_name=beepvol", "channels=2", "rate=44100"],
         capture_output=True,
         text=True,
     )
-    print("load-module", loaded.returncode, loaded.stdout.strip(), loaded.stderr.strip())
+    print("load-module", loaded.returncode, loaded.stdout.strip(), loaded.stderr.strip(), flush=True)
     time.sleep(0.5)
     names = sink_names()
     if "beepvol" not in names:
-        created = subprocess.run(
-            [
-                "pw-cli", "create-node", "adapter",
-                "{ factory.name=support.null-audio-sink node.name=beepvol media.class=Audio/Sink object.linger=1 audio.channels=2 audio.position=[FL,FR] }",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        print("pw-cli", created.returncode, created.stdout.strip(), created.stderr.strip())
-        time.sleep(0.5)
-        names = sink_names()
-    if "beepvol" in names:
-        sink = "beepvol"
-    elif names:
-        sink = names[-1]
-    else:
-        raise RuntimeError("no playback sink")
-    # PipeWire 1.0 answers set-default-sink with "Failure: Not supported".
-    # Players still accept the sink by name and through PULSE_SINK.
-    chosen = subprocess.run(["pactl", "set-default-sink", sink], capture_output=True, text=True)
-    print("default", sink, chosen.returncode, chosen.stdout.strip(), chosen.stderr.strip())
-    os.environ["PULSE_SINK"] = sink
-    return sink
+        raise RuntimeError(f"null sink missing: {names}")
+    chosen = subprocess.run(["pactl", "set-default-sink", "beepvol"], capture_output=True, text=True)
+    print("default", chosen.returncode, chosen.stdout.strip(), chosen.stderr.strip(), flush=True)
+    if chosen.returncode != 0:
+        raise RuntimeError(chosen.stderr.strip() or "could not select beepvol")
+    os.environ["PULSE_SINK"] = "beepvol"
+    return "beepvol"
 
 
 def capture(play_cmd: list[str], sink: str) -> float:
@@ -137,28 +136,43 @@ def capture(play_cmd: list[str], sink: str) -> float:
         os.remove(RECORD)
     recorder = subprocess.Popen(
         [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "pulse", "-i", f"{sink}.monitor",
-            "-t", "1.8", RECORD,
+            "parecord",
+            f"--device={sink}.monitor",
+            "--file-format=wav",
+            "--channels=2",
+            "--rate=44100",
+            "--format=s16le",
+            RECORD,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
-    time.sleep(0.2)
+    time.sleep(0.4)
+    if recorder.poll() is not None:
+        error = recorder.stderr.read().decode("utf-8", "replace")
+        raise RuntimeError(f"parecord exited early\n{error}")
     try:
         played = subprocess.run(play_cmd, capture_output=True, text=True, timeout=8)
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"play timed out {play_cmd}\n{exc.stderr}") from exc
-    recorder.wait(timeout=8)
+        recorder.kill()
+        raise RuntimeError(f"play timed out {play_cmd}\n{exc}") from exc
+    time.sleep(0.3)
+    recorder.send_signal(signal.SIGINT)
+    try:
+        recorder.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        recorder.kill()
+        recorder.wait(timeout=3)
     error = recorder.stderr.read().decode("utf-8", "replace")
-    if played.returncode != 0 or not os.path.isfile(RECORD):
+    size = os.path.getsize(RECORD) if os.path.isfile(RECORD) else 0
+    if played.returncode != 0 or size < 100:
         raise RuntimeError(
-            f"play failed {play_cmd}\n{played.stderr}\nrecorder:\n{error}"
+            f"play failed {play_cmd}\n{played.stderr}\nrecorder:\n{error}\nsize={size}"
         )
     level = rms(RECORD)
-    print(f"{play_cmd} rms={level:.1f}")
+    print(f"{play_cmd} rms={level:.1f} bytes={size}", flush=True)
     if error.strip():
-        print(error.strip())
+        print(error.strip(), flush=True)
     return level
 
 
@@ -181,8 +195,6 @@ def main() -> None:
         raise SystemExit(f"expected a scaled file at unity, got {quiet_path} {amplitude}")
     os.replace(cleanup, QUIET)
 
-    # A private PulseAudio server can play and record. The GitHub PipeWire
-    # session accepts a null sink and then times out when a client plays to it.
     if not start_pulse():
         raise SystemExit("PulseAudio did not start")
     backend = "pulse"
