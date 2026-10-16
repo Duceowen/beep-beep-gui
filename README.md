@@ -1,5 +1,9 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.25
+- Alerts play again on Linux Mint. 1.0.24 gave the quieter sound to the first player and stopped if that player exited. Beep Beep now tries the next player, and plays the original sound if the quieter copy cannot be played
+- The Alert Volume slider still makes that copy quieter. The player is asked to play it at its normal volume, so a volume flag cannot mute the copy as well
+
 ## 1.0.24
 - Alert Volume works on Linux even when the player ignores its volume flag. The sound file itself is made quieter, so paplay, pw-play, and aplay all follow the slider
 - Thanks to CMDR Kiranos for Linux testing and bug reports
@@ -72,7 +76,7 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI.
 
-On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. macOS uses the system sound player.
+On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. If one Linux player cannot play the copy, the next player is tried. macOS uses the system sound player.
 
 ## Installation
 1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**

@@ -7,6 +7,7 @@ import subprocess
 import platform
 import shutil
 import threading
+import time
 from logutil import log
 from beep_beep_config import config
 from commander_history import history_inst
@@ -71,6 +72,13 @@ class BeepBeep:
             return
         try:
             os.remove(path)
+        except OSError:
+            pass
+
+    def _relax_temp(self, path: str) -> None:
+        """Let the desktop player read a file mkstemp created as owner-only."""
+        try:
+            os.chmod(path, 0o644)
         except OSError:
             pass
 
@@ -225,7 +233,9 @@ class BeepBeep:
     def _write_temp_wav(self, data: bytes) -> str | None:
         import tempfile
         try:
-            fd, path = tempfile.mkstemp(prefix="beep-beep-", suffix=".wav")
+            fd, path = tempfile.mkstemp(
+                prefix="beep-beep-", suffix=".wav", dir=self.plugin_dir
+            )
         except OSError:
             return None
         try:
@@ -240,13 +250,16 @@ class BeepBeep:
             self._forget_temp(path)
             return None
         os.close(fd)
+        self._relax_temp(path)
         return path
 
     def _render_quiet_wav(self, full_path: str, amplitude: float) -> str | None:
         """Decode mp3 or an odd wav through ffmpeg or sox when PCM scaling cannot."""
         import tempfile
         try:
-            fd, path = tempfile.mkstemp(prefix="beep-beep-", suffix=".wav")
+            fd, path = tempfile.mkstemp(
+                prefix="beep-beep-", suffix=".wav", dir=self.plugin_dir
+            )
         except OSError:
             return None
         os.close(fd)
@@ -272,6 +285,7 @@ class BeepBeep:
             except OSError:
                 continue
             if result.returncode == 0 and os.path.isfile(path) and os.path.getsize(path) > 44:
+                self._relax_temp(path)
                 return path
         self._forget_temp(path)
         return None
@@ -353,86 +367,218 @@ class BeepBeep:
         except Exception:
             log.exception("Failed to stop winsound playback")
 
-    def _spawn_player(self, cmd: list[str], cleanup_path: str | None = None) -> subprocess.Popen | None:
+    def _popen_player(self, cmd: list[str]):
+        """Start a player and drain its stderr so a full pipe cannot stall it."""
         with self._play_lock:
             if self.mute:
-                self._forget_temp(cleanup_path)
                 return None
             kwargs = {
                 "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
+                "stderr": subprocess.PIPE,
                 "stdin": subprocess.DEVNULL,
             }
             # Own session so stopping the player does not signal EDMC.
             if os.name == "posix":
                 kwargs["start_new_session"] = True
-            try:
-                proc = subprocess.Popen(cmd, **kwargs)
-            except OSError:
-                self._forget_temp(cleanup_path)
-                raise
+            proc = subprocess.Popen(cmd, **kwargs)
             self._players = [item for item in self._players if item.poll() is None]
             self._players.append(proc)
-        if cleanup_path:
-            threading.Thread(
-                target=self._delete_after,
-                args=(proc, cleanup_path),
-                daemon=True,
-            ).start()
-        return proc
+        chunks: list[bytes] = []
+
+        def drain() -> None:
+            try:
+                data = proc.stderr.read() if proc.stderr else b""
+            except Exception:
+                data = b""
+            chunks.append(data or b"")
+
+        drain_thread = threading.Thread(target=drain, daemon=True)
+        drain_thread.start()
+        return proc, chunks, drain_thread
 
     def _delete_after(self, proc: subprocess.Popen, path: str) -> None:
+        started = time.monotonic()
         try:
             proc.wait()
         except Exception:
             pass
+        # A wrapper can exit before the player it started has opened the file.
+        if time.monotonic() - started < 0.5:
+            time.sleep(15.0)
         self._forget_temp(path)
 
-    def _command_for(self, player: str, full_path: str, amplitude: float) -> list[str]:
+    def _command_for(
+        self,
+        player: str,
+        full_path: str,
+        amplitude: float,
+        with_volume: bool = True,
+    ) -> list[str]:
         level = f"{amplitude:.4f}"
         if player == "ffplay":
-            return [player, "-nodisp", "-autoexit", "-af", f"volume={level}", full_path]
+            cmd = [player, "-nodisp", "-autoexit"]
+            if with_volume:
+                cmd.extend(["-af", f"volume={level}"])
+            cmd.append(full_path)
+            return cmd
         if player == "play":
-            return [player, "-q", "-v", level, full_path]
+            cmd = [player, "-q"]
+            if with_volume:
+                cmd.extend(["-v", level])
+            cmd.append(full_path)
+            return cmd
         if player == "pw-play":
-            return [player, f"--volume={level}", full_path]
+            cmd = [player]
+            if with_volume:
+                cmd.append(f"--volume={level}")
+            cmd.append(full_path)
+            return cmd
         if player == "paplay":
-            pulse = max(0, min(65536, int(round(amplitude * 65536))))
-            return [player, f"--volume={pulse}", full_path]
+            cmd = [player]
+            if with_volume:
+                pulse = max(0, min(65536, int(round(amplitude * 65536))))
+                cmd.append(f"--volume={pulse}")
+            cmd.append(full_path)
+            return cmd
         if player == "mpg123":
-            factor = max(0, min(32768, int(round(amplitude * 32768))))
-            return [player, "-f", str(factor), "-q", full_path]
+            cmd = [player]
+            if with_volume:
+                factor = max(0, min(32768, int(round(amplitude * 32768))))
+                cmd.extend(["-f", str(factor)])
+            cmd.extend(["-q", full_path])
+            return cmd
         if player == "cvlc":
-            return [player, "--intf", "dummy", "--play-and-exit", "--gain", level, full_path]
+            cmd = [player, "--intf", "dummy", "--play-and-exit"]
+            if with_volume:
+                cmd.extend(["--gain", level])
+            cmd.append(full_path)
+            return cmd
         if player == "afplay":
-            return [player, "-v", level, full_path]
+            if with_volume:
+                return [player, "-v", level, full_path]
+            return [player, full_path]
         return [player, full_path]
 
-    def _external_player_command(self, full_path: str, amplitude: float) -> list[str] | None:
+    def _linux_players(self, full_path: str) -> tuple[str, ...]:
+        ext = os.path.splitext(full_path)[1].lower()
+        # paplay reaches the Mint desktop session. pw-play is the PipeWire
+        # tool. aplay is last because it often targets a device the desktop
+        # is not using.
+        if ext == ".wav":
+            return ("paplay", "pw-play", "ffplay", "play", "aplay")
+        if ext == ".mp3":
+            return ("mpg123", "ffplay", "cvlc")
+        return ()
+
+    def _external_player_command(
+        self,
+        full_path: str,
+        amplitude: float,
+        with_volume: bool = True,
+    ) -> list[str] | None:
         system = platform.system()
         if system == "Darwin":
-            return self._command_for("afplay", full_path, amplitude)
+            return self._command_for("afplay", full_path, amplitude, with_volume)
         if system == "Windows":
             return None
-        ext = os.path.splitext(full_path)[1].lower()
-        # Wav files are already scaled. These flags stay at unity for that
-        # path. An mp3 that could not be scaled still needs a player flag.
-        # paplay's flag is ignored when PipeWire provides PulseAudio.
-        if ext == ".wav":
-            players = ("pw-play", "ffplay", "play", "paplay", "aplay")
-        elif ext == ".mp3":
-            players = ("mpg123", "ffplay", "cvlc")
-        else:
-            return None
-        for player in players:
+        for player in self._linux_players(full_path):
             if shutil.which(player):
-                return self._command_for(player, full_path, amplitude)
+                return self._command_for(player, full_path, amplitude, with_volume)
         return None
+
+    def _player_kept_running(self, proc: subprocess.Popen, started: float) -> bool:
+        """True when the player is still playing, or finished a real playback."""
+        try:
+            code = proc.wait(timeout=0.35)
+        except subprocess.TimeoutExpired:
+            return True
+        if self.mute:
+            return True
+        return code == 0 and (time.monotonic() - started) >= 0.2
+
+    def _try_linux_players(
+        self,
+        full_path: str,
+        amplitude: float,
+        with_volume: bool,
+        cleanup: str | None,
+    ) -> bool:
+        """Try each installed player. A player that exits immediately is skipped."""
+        tried = False
+        for player in self._linux_players(full_path):
+            if not shutil.which(player):
+                continue
+            if self.mute:
+                self._forget_temp(cleanup)
+                return True
+            cmd = self._command_for(player, full_path, amplitude, with_volume)
+            tried = True
+            started = time.monotonic()
+            try:
+                opened = self._popen_player(cmd)
+            except OSError as exc:
+                log.error("Could not start %s: %s", player, exc)
+                continue
+            if opened is None:
+                self._forget_temp(cleanup)
+                return True
+            proc, chunks, drain = opened
+            if self._player_kept_running(proc, started):
+                if cleanup:
+                    threading.Thread(
+                        target=self._delete_after,
+                        args=(proc, cleanup),
+                        daemon=True,
+                    ).start()
+                log.info("Playing %s with %s", os.path.basename(full_path), player)
+                return True
+            drain.join(timeout=0.2)
+            err = b"".join(chunks).decode("utf-8", "replace").strip()
+            log.error("Player failed (%s): %s", " ".join(cmd), err or "exited before playback")
+        if not tried:
+            log.error("No suitable sound player found for %s", full_path)
+        return False
+
+    def _play_linux(self, full_path: str, amplitude: float) -> None:
+        """Play on Linux. The slider is baked into a copy of the file.
+
+        The copy is played at the player's normal volume. A unity volume flag
+        on that copy makes some Mint players exit or mute, and 1.0.24 stopped
+        after the first player. Later players still get a turn. If the copy
+        cannot be played, the original file is played.
+        """
+        cleanup = None
+        play_path = full_path
+        try:
+            try:
+                play_path, _ignored, cleanup = self._prepare_playback(full_path, amplitude)
+            except Exception:
+                log.exception("Could not scale %s", full_path)
+                self._forget_temp(cleanup)
+                cleanup = None
+                play_path = full_path
+
+            scaled = cleanup is not None
+            # Volume flags are only for a file that was not already scaled.
+            if self._try_linux_players(
+                play_path, amplitude, not scaled and amplitude < 1.0, cleanup
+            ):
+                cleanup = None
+                return
+            if not scaled:
+                log.error("No sound player could play %s", full_path)
+                return
+            log.error("Quieter copy of %s could not be played; playing the original", full_path)
+            self._forget_temp(cleanup)
+            cleanup = None
+            if self._try_linux_players(full_path, amplitude, True, None):
+                return
+            self._try_linux_players(full_path, amplitude, False, None)
+        finally:
+            self._forget_temp(cleanup)
 
     def _play_sound_cross_platform(self, full_path: str, amplitude: float):
         system = platform.system()
-        cleanup = None
-        handed_off = False
         try:
             if system == "Windows":
                 dll_path = os.path.join(self.plugin_dir, "BeepBeepPlay.dll")
@@ -454,21 +600,18 @@ class BeepBeep:
                     self._winsound_active = True
                 return
 
-            play_path = full_path
-            play_amplitude = amplitude
             if system == "Linux":
-                play_path, play_amplitude, cleanup = self._prepare_playback(full_path, amplitude)
-            cmd = self._external_player_command(play_path, play_amplitude)
+                self._play_linux(full_path, amplitude)
+                return
+
+            cmd = self._external_player_command(full_path, amplitude)
             if cmd is None:
-                self._forget_temp(cleanup)
-                cleanup = None
                 log.error("No suitable sound player found for %s", full_path)
                 return
-            self._spawn_player(cmd, cleanup)
-            handed_off = True
+            opened = self._popen_player(cmd)
+            if opened is None:
+                return
         except Exception as e:
-            if not handed_off:
-                self._forget_temp(cleanup)
             log.error("Failed to play sound %s: %s", full_path, e)
 
     def play_sound(self, base_name: str):
