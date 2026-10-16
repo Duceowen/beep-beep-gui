@@ -600,6 +600,10 @@ class SeenCommandersGUI:
         return max(samples, key=self._text_px)
 
     def _locked_widths(self):
+        if not getattr(self, "_content_dirty", True):
+            cached = getattr(self, "_locked_cache", None)
+            if isinstance(cached, dict):
+                return cached
         locked = {}
         tree = getattr(self, "tree", None)
         tree_ok = tree is not None and tree.winfo_exists()
@@ -617,6 +621,8 @@ class SeenCommandersGUI:
                         continue
                     widest = max(widest, self._text_px(value))
             locked[col] = widest + COLUMN_BUFFER
+        self._locked_cache = locked
+        self._content_dirty = False
         return locked
 
     def _min_label_width(self, col):
@@ -633,6 +639,11 @@ class SeenCommandersGUI:
             preferred.get("last_seen"),
         )
 
+    def _column_floor(self, col):
+        if col == "name":
+            return max(1, self._min_label_width(col))
+        return max(1, self._fixed_floor(col))
+
     def _apply_column_widths(self, widths):
         if not getattr(self, "tree", None) or not self.tree.winfo_exists():
             return
@@ -641,9 +652,15 @@ class SeenCommandersGUI:
         for col, width in zip(SEEN_COLUMNS, widths):
             width = 0 if col not in visible else max(1, int(width))
             applied[col] = width
-            floor = width
-            if width == 0:
-                floor = 0
+            floor = 0 if width == 0 else max(1, min(width, self._column_floor(col)))
+            try:
+                current = int(self.tree.column(col, "width"))
+                current_min = int(self.tree.column(col, "minwidth"))
+            except Exception:
+                current = -1
+                current_min = -1
+            if current == width and current_min == floor:
+                continue
             try:
                 # Tk will not shrink a column until its minwidth is lowered.
                 self.tree.column(col, minwidth=0)
@@ -651,10 +668,13 @@ class SeenCommandersGUI:
                 self.tree.column(col, minwidth=floor)
             except Exception:
                 pass
-        try:
-            self.tree.configure(displaycolumns=self._visible_columns())
-        except Exception:
-            pass
+        shown = tuple(self._visible_columns())
+        if getattr(self, "_display_columns", None) != shown:
+            try:
+                self.tree.configure(displaycolumns=shown)
+            except Exception:
+                pass
+            self._display_columns = shown
         self._applied_widths = applied
 
     def _apply_initial_col_widths(self, parent):
@@ -684,10 +704,25 @@ class SeenCommandersGUI:
         available = self._seen_row_width()
         if available <= 1:
             return
+        dirty = bool(getattr(self, "_content_dirty", True))
         self._migrate_legacy_sound(available)
-        signature = self._layout_signature(available)
-        if not persist and signature == getattr(self, "_fitted_sig", None):
-            self._layout_tree_header()
+        user = self._user_fixed_widths()
+        header = getattr(self, "header_frame", None)
+        try:
+            header_h = header.winfo_height() if header and header.winfo_exists() else 0
+        except Exception:
+            header_h = 0
+        cheap = (
+            available,
+            tuple(self._visible_columns()),
+            user.get("sound"),
+            user.get("seen_count"),
+            user.get("last_seen"),
+            header_h,
+        )
+        # Same window size and same saved widths: do not touch the widgets.
+        # Touching them schedules another resize and keeps EDMC busy.
+        if not persist and not dirty and header_h > 1 and cheap == getattr(self, "_fitted_cheap", None):
             return
         widths = layout_seen_columns(
             available,
@@ -701,7 +736,9 @@ class SeenCommandersGUI:
             self._layout_tree_header(widths)
         finally:
             self._fitting = False
-        self._fitted_sig = signature
+        if header_h > 1:
+            self._fitted_cheap = cheap
+            self._fitted_sig = cheap
         if persist:
             self._save_col_widths()
 
@@ -735,6 +772,7 @@ class SeenCommandersGUI:
         config.set_config("seen_columns_enabled", enabled)
         config.save_config()
         self._fitted_sig = None
+        self._fitted_cheap = None
         self._fit_columns()
 
     def _menu_palette(self):
@@ -925,7 +963,23 @@ class SeenCommandersGUI:
         width = getattr(event, "width", 0) if event is not None else 0
         if width is not None and width <= 1:
             return
-        self._fit_columns()
+        if getattr(self, "_fit_job", None):
+            return
+        window = getattr(self, "window", None)
+        if not window or not window.winfo_exists():
+            self._fit_columns()
+            return
+
+        def run():
+            self._fit_job = None
+            if getattr(self, "_resize_col", None):
+                return
+            self._fit_columns()
+
+        try:
+            self._fit_job = window.after_idle(run)
+        except Exception:
+            self._fit_columns()
         
         
     def attach_resize_listener(self):
@@ -1359,6 +1413,7 @@ class SeenCommandersGUI:
         self._resize_col = None
         self._resize_start = None
         self._fitted_sig = None
+        self._fitted_cheap = None
         self._fit_columns(persist=True)
 
     def apply_edmc_theme_to_window(self, parent):
@@ -1681,14 +1736,18 @@ class SeenCommandersGUI:
                 if sid in self.tree_items:
                     index += 1
     
-            item = self.tree.insert("", index, values=(
+            values = (
                 self.name_vars[cmdr_id].get(),
                 self.sound_vars[cmdr_id].get().capitalize(),
                 self.seen_count_vars[cmdr_id].get(),
                 self.last_seen_vars[cmdr_id].get()
-            ))
+            )
+            item = self.tree.insert("", index, values=values)
             self.tree_items[cmdr_id] = item
             self.widgets[cmdr_id] = {}
+            self._remember_cells(cmdr_id, values)
+            self._row_order = None
+            self._content_dirty = True
 
     def add_or_update_commander(self, data):
         if not isinstance(data, list):
@@ -1708,11 +1767,22 @@ class SeenCommandersGUI:
             item_id = self.tree_items.get(cmdr_id_str)
             if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
                 if item_id:
-                    self.tree.set(item_id, "last_seen", self.format_last_seen(info["last_seen"]))
-                    self.tree.set(item_id, "name", info.get("name", "unknown"))
-                    self.tree.set(item_id, "sound", info.get("sound", sound_inst.neutral).capitalize())
-                    self.tree.set(item_id, "seen_count", str(info.get("seen_count", 0)))
-                    
+                    values = (
+                        info.get("name", "unknown"),
+                        info.get("sound", sound_inst.neutral).capitalize(),
+                        str(info.get("seen_count", 0)),
+                        self.format_last_seen(info["last_seen"]),
+                    )
+                    prev = (getattr(self, "_cell_snapshot", {}) or {}).get(cmdr_id_str)
+                    if prev != values:
+                        self.tree.set(item_id, "name", values[0])
+                        self.tree.set(item_id, "sound", values[1])
+                        self.tree.set(item_id, "seen_count", values[2])
+                        self.tree.set(item_id, "last_seen", values[3])
+                        self._remember_cells(cmdr_id_str, values)
+                        if prev is None or prev[1:] != values[1:]:
+                            self._content_dirty = True
+                            self._fitted_cheap = None
                 else:
                     new_cmdr_ids.append(cmdr_id_str)
     
@@ -1749,32 +1819,74 @@ class SeenCommandersGUI:
             return cmdr_id
     
         sorted_ids = sorted(history_inst.seen_data.keys(), key=sort_key, reverse=not sort_asc)
-    
-        for index, cmdr_id in enumerate(sorted_ids):
+        order = [cmdr_id for cmdr_id in sorted_ids if self.tree_items.get(cmdr_id)]
+        previous = getattr(self, "_row_order", None)
+        if previous == order:
+            return
+        live = list(previous or [])
+        for index, cmdr_id in enumerate(order):
+            if index < len(live) and live[index] == cmdr_id:
+                continue
             item_id = self.tree_items.get(cmdr_id)
             if not item_id:
                 continue
-            current_index = self.tree.index(item_id)
-            if current_index != index:
+            try:
+                current = live.index(cmdr_id)
+            except ValueError:
+                current = -1
+            try:
                 self.tree.move(item_id, "", index)
-    
+            except Exception:
+                continue
+            if current >= 0:
+                live.pop(current)
+                live.insert(index, cmdr_id)
+            else:
+                live.insert(index, cmdr_id)
+        self._row_order = order
+
+    def _remember_cells(self, cmdr_id, values):
+        snapshot = getattr(self, "_cell_snapshot", None)
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+            self._cell_snapshot = snapshot
+        snapshot[cmdr_id] = tuple(values)
+
     def refresh_gui(self):
         if not self.tree or not self.tree.winfo_exists():
             return
-    
+        snapshot = getattr(self, "_cell_snapshot", None)
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+            self._cell_snapshot = snapshot
+        changed = False
         for cmdr_id, data in history_inst.seen_data.items():
             item_id = self.tree_items.get(cmdr_id)
-    
             if not item_id:
                 continue
-    
             try:
                 new_time = self.format_last_seen(data["last_seen"])
-                self.tree.set(item_id, "last_seen", new_time)
-                self.tree.set(item_id, "seen_count", str(data.get("seen_count", 0)))
+                new_count = str(data.get("seen_count", 0))
             except Exception:
-                pass
+                continue
+            prev = snapshot.get(cmdr_id)
+            if prev and prev[2] == new_count and prev[3] == new_time:
+                continue
+            try:
+                self.tree.set(item_id, "last_seen", new_time)
+                self.tree.set(item_id, "seen_count", new_count)
+            except Exception:
+                continue
+            if prev:
+                snapshot[cmdr_id] = (prev[0], prev[1], new_count, new_time)
+            else:
+                snapshot[cmdr_id] = ("", "", new_count, new_time)
+            changed = True
+        if not changed:
+            return
+        self._content_dirty = True
         self._fitted_sig = None
+        self._fitted_cheap = None
         self._fit_columns()
 
 

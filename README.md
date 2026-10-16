@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.15
+- Seen Commanders measures its columns once, then resizes from those widths, so the window and EDMC stay responsive
+
 ## 1.0.14
 - Name stays on the left and takes whatever width is left in the header
 - The line on the left of Sound resizes Sound, the line on the left of Seen resizes Seen, and the line on the left of Last Encounter resizes Last Encounter
