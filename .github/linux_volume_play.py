@@ -121,10 +121,11 @@ def prepare_sink() -> str:
         sink = names[-1]
     else:
         raise RuntimeError("no playback sink")
+    # PipeWire 1.0 answers set-default-sink with "Failure: Not supported".
+    # Players still accept the sink by name and through PULSE_SINK.
     chosen = subprocess.run(["pactl", "set-default-sink", sink], capture_output=True, text=True)
     print("default", sink, chosen.returncode, chosen.stdout.strip(), chosen.stderr.strip())
-    if chosen.returncode != 0:
-        raise RuntimeError(f"could not select sink {sink}")
+    os.environ["PULSE_SINK"] = sink
     return sink
 
 
