@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.20
+- Seen Commanders name editing works on Linux Mint. The edit dialog no longer calls grab before the window is visible
+
 ## 1.0.19
 - Linux Mint finds CommanderHistory in the Steam Proton prefix, including ~/.local/share/Steam and ~/.steam/debian-installation
 

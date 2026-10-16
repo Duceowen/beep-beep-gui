@@ -442,6 +442,29 @@ class SeenCommandersGUI:
             return
         set_always_on_top(win, bool(config.get_config("stay_on_top", False)))
 
+    def _grab_when_viewable(self, popup):
+        """Grab a dialog after the window manager has mapped it.
+
+        Linux Mint raises TclError from grab_set() while the window is not
+        viewable. That error was aborting the Seen Commanders editor before
+        its fields were created.
+        """
+        def attempt(tries_left):
+            try:
+                if not popup.winfo_exists():
+                    return
+                popup.update_idletasks()
+                if popup.winfo_viewable():
+                    popup.grab_set()
+                    popup.lift()
+                    return
+            except tk.TclError:
+                return
+            if tries_left > 0:
+                popup.after(20, lambda: attempt(tries_left - 1))
+
+        popup.after(0, lambda: attempt(15))
+
     def _on_topmost_toggle(self, value):
         self._apply_topmost()
         self._apply_topmost(getattr(self, "options_popup", None))
@@ -1142,10 +1165,7 @@ class SeenCommandersGUI:
     
         popup = tk.Toplevel(self.window)
         popup.title(f"Edit Commander {info.get('name', 'unknown')}")
-        popup.geometry(f"+{event.x_root}+{event.y_root}")
-        popup.grab_set()
-        self._apply_topmost(popup)
-
+        popup.transient(self.window)
         popup.bind("<Escape>", lambda e: popup.destroy())
     
     
@@ -1222,8 +1242,11 @@ class SeenCommandersGUI:
         combo.bind("<Return>", on_combo_enter)
         combo.bind("<KP_Enter>", on_combo_enter)
 
-        popup.transient(self.window)
+        self._move_popup(popup, event.x_root, event.y_root)
+        self._apply_topmost(popup)
         self.apply_edmc_theme(popup)
+        name_entry.focus_set()
+        self._grab_when_viewable(popup)
 
     def build_ui(self, parent):
         sort_field = config.get_config("sort_field", "last_seen")
@@ -1512,7 +1535,6 @@ class SeenCommandersGUI:
         popup = tk.Toplevel(owner)
         popup.title("Options")
         popup.transient(owner)
-        popup.grab_set()
 
         self.options_popup = popup
         self._apply_topmost(popup)
@@ -1527,6 +1549,7 @@ class SeenCommandersGUI:
         popup.grid_columnconfigure(0, weight=1)
         
         self.attach_options_resize_listener(popup)
+        self._grab_when_viewable(popup)
 
     def _edmc_palette(self):
         palette = {
