@@ -1,10 +1,14 @@
 import datetime
+import math
 import os
 import signal
 import subprocess
 import platform
 import shutil
+import struct
+import tempfile
 import threading
+import wave
 from logutil import log
 from beep_beep_config import config
 from commander_history import history_inst
@@ -30,6 +34,39 @@ class BeepBeep:
     @property
     def sounds(self) -> int:
         return config.get_config("sounds", 1)
+
+    def _amplitude(self) -> float:
+        """Turn the 0-100 slider into playback amplitude.
+
+        100% is full level. The steps are even in decibels, about -40 dB at
+        1%, and silence at 0.
+        """
+        try:
+            percent = float(self.volume)
+        except (TypeError, ValueError):
+            percent = 100.0
+        percent = max(0.0, min(100.0, percent))
+        if percent <= 0.0:
+            return 0.0
+        if percent >= 100.0:
+            return 1.0
+        decibels = -40.0 * (1.0 - percent / 100.0)
+        return 10 ** (decibels / 20.0)
+
+    def _dll_volume(self, amplitude: float) -> float:
+        """Convert linear amplitude to the float BeepBeepPlay.dll expects.
+
+        The DLL maps its argument v with (1-v)^2 * -10000 hundredths of a
+        decibel. Passing the slider percent through that curve directly makes
+        the middle of the slider nearly silent.
+        """
+        amplitude = max(0.0, min(1.0, amplitude))
+        if amplitude <= 0.0:
+            return 0.0
+        if amplitude >= 1.0:
+            return 1.0
+        db100 = max(-10000.0, 2000.0 * math.log10(amplitude))
+        return 1.0 - math.sqrt(-db100 / 10000.0)
 
     def set_muted(self, muted: bool) -> None:
         config.set_config("mute", bool(muted))
@@ -98,30 +135,83 @@ class BeepBeep:
             self._players.append(proc)
             return proc
 
-    def _external_player_command(self, full_path: str, vol: float) -> list[str] | None:
+    def _command_for(self, player: str, full_path: str, amplitude: float) -> list[str]:
+        level = f"{amplitude:.4f}"
+        if player == "ffplay":
+            return [player, "-nodisp", "-autoexit", "-af", f"volume={level}", full_path]
+        if player == "play":
+            return [player, "-q", "-v", level, full_path]
+        if player == "pw-play":
+            return [player, f"--volume={level}", full_path]
+        if player == "paplay":
+            pulse = max(0, min(65536, int(round(amplitude * 65536))))
+            return [player, f"--volume={pulse}", full_path]
+        if player == "mpg123":
+            factor = max(0, min(32768, int(round(amplitude * 32768))))
+            return [player, "-f", str(factor), "-q", full_path]
+        if player == "cvlc":
+            return [player, "--intf", "dummy", "--play-and-exit", "--gain", level, full_path]
+        if player == "afplay":
+            return [player, "-v", level, full_path]
+        return [player, full_path]
+
+    def _external_player_command(self, full_path: str, amplitude: float) -> list[str] | None:
         system = platform.system()
         if system == "Darwin":
-            return ["afplay", "-v", str(vol), full_path]
+            return self._command_for("afplay", full_path, amplitude)
         if system == "Windows":
             return None
         ext = os.path.splitext(full_path)[1].lower()
+        # pw-play and ffplay honor volume. paplay's --volume flag is ignored
+        # when PipeWire is providing PulseAudio, which is the usual Mint setup.
         if ext == ".wav":
-            players = ("paplay", "pw-play", "aplay", "ffplay", "play")
+            players = ("pw-play", "ffplay", "play", "paplay", "aplay")
         elif ext == ".mp3":
             players = ("mpg123", "ffplay", "cvlc")
         else:
             return None
         for player in players:
-            if not shutil.which(player):
-                continue
-            if player == "ffplay":
-                return [player, "-nodisp", "-autoexit", "-af", f"volume={vol}", full_path]
-            if player == "play":
-                return [player, "-q", full_path]
-            return [player, full_path]
+            if shutil.which(player):
+                return self._command_for(player, full_path, amplitude)
         return None
 
-    def _play_sound_cross_platform(self, full_path: str, vol: float):
+    def _scaled_wav(self, full_path: str, amplitude: float) -> str | None:
+        """Write a quieter 16-bit copy for players that cannot set volume."""
+        try:
+            with wave.open(full_path, "rb") as source:
+                if source.getsampwidth() != 2:
+                    return None
+                frames = source.readframes(source.getnframes())
+                params = source.getparams()
+            samples = struct.unpack("<" + "h" * (len(frames) // 2), frames)
+            scaled = struct.pack(
+                "<" + "h" * len(samples),
+                *[max(-32768, min(32767, int(sample * amplitude))) for sample in samples],
+            )
+            handle = tempfile.NamedTemporaryFile(prefix="beep-beep-", suffix=".wav", delete=False)
+            handle.close()
+            with wave.open(handle.name, "wb") as target:
+                target.setparams(params)
+                target.writeframes(scaled)
+            return handle.name
+        except (OSError, wave.Error, struct.error):
+            log.exception("Failed to scale %s", full_path)
+            return None
+
+    def _delete_later(self, proc: subprocess.Popen, path: str) -> None:
+        def cleanup():
+            try:
+                proc.wait()
+            except Exception:
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+        threading.Thread(target=cleanup, daemon=True).start()
+
+    def _play_sound_cross_platform(self, full_path: str, amplitude: float):
         system = platform.system()
         try:
             if system == "Windows":
@@ -133,7 +223,7 @@ class BeepBeep:
                     dll = ctypes.CDLL(dll_path)
                     dll.BeepBeepPlay.argtypes = [ctypes.c_char_p, ctypes.c_float]
                     dll.BeepBeepPlay.restype = ctypes.c_int
-                    dll.BeepBeepPlay(full_path.encode("utf-8"), vol)
+                    dll.BeepBeepPlay(full_path.encode("utf-8"), self._dll_volume(amplitude))
                     return
                 log.warning("BeepBeepPlay.dll not found, using fallback")
                 import winsound
@@ -144,11 +234,19 @@ class BeepBeep:
                     self._winsound_active = True
                 return
 
-            cmd = self._external_player_command(full_path, vol)
+            cmd = self._external_player_command(full_path, amplitude)
             if cmd is None:
                 log.error("No suitable sound player found for %s", full_path)
                 return
-            self._spawn_player(cmd)
+            cleanup = None
+            if cmd[0] == "aplay" and amplitude < 0.999:
+                scaled = self._scaled_wav(full_path, amplitude)
+                if scaled:
+                    cmd = ["aplay", scaled]
+                    cleanup = scaled
+            proc = self._spawn_player(cmd)
+            if proc is not None and cleanup:
+                self._delete_later(proc, cleanup)
         except Exception as e:
             log.error("Failed to play sound %s: %s", full_path, e)
 
@@ -173,9 +271,11 @@ class BeepBeep:
                 log.info("No neutral sound found, cannot play '%s'", base_name)
                 return
     
-        vol = self.volume / 100.0
-    
-        self._play_sound_cross_platform(full_path, vol)
+        amplitude = self._amplitude()
+        if amplitude <= 0.0:
+            return
+
+        self._play_sound_cross_platform(full_path, amplitude)
 
         
     def handle_event(self, info: dict | list[dict]):

@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.22
+- Alert Volume changes the loudness of the alert. The slider no longer jumps from full volume to silence, and Linux uses a player that honors the setting
+
 ## 1.0.21
 - Mute stops a sound that is already playing. A long file started by paplay, pw-play, or another Linux player no longer keeps going after the mute button is pressed
 
