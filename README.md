@@ -1,5 +1,9 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.24
+- Alert Volume works on Linux even when the player ignores its volume flag. The sound file itself is made quieter, so paplay, pw-play, and aplay all follow the slider
+- Thanks to CMDR Kiranos for Linux testing and bug reports
+
 ## 1.0.23
 - Beep Beep loads again under EDMC. The volume fix no longer imports a module EDMC does not ship
 
@@ -68,7 +72,7 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI.
 
-On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux and macOS use the system sound player.
+On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. macOS uses the system sound player.
 
 ## Installation
 1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
@@ -77,7 +81,7 @@ On Windows, sound playback uses the included DLL so each alert can have its own 
 ## Notes
 - Only tested with the latest version of EDMarketConnector
 - Includes default sounds; you can add your own `.wav` or `.mp3` files in the `sounds` folder
-- Windows volume control uses the included DLL. Linux and macOS play sounds with the system player
+- Windows volume control uses the included DLL. Linux volume is applied to the sound before playback. macOS uses the system player
 - Does not require python to be installed.
 
 ## License
