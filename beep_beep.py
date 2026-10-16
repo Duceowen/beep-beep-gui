@@ -5,10 +5,7 @@ import signal
 import subprocess
 import platform
 import shutil
-import struct
-import tempfile
 import threading
-import wave
 from logutil import log
 from beep_beep_config import config
 from commander_history import history_inst
@@ -175,42 +172,6 @@ class BeepBeep:
                 return self._command_for(player, full_path, amplitude)
         return None
 
-    def _scaled_wav(self, full_path: str, amplitude: float) -> str | None:
-        """Write a quieter 16-bit copy for players that cannot set volume."""
-        try:
-            with wave.open(full_path, "rb") as source:
-                if source.getsampwidth() != 2:
-                    return None
-                frames = source.readframes(source.getnframes())
-                params = source.getparams()
-            samples = struct.unpack("<" + "h" * (len(frames) // 2), frames)
-            scaled = struct.pack(
-                "<" + "h" * len(samples),
-                *[max(-32768, min(32767, int(sample * amplitude))) for sample in samples],
-            )
-            handle = tempfile.NamedTemporaryFile(prefix="beep-beep-", suffix=".wav", delete=False)
-            handle.close()
-            with wave.open(handle.name, "wb") as target:
-                target.setparams(params)
-                target.writeframes(scaled)
-            return handle.name
-        except (OSError, wave.Error, struct.error):
-            log.exception("Failed to scale %s", full_path)
-            return None
-
-    def _delete_later(self, proc: subprocess.Popen, path: str) -> None:
-        def cleanup():
-            try:
-                proc.wait()
-            except Exception:
-                pass
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
-        threading.Thread(target=cleanup, daemon=True).start()
-
     def _play_sound_cross_platform(self, full_path: str, amplitude: float):
         system = platform.system()
         try:
@@ -238,15 +199,7 @@ class BeepBeep:
             if cmd is None:
                 log.error("No suitable sound player found for %s", full_path)
                 return
-            cleanup = None
-            if cmd[0] == "aplay" and amplitude < 0.999:
-                scaled = self._scaled_wav(full_path, amplitude)
-                if scaled:
-                    cmd = ["aplay", scaled]
-                    cleanup = scaled
-            proc = self._spawn_player(cmd)
-            if proc is not None and cleanup:
-                self._delete_later(proc, cleanup)
+            self._spawn_player(cmd)
         except Exception as e:
             log.error("Failed to play sound %s: %s", full_path, e)
 
