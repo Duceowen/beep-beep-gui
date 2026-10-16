@@ -401,6 +401,7 @@ class SeenCommandersGUI:
             self.build_ui(self.window)
             self._apply_topmost()
             self.apply_seen_opacity()
+            self._sync_seen_list_with_options()
             return
     
         self.window = tk.Toplevel(parent)
@@ -429,6 +430,7 @@ class SeenCommandersGUI:
         self.apply_seen_opacity()
         self.window.after(150, self._apply_topmost)
         self.window.after(150, self.apply_seen_opacity)
+        self._sync_seen_list_with_options()
 
     def _apply_topmost(self, window=None):
         """Apply the saved "stay on top" preference to a window."""
@@ -454,6 +456,8 @@ class SeenCommandersGUI:
                 if not popup.winfo_exists():
                     return
                 popup.update_idletasks()
+                if getattr(popup, "_beep_allow_grab", True) is False:
+                    return
                 if popup.winfo_viewable():
                     popup.grab_set()
                     popup.lift()
@@ -464,6 +468,40 @@ class SeenCommandersGUI:
                 popup.after(20, lambda: attempt(tries_left - 1))
 
         popup.after(0, lambda: attempt(15))
+
+    def _raise_in_front(self, window, owner=None):
+        """Show a dialog above the window the commander is using.
+
+        Windows maps a new Toplevel behind the focused window. A topmost
+        owner, such as Options while Seen Commanders stays above the game,
+        hides that dialog until the dialog is topmost too.
+        """
+        def attempt(tries_left):
+            try:
+                if not window.winfo_exists():
+                    return
+                window.update_idletasks()
+                window.deiconify()
+                keep = False
+                if owner is not None:
+                    try:
+                        if owner.winfo_exists():
+                            keep = bool(owner.wm_attributes("-topmost"))
+                    except tk.TclError:
+                        keep = False
+                window.wm_attributes("-topmost", True)
+                window.lift()
+                window.focus_force()
+                if not keep:
+                    window.wm_attributes("-topmost", False)
+                    window.lift()
+                    window.focus_force()
+            except tk.TclError:
+                return
+            if tries_left > 0:
+                window.after(60, lambda: attempt(tries_left - 1))
+
+        window.after(0, lambda: attempt(2))
 
     def _on_topmost_toggle(self, value):
         self._apply_topmost()
@@ -1123,6 +1161,8 @@ class SeenCommandersGUI:
         self.tree.bind("<Return>", self.on_tree_enter_pressed)
 
     def on_tree_enter_pressed(self, _event):
+        if self._options_are_open():
+            return
         selection = self.tree.selection()
         if not selection:
             return
@@ -1153,6 +1193,8 @@ class SeenCommandersGUI:
         self.on_tree_double_click_popup(e)        
     
     def on_tree_double_click_popup(self, event):
+        if self._options_are_open():
+            return
         row_id = self.tree.identify_row(event.y)
         if not row_id:
             return
@@ -1167,6 +1209,15 @@ class SeenCommandersGUI:
         popup.title(f"Edit Commander {info.get('name', 'unknown')}")
         popup.transient(self.window)
         popup.bind("<Escape>", lambda e: popup.destroy())
+        self._edit_popup = popup
+
+        def forget_edit(event, editor=popup):
+            if event.widget is not editor:
+                return
+            if getattr(self, "_edit_popup", None) is editor:
+                self._edit_popup = None
+
+        popup.bind("<Destroy>", forget_edit)
     
     
         tk.Label(popup, text="Name:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -1529,6 +1580,7 @@ class SeenCommandersGUI:
             if existing is not None and existing.winfo_exists():
                 existing.lift()
                 existing.focus_set()
+                self._set_seen_list_locked(True)
                 return
         except Exception:
             pass
@@ -1550,6 +1602,91 @@ class SeenCommandersGUI:
         
         self.attach_options_resize_listener(popup)
         self._grab_when_viewable(popup)
+        self._set_seen_list_locked(True)
+
+    def _options_are_open(self):
+        popup = getattr(self, "options_popup", None)
+        try:
+            return popup is not None and popup.winfo_exists()
+        except tk.TclError:
+            return False
+
+    def _sync_seen_list_with_options(self):
+        self._set_seen_list_locked(self._options_are_open())
+
+    def _set_seen_list_locked(self, locked):
+        """Replace the commander list while Options is open.
+
+        The list comes back when that window closes, which is when editing
+        is allowed again.
+        """
+        window = getattr(self, "window", None)
+        try:
+            if not window or not window.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        notice = getattr(self, "_options_notice", None)
+        pieces = (
+            (getattr(self, "header_frame", None), {"row": 0, "column": 0, "columnspan": 3, "sticky": "ew"}),
+            (getattr(self, "tree", None), {"row": 1, "column": 0, "columnspan": 3, "sticky": "nsew"}),
+            (getattr(self, "scrollbar", None), {"row": 1, "column": 3, "sticky": "ns"}),
+        )
+        if locked:
+            editor = getattr(self, "_edit_popup", None)
+            try:
+                if editor is not None and editor.winfo_exists():
+                    editor.destroy()
+            except tk.TclError:
+                pass
+            for widget, _grid in pieces:
+                try:
+                    if widget is not None and widget.winfo_exists():
+                        widget.grid_remove()
+                except tk.TclError:
+                    pass
+            if notice is None or not notice.winfo_exists():
+                notice = tk.Label(
+                    window,
+                    text="Beep Beep Options are Open. Close Options window to edit list",
+                    justify="center",
+                    anchor="center",
+                )
+                self._options_notice = notice
+
+                def fit_notice(_event=None, label=notice, host=window):
+                    try:
+                        width = host.winfo_width()
+                        if width > 80:
+                            label.configure(wraplength=width - 48)
+                    except tk.TclError:
+                        pass
+
+                window.bind("<Configure>", fit_notice, add="+")
+                fit_notice()
+            notice.grid(row=0, column=0, rowspan=2, columnspan=4, sticky="nsew", padx=24, pady=24)
+            try:
+                self._theme_widget(notice, self._edmc_palette())
+            except Exception:
+                pass
+            return
+
+        try:
+            if notice is not None and notice.winfo_exists():
+                notice.grid_remove()
+        except tk.TclError:
+            pass
+        for widget, grid in pieces:
+            try:
+                if widget is not None and widget.winfo_exists():
+                    widget.grid(**grid)
+            except tk.TclError:
+                pass
+        try:
+            window.after_idle(self._layout_tree_header)
+        except Exception:
+            pass
 
     def _edmc_palette(self):
         palette = {
@@ -2016,9 +2153,20 @@ class SeenCommandersGUI:
     
         def on_window_close():
             self.save_options_geometry(popup)
+            if getattr(self, "options_popup", None) is popup:
+                self.options_popup = None
             popup.destroy()
-    
+            self._set_seen_list_locked(False)
+
+        def on_destroy(event):
+            if event.widget is not popup:
+                return
+            if getattr(self, "options_popup", None) is popup:
+                self.options_popup = None
+            self._set_seen_list_locked(False)
+
         popup.protocol("WM_DELETE_WINDOW", on_window_close)
+        popup.bind("<Destroy>", on_destroy)
     
     
     
@@ -2083,6 +2231,55 @@ class SeenCommandersGUI:
         else:
             subprocess.Popen(["xdg-open", folder])
 
+    def _destroy_window(self, widget):
+        try:
+            if widget is not None and widget.winfo_exists():
+                widget.destroy()
+        except tk.TclError:
+            pass
+
+    def _show_spelling_notice(self, owner, message, title="Spelling changes"):
+        """Show one short spelling result above the window the commander is using."""
+        host = None
+        for candidate in (
+            owner,
+            getattr(self, "options_popup", None),
+            getattr(self, "window", None),
+            getattr(self, "parent", None),
+        ):
+            try:
+                if candidate is not None and candidate.winfo_exists():
+                    host = candidate
+                    break
+            except tk.TclError:
+                continue
+        if host is None:
+            return
+        popup = tk.Toplevel(host)
+        popup.title(title)
+        popup.resizable(False, False)
+        try:
+            popup.transient(host)
+        except tk.TclError:
+            pass
+        popup.bind("<Escape>", lambda _event: popup.destroy())
+        popup.bind("<Return>", lambda _event: popup.destroy())
+        tk.Label(
+            popup,
+            text=message,
+            justify="left",
+            wraplength=420,
+        ).pack(padx=16, pady=(14, 8), anchor="w")
+        tk.Button(popup, text="OK", command=popup.destroy).pack(pady=(0, 14))
+        popup.update_idletasks()
+        try:
+            popup.geometry("+%s+%s" % (host.winfo_rootx() + 80, host.winfo_rooty() + 80))
+        except tk.TclError:
+            pass
+        self.apply_edmc_theme(popup)
+        self._grab_when_viewable(popup)
+        self._raise_in_front(popup, host)
+
     def show_spelling_changes(self, parent, planned):
         existing = getattr(self, "_spelling_changes_window", None)
         if existing is not None:
@@ -2111,7 +2308,6 @@ class SeenCommandersGUI:
         window.bind("<Escape>", lambda _event: window.destroy())
 
         trust_var = tk.BooleanVar(value=bool(config.get_config("trust_spelling", False)))
-        saved = {"done": False}
 
         def instruction_text():
             if trust_var.get():
@@ -2227,35 +2423,22 @@ class SeenCommandersGUI:
                 row["var"].set(bool(value))
                 row["redraw"]()
 
-        def on_trust(value):
-            if value:
-                set_verified(True)
-            if not saved["done"]:
-                status.configure(text=instruction_text())
-
-        trust_row = tk.Frame(window)
-        self.add_checkbox(
-            trust_row,
-            0,
-            "Trust journal spelling",
-            trust_var,
-            attr="trust_spelling",
-            callback=on_trust,
-        )
         if trust_var.get():
             set_verified(True)
 
         def open_final_confirmation():
             chosen = []
-            picked = []
             for row in rows:
                 if not row["enabled"] or not row["var"].get():
                     continue
                 for cmdr_id in row["ids"]:
                     chosen.append((cmdr_id, row["old"], row["new"]))
-                picked.append(row)
             if not chosen:
                 status.configure(text="Select at least one name before the final confirmation.")
+                self._show_spelling_notice(
+                    window,
+                    "Select at least one name before the final confirmation.",
+                )
                 return
             final = tk.Toplevel(window)
             final.title("Confirm spelling changes")
@@ -2283,33 +2466,48 @@ class SeenCommandersGUI:
                 applied = history_inst.apply_spelling_updates(chosen)
                 if not applied:
                     status.configure(text="None of the selected names could be saved.")
-                    final.destroy()
+
+                    def show_failure():
+                        self._destroy_window(final)
+                        self._show_spelling_notice(
+                            window,
+                            "None of the selected names could be saved.",
+                        )
+
+                    window.after(0, show_failure)
                     return
-                applied_ids = {cmdr_id for cmdr_id, _old, _new in applied}
-                for row in picked:
-                    if any(cmdr_id in applied_ids for cmdr_id in row["ids"]):
-                        row["enabled"] = False
-                        row["var"].set(True)
-                        row["redraw"]()
                 self.add_or_update_commander([
                     history_inst.seen_data[cmdr_id]
                     for cmdr_id, _old, _new in applied
                     if cmdr_id in history_inst.seen_data
                 ])
-                saved["done"] = True
-                status.configure(text="Saved %s names." % len(applied))
-                final.destroy()
+                count = len(applied)
+                noun = "name" if count == 1 else "names"
+                message = "Saved %s %s." % (count, noun)
+
+                def show_success():
+                    warning = getattr(self, "_spelling_warning_window", None)
+                    self._destroy_window(final)
+                    self._destroy_window(window)
+                    self._destroy_window(warning)
+                    self._show_spelling_notice(parent, message, "Spelling saved")
+
+                try:
+                    if parent is not None and parent.winfo_exists():
+                        parent.after(0, show_success)
+                        return
+                except tk.TclError:
+                    pass
+                show_success()
 
             tk.Button(final_buttons, text="Confirm", command=accept).pack(side="right")
             tk.Button(final_buttons, text="Go Back", command=final.destroy).pack(side="right", padx=(0, 8))
-            try:
-                final.grab_set()
-            except tk.TclError:
-                pass
             final.update_idletasks()
             final.geometry("+%s+%s" % (window.winfo_rootx() + 60, window.winfo_rooty() + 60))
             final.focus_set()
             self.apply_edmc_theme(final)
+            self._grab_when_viewable(final)
+            self._raise_in_front(final, window)
 
         buttons = tk.Frame(window)
         tk.Button(buttons, text="Verify all", command=lambda: set_verified(True)).pack(side="left")
@@ -2319,24 +2517,33 @@ class SeenCommandersGUI:
 
         # Pack the fixed rows before the expanding list so the buttons stay visible.
         buttons.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
-        trust_row.pack(side="bottom", fill="x", padx=7, pady=(0, 4))
         status.pack(side="top", fill="x", padx=12, pady=(12, 6))
         body.pack(side="top", fill="both", expand=True, padx=12, pady=(0, 8))
 
         try:
+            window.transient(parent)
             window.geometry("+%s+%s" % (parent.winfo_rootx() + 80, parent.winfo_rooty() + 80))
-            window.lift()
         except tk.TclError:
             pass
         self.apply_edmc_theme(window)
+        self._raise_in_front(window, parent)
 
     def confirm_spelling_update(self, parent):
         from commander_history import edmc_journal_dir
         from commander_names import collect_journal_spellings, plan_spelling_updates
 
         dialog = tk.Toplevel(parent)
+        self._spelling_warning_window = dialog
         dialog.title("Update name spelling")
         dialog.transient(parent)
+
+        def forget_warning(event, warning=dialog):
+            if event.widget is not warning:
+                return
+            if getattr(self, "_spelling_warning_window", None) is warning:
+                self._spelling_warning_window = None
+
+        dialog.bind("<Destroy>", forget_warning)
         dialog.resizable(False, False)
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
 
@@ -2350,27 +2557,29 @@ class SeenCommandersGUI:
                 "TishTech. A typed chat line is not used. Unknown commanders stay "
                 "unknown. A name is skipped when those logs disagree, or when two "
                 "saved rows already spell it differently.\n\n"
-                "Make a backup of seen_commanders.json before you continue. "
-                "Open the folder and copy that file somewhere safe.\n\n"
-                "Confirm opens the list. Nothing is saved until the final confirmation. "
-                "Trust journal spelling selects every suggestion for you, and that "
-                "still waits for the final confirmation."
+                "Make a backup of seen_commanders.json before you continue.\n\n"
+                "Confirm opens the list. Nothing is saved until the final confirmation."
             ),
             justify="left",
             wraplength=460,
         )
         message.pack(padx=16, pady=(14, 8), anchor="w")
 
+        trust_row = tk.Frame(dialog)
+        trust_row.pack(padx=11, pady=(0, 4), anchor="w", fill="x")
+        self.add_checkbox(
+            trust_row,
+            0,
+            "Trust journal spelling",
+            tk.BooleanVar(value=bool(config.get_config("trust_spelling", False))),
+            attr="trust_spelling",
+        )
+
         status = tk.Label(dialog, text="", justify="left", wraplength=460)
         status.pack(padx=16, pady=(0, 8), anchor="w")
 
         buttons = tk.Frame(dialog)
         buttons.pack(padx=16, pady=(0, 14), fill="x")
-        tk.Button(
-            buttons,
-            text="Open Seen Commanders Folder",
-            command=self.open_seen_commanders_folder,
-        ).pack(side="left")
 
         def go_back():
             dialog.destroy()
@@ -2416,8 +2625,14 @@ class SeenCommandersGUI:
                             status.configure(text="Every suggestion is selected. Nothing is saved until the final confirmation.")
                         else:
                             status.configure(text="Check the names you want. Nothing is saved until the final confirmation.")
+                        dialog._beep_allow_grab = False
                         try:
                             dialog.grab_release()
+                        except tk.TclError:
+                            pass
+                        try:
+                            dialog.wm_attributes("-topmost", False)
+                            dialog.lower()
                         except tk.TclError:
                             pass
                         self.show_spelling_changes(parent, planned)
@@ -2435,16 +2650,14 @@ class SeenCommandersGUI:
         confirm_holder["button"].pack(side="right")
         tk.Button(buttons, text="Go Back", command=go_back).pack(side="right", padx=(0, 8))
 
-        try:
-            dialog.grab_set()
-        except tk.TclError:
-            pass
         dialog.update_idletasks()
         dialog.geometry("+%s+%s" % (
             parent.winfo_rootx() + 40,
             parent.winfo_rooty() + 40,
         ))
         self.apply_edmc_theme(dialog)
+        self._grab_when_viewable(dialog)
+        self._raise_in_front(dialog, parent)
     
 
     def add_checkbox(self, frame, row, text, var, *, target=None, attr=None, callback=None):
@@ -2519,33 +2732,22 @@ class SeenCommandersGUI:
 
 
 
-    def add_info_box(self, frame, row, text, *, title="Info", columnspan=2):
-        info_frame = tk.LabelFrame(frame, text=title, bd=2, relief="groove")
+    def add_section(self, frame, row, text):
+        label = tk.Label(frame, text=text, anchor="w")
+        top = 2 if row == 0 else 14
+        label.grid(row=row, column=0, columnspan=2, padx=5, pady=(top, 2), sticky="w")
+        return row + 1
 
-        info_frame.grid(
-            row=row,
-            column=0,
-            columnspan=columnspan,
-            padx=5,
-            pady=(2, 8),
-            sticky="ew"
-        )
+    def add_hint(self, frame, row, text, gap=0):
+        label = tk.Label(frame, text=text, anchor="w", justify="left")
+        label.grid(row=row, column=0, columnspan=2, padx=(28, 8), pady=(gap, 4), sticky="ew")
 
-        label = tk.Label(
-            info_frame,
-            text=text,
-            justify="left",
-            anchor="nw"
-        )
-        label.pack(padx=10, pady=6, fill="x")
-    
         def update_wrap(event):
             width = event.width
-            if width > 50:
-                label.config(wraplength=width - 20)
-    
-        info_frame.bind("<Configure>", update_wrap)
-    
+            if width > 80:
+                label.configure(wraplength=max(120, width - 36))
+
+        frame.bind("<Configure>", update_wrap, add="+")
         return row + 1
 
     def options_menu(self, parent):
@@ -2576,7 +2778,8 @@ class SeenCommandersGUI:
 
 
         row = 0
-    
+
+        row = self.add_section(frame, row, "Sound")
         row = self.add_slider(
             frame,
             row,
@@ -2586,26 +2789,19 @@ class SeenCommandersGUI:
             to=100,
             attr="volume"
         )
-
-        try:
-            seen_opacity = int(config.get_config("seen_window_opacity", 100))
-        except (TypeError, ValueError):
-            seen_opacity = 100
-        seen_opacity = max(10, min(100, seen_opacity))
-
         row = self.add_slider(
             frame,
             row,
-            "Seen Commanders opacity (%)",
-            tk.IntVar(value=seen_opacity),
-            from_=10,
-            to=100,
-            attr="seen_window_opacity",
-            command=self.apply_seen_opacity
+            "Multiple sounds",
+            tk.IntVar(value=config.get_config("sounds", 1)),
+            from_=1,
+            to=10,
+            attr="sounds"
         )
-                
+        row = self.add_hint(frame, row, "Plays each commander 200 ms apart.")
+
         actions = tk.Frame(frame)
-        actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 6), sticky="w")
+        actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 2), sticky="w")
         tk.Button(
             actions,
             text="Open Sounds Folder",
@@ -2622,107 +2818,63 @@ class SeenCommandersGUI:
             command=sound_inst.reload
         ).pack(side="left")
         row += 1
-
-        row = self.add_info_box(
+        row = self.add_hint(
             frame,
             row,
-            (
-                "To add sounds, place them in the 'sounds' folder inside the plugin. "
-                "Only WAV and MP3 files are supported. "
-                "The default files 'foe', 'friend', and 'neutral' in the 'default' folder "
-                "should not be modified. To override a default sound, simply add a file "
-                "with the same name in the main 'sounds' folder (ext does not matter). "
-                "The plugin automatically loads the newest file for each name. "
-                "Use Reload Sounds to update the list immediately."
-            ),
-            title="Sound Files"
-        )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "Reload Sounds re-scans the sounds folder and updates the available "
-                "files, so new sounds can be added without restarting EDMC."
-            ),
-            title="Reload Sounds"
-        )
-
-        row = self.add_slider(
-            frame,
-            row,
-            "Multiple sounds",
-            tk.IntVar(value=config.get_config("sounds", 1)),
-            from_=1,
-            to=10,
-            attr="sounds"
-        )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "If there are multiple CMDRS, it will play each one with a 200 ms delay."
-            ),
-            title="Multiple sounds"
+            "WAV and MP3. A file in the sounds folder with the same name replaces the default.",
         )
 
         row = self.add_checkbox(
             frame,
             row,
-            "Beep on leaving",
+            "Beep when a commander leaves",
             tk.BooleanVar(value=config.get_config("beep_on_leave", False)),
             attr="beep_on_leave"
         )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "When enabled, if a CMDR or yourself leaves your instance, a sound will play. "
-                "For example, if you are in Supercruise and someone leaves, the sound will play."
-            ),
-            title="Beep on leaving"
-        )
-
         row = self.add_checkbox(
             frame,
             row,
-            "Keep Seen Commanders on top of the game",
+            "Beep for wing members",
+            tk.BooleanVar(value=config.get_config("wing_notify", False)),
+            attr="wing_notify"
+        )
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Announce arrivals in Modern Overlay",
+            tk.BooleanVar(value=config.get_config("overlay_announce", False)),
+            attr="overlay_announce"
+        )
+        row = self.add_hint(frame, row, "Needs the EDMC Modern Overlay plugin.")
+
+        gap = tk.Frame(frame, height=14)
+        gap.grid_propagate(False)
+        gap.grid(row=row, column=0, columnspan=2, sticky="ew")
+        row += 1
+        try:
+            seen_opacity = int(config.get_config("seen_window_opacity", 100))
+        except (TypeError, ValueError):
+            seen_opacity = 100
+        seen_opacity = max(10, min(100, seen_opacity))
+        row = self.add_slider(
+            frame,
+            row,
+            "Window opacity (%)",
+            tk.IntVar(value=seen_opacity),
+            from_=10,
+            to=100,
+            attr="seen_window_opacity",
+            command=self.apply_seen_opacity
+        )
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Keep the window above the game",
             tk.BooleanVar(value=bool(config.get_config("stay_on_top", False))),
             attr="stay_on_top",
             callback=self._on_topmost_toggle
         )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "Keeps the Seen Commanders window above Elite Dangerous and other "
-                "windows. Only works when the game runs in windowed or borderless "
-                "mode; exclusive fullscreen always paints over everything."
-            ),
-            title="Stay on top"
-        )
-    
-        row = self.add_checkbox(
-            frame,
-            row,
-            "Notify on Wing Member encounters",
-            tk.BooleanVar(value=config.get_config("wing_notify", False)),
-            attr="wing_notify"
-        )
-    
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "When disabled, no sounds will play for wing members. "
-                "This setting only affects wing-related alerts."
-            ),
-            title="Wing Notify"
-        )
-
+        row = self.add_hint(frame, row, "Windowed and borderless. Exclusive fullscreen covers this window.")
         row = self.add_checkbox(
             frame,
             row,
@@ -2730,67 +2882,14 @@ class SeenCommandersGUI:
             tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
             attr="autofill_on_kill"
         )
-
-        row = self.add_info_box(
+        row = self.add_hint(
             frame,
             row,
-            (
-                "When this is on, a PvP kill names the unknown commander who was "
-                "just killed. Turn it off to leave kill victims unknown. Ship scans, "
-                "wing adds, messages, and player interdictions still fill a name."
-            ),
-            title="Autofill on Kill"
-        )
-    
-        row = self.add_checkbox(
-            frame,
-            row,
-            "Announce connections in Modern Overlay",
-            tk.BooleanVar(value=config.get_config("overlay_announce", False)),
-            attr="overlay_announce"
-        )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "When enabled, a \"Commander <name> has jumped in\" message is shown at the center "
-                "of the screen (raised slightly above center) through the EDMC Modern "
-                "Overlay plugin whenever a "
-                "new commander enters your instance. The name is taken from the Seen "
-                "Commanders list (rename a commander there to change what is shown). "
-                "Requires the EDMC Modern Overlay plugin to be installed and running."
-            ),
-            title="Modern Overlay announcements"
-        )
-
-        row = self.add_checkbox(
-            frame,
-            row,
-            "Trust journal spelling",
-            tk.BooleanVar(value=bool(config.get_config("trust_spelling", False))),
-            attr="trust_spelling",
-        )
-
-        row = self.add_info_box(
-            frame,
-            row,
-            (
-                "Experimental. Update spelling reads your Elite journals and can "
-                "change a saved name to the capitalization and punctuation from a "
-                "ship scan, wing name, kill, or interdiction. Typed chat is not "
-                "used. Unknown commanders are left unknown. Check each name in "
-                "the list, or turn on Trust journal spelling to select every "
-                "suggestion without checking them one by one. Nothing is saved "
-                "until the final confirmation. Make a backup of "
-                "seen_commanders.json first. Open Seen Commanders Folder and copy "
-                "that file somewhere safe."
-            ),
-            title="Journal spelling"
+            "A PvP kill names the one unknown commander from that visit. Turn this off to skip kills. Scans, wing adds, messages, and interdictions still name commanders.",
         )
 
         spelling_actions = tk.Frame(frame)
-        spelling_actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 8), sticky="w")
+        spelling_actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(6, 2), sticky="w")
         tk.Button(
             spelling_actions,
             text="Open Seen Commanders Folder",
@@ -2802,18 +2901,16 @@ class SeenCommandersGUI:
             command=lambda: self.confirm_spelling_update(frame.winfo_toplevel()),
         ).pack(side="left")
         row += 1
-    
-        row = self.add_info_box(
+        row = self.add_hint(
             frame,
             row,
-            (
-                "If EDMC is started while the game is already running, commanders who are "
-                "already in your instance may trigger sounds in reverse — for example, "
-                "alerts may play when they leave instead of when they arrive. \n\n"
-                "Going to any EMPTY instance (Normal Space, Supercruise, or Hyperspace) and "
-                "waiting about 5 seconds will reset this."
-            ),
-            title="General Notes"
+            "Experimental. Copy seen_commanders.json first. THE LAST CONFIRM SAVES CHECKED NAMES.",
+        )
+        row = self.add_hint(
+            frame,
+            row,
+            "If EDMC Starts while you are already in a group, wait about 5 seconds in an EMPTY instance so alerts play when commanders arrive.",
+            gap=12,
         )
 
         def _on_mousewheel(event):
