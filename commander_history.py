@@ -10,6 +10,173 @@ from logutil import log
 from beep_beep_config import config
 from location import location
 
+_HISTORY_TAIL = (
+    "Frontier Developments",
+    "Elite Dangerous",
+    "CommanderHistory",
+)
+_ELITE_APP_ID = "359320"
+_STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
+
+
+def _join_parts(parts: list[str]) -> str:
+    if not parts:
+        return ""
+    if parts[0] == "":
+        return "/" + "/".join(parts[1:])
+    # os.path.join("C:", "Users") is drive-relative ("C:Users"), not "C:\Users".
+    if len(parts[0]) == 2 and parts[0][1] == ":":
+        return parts[0] + "\\" + "\\".join(parts[1:])
+    return os.path.join(*parts)
+
+
+def history_dir_from_journal_dir(journal_dir: str) -> str | None:
+    """Map an EDMC journal folder to the Wine/Windows CommanderHistory folder.
+
+    Journals live in Saved Games. CommanderHistory lives in AppData\\Local
+    for the same Windows user, including inside a Proton prefix.
+    """
+    expanded = os.path.expanduser(journal_dir.strip())
+    if not expanded:
+        return None
+    parts = expanded.replace("\\", "/").split("/")
+    lowered = [part.lower() for part in parts]
+    user_root = None
+    if "saved games" in lowered:
+        user_root = parts[: lowered.index("saved games")]
+    else:
+        for index, part in enumerate(lowered):
+            if part == "users" and index > 0 and lowered[index - 1] == "drive_c" and index + 1 < len(parts):
+                user_root = parts[: index + 2]
+                break
+    if not user_root:
+        return None
+    return _join_parts(user_root + ["AppData", "Local", *_HISTORY_TAIL])
+
+
+def edmc_journal_dir() -> str | None:
+    try:
+        from config import config as edmc_config
+    except ImportError:
+        return None
+    raw = None
+    getter = getattr(edmc_config, "get_str", None)
+    if callable(getter):
+        try:
+            raw = getter("journaldir")
+        except Exception:
+            raw = None
+    if not raw:
+        raw = getattr(edmc_config, "default_journal_dir", None)
+    if not raw:
+        return None
+    expanded = os.path.expanduser(str(raw))
+    return expanded or None
+
+
+def platform_default_history_dir(system: str | None = None) -> str:
+    system = system or platform.system()
+    if system == "Windows":
+        base_dir = os.getenv("LOCALAPPDATA", "")
+    elif system == "Darwin":
+        base_dir = os.path.expanduser("~/Library/Application Support")
+    else:
+        base_dir = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    return os.path.join(base_dir, *_HISTORY_TAIL)
+
+
+def steam_library_roots() -> list[str]:
+    home = os.path.expanduser("~")
+    seeds = [
+        os.path.join(home, ".steam", "steam"),
+        os.path.join(home, ".steam", "root"),
+        os.path.join(home, ".local", "share", "Steam"),
+        os.path.join(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam"),
+        os.path.join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+    ]
+    roots: list[str] = []
+    seen: set[str] = set()
+
+    def add(path: str) -> None:
+        if not path:
+            return
+        expanded = os.path.expanduser(path)
+        key = os.path.normcase(os.path.normpath(expanded))
+        if key in seen:
+            return
+        seen.add(key)
+        roots.append(expanded)
+
+    for seed in seeds:
+        if os.path.isdir(seed):
+            add(seed)
+        vdf = os.path.join(seed, "steamapps", "libraryfolders.vdf")
+        if not os.path.isfile(vdf):
+            continue
+        try:
+            with open(vdf, encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+        for match in _STEAM_LIBRARY_PATH.finditer(text):
+            add(match.group(1).replace("\\\\", "\\"))
+    return roots
+
+
+def proton_history_dirs() -> list[str]:
+    found: list[str] = []
+    tail = os.path.join("AppData", "Local", *_HISTORY_TAIL)
+    for root in steam_library_roots():
+        users_root = os.path.join(
+            root, "steamapps", "compatdata", _ELITE_APP_ID, "pfx", "drive_c", "users"
+        )
+        if not os.path.isdir(users_root):
+            continue
+        try:
+            names = os.listdir(users_root)
+        except OSError:
+            continue
+        for name in names:
+            found.append(os.path.join(users_root, name, tail))
+    return found
+
+
+def commander_history_candidates(journal_dir: str | None = None, system: str | None = None) -> list[str]:
+    journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
+    ordered: list[str] = []
+    if journal_dir:
+        derived = history_dir_from_journal_dir(journal_dir)
+        if derived:
+            ordered.append(derived)
+        ordered.append(os.path.join(os.path.expanduser(journal_dir), "CommanderHistory"))
+    if (system or platform.system()) != "Windows":
+        ordered.extend(proton_history_dirs())
+    ordered.append(platform_default_history_dir(system))
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for path in ordered:
+        if not path:
+            continue
+        key = os.path.normcase(os.path.normpath(path))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(os.path.normpath(path))
+    return unique
+
+
+def _directory_has_history(path: str) -> bool:
+    try:
+        with os.scandir(path) as entries:
+            return any(
+                entry.is_file() and CommanderHistoryManager.is_cmdr_history_file(entry.name)
+                for entry in entries
+            )
+    except OSError:
+        return False
+
+
 class CommanderEntry(TypedDict):
     commander_id: str
     name: str
@@ -23,15 +190,11 @@ class CommanderHistoryManager:
     def __init__(self):
         self.plugin_dir = os.path.dirname(__file__)
         self.seen_data: CommanderDict = {}
-        if platform.system() == "Windows":
-            base_dir = os.getenv("LOCALAPPDATA", "")
-        elif platform.system() == "Darwin":
-            base_dir = os.path.expanduser("~/Library/Application Support")
-        else:
-            base_dir = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
-        self.commander_history_dir = os.path.join(
-            base_dir, "Frontier Developments", "Elite Dangerous", "CommanderHistory"
-        )
+        self.commander_history_dir = platform_default_history_dir()
+        self._resolved_history_dir: str | None = None
+        self._fallback_history_dir: str | None = None
+        self._next_history_search = 0.0
+        self._missing_history_logged = False
         self.json_file_path = os.path.join(self.plugin_dir, "seen_commanders.json")
         self.last_modified_timestamp: datetime.datetime = datetime.datetime.min
         self.listeners: list[Callable[[list[CommanderEntry]], None]] = []
@@ -105,17 +268,60 @@ class CommanderHistoryManager:
         except (OSError, TypeError):
             log.exception("Failed to save seen_commanders.json")
             
+    def resolve_commander_history_dir(self) -> str | None:
+        if self._resolved_history_dir and os.path.isdir(self._resolved_history_dir):
+            return self._resolved_history_dir
+
+        now = time.monotonic()
+        if now < self._next_history_search:
+            if self._fallback_history_dir and os.path.isdir(self._fallback_history_dir):
+                return self._fallback_history_dir
+            return None
+
+        candidates = commander_history_candidates()
+        existing = [path for path in candidates if os.path.isdir(path)]
+        with_files = next((path for path in existing if _directory_has_history(path)), None)
+        chosen = with_files or (existing[0] if existing else None)
+        if chosen:
+            self.commander_history_dir = chosen
+            self._missing_history_logged = False
+            if with_files:
+                self._resolved_history_dir = chosen
+                self._fallback_history_dir = None
+                log.info("Using CommanderHistory at %s", chosen)
+            else:
+                self._fallback_history_dir = chosen
+                self._next_history_search = now + 30
+            return chosen
+
+        self._fallback_history_dir = None
+        self._next_history_search = now + 30
+        if not self._missing_history_logged:
+            log.error(
+                "CommanderHistory folder was not found. EDMC journals are at %s. Looked in: %s",
+                edmc_journal_dir() or "(not set)",
+                "; ".join(candidates) or "(none)",
+            )
+            self._missing_history_logged = True
+        return None
+
     def aggregate_most_recent_commanders(self, first_run=False):
         self.changed = False
+        history_dir = self.resolve_commander_history_dir()
+        if not history_dir:
+            return None
         try:
             abs_paths = [
                 e.path
-                for e in os.scandir(self.commander_history_dir)
+                for e in os.scandir(history_dir)
                 if e.is_file() and self.is_cmdr_history_file(e.name)
             ]
         except (FileNotFoundError, PermissionError, OSError) as err:
-            log.error("Failed to list directory %s", self.commander_history_dir)
-            log.exception(err)
+            self._resolved_history_dir = None
+            self._next_history_search = time.monotonic() + 30
+            if not self._missing_history_logged:
+                log.error("Failed to list CommanderHistory at %s: %s", history_dir, err)
+                self._missing_history_logged = True
             return None
 
     

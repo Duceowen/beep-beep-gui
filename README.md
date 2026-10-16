@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.18
+- Linux looks for CommanderHistory in the Proton prefix, using the same EDMC journal folder, instead of ~/.local/share
+
 ## 1.0.17
 - Options is on the main EDMC window, aligned to the right
 
