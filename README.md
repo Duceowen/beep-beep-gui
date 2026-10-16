@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.23
+- Beep Beep loads again under EDMC. The volume fix no longer imports a module EDMC does not ship
+
 ## 1.0.22
 - Alert Volume changes the loudness of the alert. The slider no longer jumps from full volume to silence, and Linux uses a player that honors the setting
 
