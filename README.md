@@ -1,5 +1,11 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.26
+- Seen Commanders records the first time a commander was seen, the last time, and up to eight recent visits. A gap of more than 15 minutes starts a new visit
+- An unknown row takes a journal name when that visit has one matching event and one unknown commander. A ship scan, wing add, direct message, or player interdiction can supply the name. A PvP kill can supply it while Autofill on Kill is on. Two unknown commanders in the same visit stay unknown. Learning a name keeps the alert that already played
+- Autofill on Kill is in Options and starts on. It controls only the PvP kill path
+- Update spelling from journals is experimental. Copy seen_commanders.json somewhere safe first. The list shows each capitalization from a ship scan, wing name, kill, or interdiction. Check the names you want, or turn on Trust journal spelling to select every suggestion. The last Confirm writes the checked names. Go Back and Close leave every saved name as it is. Typed chat stays unused, and a row saved as unknown stays unknown
+
 ## 1.0.25
 - Alerts play again on Linux Mint. 1.0.24 gave the quieter sound to the first player and stopped if that player exited. Beep Beep now tries the next player, and plays the original sound if the quieter copy cannot be played
 - The Alert Volume slider still makes that copy quieter. The player is asked to play it at its normal volume, so a volume flag cannot mute the copy as well
@@ -74,7 +80,7 @@ The main issue is that there is no reliable way to distinguish these events usin
 To work around this, an instance tracker is created which keeps track of who has joined and who has left using edge detection.
 Additionally, by using EDMC journal events, we can hook into other events such as wing activity, giving us the ability to mute wing-related notifications.
 
-By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI.
+By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI. A row saved as unknown keeps its commander ID. The row records the first time that commander was seen, the last time, and up to eight recent visits, so a journal line can be matched to that visit without the file growing without limit. When a journal event names a player and only one unknown row matches that visit, the journal spelling is saved on the row. A ship scan, wing add, direct message, or player interdiction can supply the name. A PvP kill can supply it too, unless Autofill on Kill is turned off in Options. The name is saved after a short wait, so two unknown commanders in the same visit keep both rows unknown. Options can also update a saved name from a ship scan or similar journal event when that event shows the capitalization the commander used. The list lets you check each change, or Trust journal spelling can select every suggestion without checking them one by one. Nothing is saved until the final confirmation. That tool is experimental, so copy seen_commanders.json somewhere safe before using it.
 
 On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. If one Linux player cannot play the copy, the next player is tried. macOS uses the system sound player.
 

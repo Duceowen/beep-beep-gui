@@ -16,6 +16,7 @@ class Location:
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
+        self.on_instance_reset = None
 
     def _record_departures(self):
         for cmdr_id, info in self.instance.items():
@@ -35,7 +36,8 @@ class Location:
             
         if state != self.state and system != self.system:
             self._record_departures()
-            self.instance = {} 
+            self.instance = {}
+            self._fire_instance_reset() 
             
         self.prev_system = self.system
         self.prev_state = self.state
@@ -68,6 +70,7 @@ class Location:
             self._record_departures()
             self.jump_backup = self.instance.copy()
             self.instance.clear()
+            self._fire_instance_reset()
             
         else:
             self.jump_ts = None
@@ -82,6 +85,11 @@ class Location:
     def pvp_kill(self, victim):
         self.pvp_kill_ts = time.time()
         self.pvp_kill_victim = victim
+
+    def _fire_instance_reset(self):
+        callback = self.on_instance_reset
+        if callback is not None:
+            callback()
         
         
 location = Location()

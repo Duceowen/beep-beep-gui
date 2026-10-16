@@ -5,10 +5,21 @@ import platform
 import re
 import threading
 import time
-from typing import Callable, Dict, TypedDict
+from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
 from location import location
+from commander_names import (
+    UnknownNameResolver,
+    backfill_seen_record,
+    candidate_unknown_ids,
+    close_seen_time,
+    is_unknown_name,
+    name_key,
+    note_seen_time,
+    utc_now,
+    visit_is_new,
+)
 
 _HISTORY_TAIL = (
     "Frontier Developments",
@@ -196,6 +207,8 @@ class CommanderEntry(TypedDict):
     sound: str
     last_seen: str
     seen_count: int
+    first_seen: NotRequired[str]
+    encounters: NotRequired[list]
 
 CommanderDict = Dict[str, CommanderEntry]  
 
@@ -223,6 +236,8 @@ class CommanderHistoryManager:
         self._reset_timer: threading.Timer | None = None
         self._lock = threading.Lock()    
         self.last_interactions: dict[str, set[str]] = {}
+        self._names = UnknownNameResolver()
+        location.on_instance_reset = self.forget_pending_names
 
 
     @property
@@ -231,7 +246,11 @@ class CommanderHistoryManager:
     
     @property
     def beep_on_leave(self) -> bool:
-        return config.get_config("beep_on_leave", False)    
+        return config.get_config("beep_on_leave", False)
+
+    @property
+    def autofill_on_kill(self) -> bool:
+        return bool(config.get_config("autofill_on_kill", True))    
 
     @staticmethod
     def is_cmdr_history_file(name: str) -> bool:
@@ -263,13 +282,20 @@ class CommanderHistoryManager:
             log.exception("Failed to load seen_commanders.json, starting empty")
             self.seen_data = {}
                 
+        changed = False
         for cmdr_id, entry in self.seen_data.items():
+            if not isinstance(entry, dict):
+                continue
             if "sound" in entry:
                 entry["sound"] = os.path.splitext(entry["sound"])[0].lower()
             try:
                 entry["seen_count"] = int(entry.get("seen_count", 1) or 1)
             except (TypeError, ValueError):
                 entry["seen_count"] = 1
+            if backfill_seen_record(entry):
+                changed = True
+        if changed:
+            self.save_seen_commanders()
 
     def save_seen_commanders(self):
         if self.json_file_path is None:
@@ -431,6 +457,7 @@ class CommanderHistoryManager:
                     "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
                 }
         
+                self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
              
             self.save_seen_commanders()
@@ -452,6 +479,8 @@ class CommanderHistoryManager:
         beeps_to_play = []
         connected_entries: list[CommanderEntry] = []
         changed_entries: list[CommanderEntry] = []
+        killed_unknown_ids = []
+        new_wing_unknown_ids = []
     
         now_ts = time.time()
         jump_recent = location.jump_ts is not None and (now_ts - location.jump_ts <= 60)
@@ -501,8 +530,12 @@ class CommanderHistoryManager:
                 "last_seen": ts.isoformat(),
                 "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
             }
+
+            if killed_now and is_unknown_name(info.get("name")):
+                killed_unknown_ids.append(cmdr_id)
+            if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
+                new_wing_unknown_ids.append(cmdr_id)
  
-    
             inst = location.get_instance().get(cmdr_id)
     
             beep_this_commander = True            
@@ -528,14 +561,11 @@ class CommanderHistoryManager:
                     inst["here"] = True
                     beep_this_commander = False
                        
-                    if killed_now:
-                        if info["name"] == "unknown":
-                            info["name"] = location.pvp_kill_victim.lower().capitalize()
-                            
-                        if cmdr_id in self.last_interactions:
-                            self.last_interactions[cmdr_id].discard("Killed")                        
+                    if killed_now and cmdr_id in self.last_interactions:
+                        self.last_interactions[cmdr_id].discard("Killed")
                 
                     self.last_interactions[cmdr_id] = current_flags
+                    self._remember_sighting(info, existing)
                     self.seen_data[cmdr_id] = info
                     changed_entries.append(info)
                     continue
@@ -589,11 +619,18 @@ class CommanderHistoryManager:
             if allow_beep and beep_this_commander and interdiction_recent == False:
                 beeps_to_play.append(info)
    
+            self._remember_sighting(info, existing)
             self.seen_data[cmdr_id] = info
             changed_entries.append(info)
                             
             self.last_interactions[cmdr_id] = current_flags
     
+        stored = set(self.seen_data)
+        self._resolve_unknown_names(
+            [cid for cid in killed_unknown_ids if cid in stored],
+            [cid for cid in new_wing_unknown_ids if cid in stored],
+        )
+
         if not changed_entries:
             return
     
@@ -621,13 +658,139 @@ class CommanderHistoryManager:
 
         self.save_seen_commanders()
 
-      
+    def _remember_sighting(self, info: dict, existing) -> None:
+        seen_at = info.get("last_seen")
+        previous_last = existing.get("last_seen") if isinstance(existing, dict) else None
+        note_seen_time(
+            info,
+            seen_at,
+            existing if isinstance(existing, dict) else None,
+            visit_is_new(previous_last, seen_at),
+        )
+
+    def note_journal_name(self, entry: dict) -> None:
+        if not isinstance(entry, dict):
+            return
+        try:
+            self._names.note_journal(
+                entry,
+                time.time(),
+                set(self._unknown_ids_here()),
+                self._known_name_keys(),
+                allow_kill=self.autofill_on_kill,
+            )
+        except Exception:
+            log.exception("Failed to note a commander name from the journal")
+
+    def forget_pending_names(self) -> None:
+        self._names.clear()
+
+    def _unknown_ids_here(self) -> list[str]:
+        ids = []
+        for cmdr_id, inst in list(location.get_instance().items()):
+            if not isinstance(inst, dict) or not inst.get("here"):
+                continue
+            info = self.seen_data.get(str(cmdr_id))
+            name = info.get("name") if isinstance(info, dict) else None
+            if not isinstance(info, dict) or is_unknown_name(name):
+                ids.append(str(cmdr_id))
+        return ids
+
+    def _known_name_keys(self) -> set[str]:
+        keys = set()
+        for info in self.seen_data.values():
+            if not isinstance(info, dict):
+                continue
+            name = info.get("name")
+            if isinstance(name, str) and not is_unknown_name(name):
+                keys.add(name_key(name))
+        return keys
+
+    def _resolve_unknown_names(self, killed_unknown_ids=None, new_wing_unknown_ids=None) -> None:
+        unknown_ids, historical = candidate_unknown_ids(
+            self._unknown_ids_here(),
+            self.seen_data,
+            self._names.link_time(),
+        )
+        try:
+            assignments = self._names.resolve(
+                unknown_ids,
+                time.time(),
+                self._known_name_keys(),
+                killed_unknown_ids=killed_unknown_ids,
+                new_wing_unknown_ids=new_wing_unknown_ids,
+                allow_kill=self.autofill_on_kill,
+                historical=historical,
+            )
+        except Exception:
+            log.exception("Failed to resolve an unknown commander name")
+            return
+        if not assignments:
+            return
+
+        known = self._known_name_keys()
+        updated = []
+        for cmdr_id, name in assignments:
+            key = name_key(name)
+            if key in known:
+                continue
+            info = self.seen_data.get(cmdr_id)
+            if not isinstance(info, dict) or not is_unknown_name(info.get("name")):
+                continue
+            info["name"] = name
+            known.add(key)
+            updated.append(info)
+            log.info("Named commander %s from the journal as %s", cmdr_id, name)
+        if not updated:
+            return
+        self.save_seen_commanders()
+        if self._gui_listener:
+            try:
+                self._gui_listener(updated)
+            except Exception:
+                log.exception("Failed to show a resolved commander name")
+
+    def apply_spelling_updates(self, planned) -> list[tuple[str, str, str]]:
+        """Write journal spellings onto saved rows. Unknown names are not filled."""
+        applied = []
+        updated = []
+        for cmdr_id, old_name, new_name in planned or []:
+            info = self.seen_data.get(str(cmdr_id))
+            if not isinstance(info, dict) or info.get("name") != old_name:
+                continue
+            if not isinstance(new_name, str) or is_unknown_name(new_name):
+                continue
+            if name_key(new_name) != name_key(old_name):
+                continue
+            info["name"] = new_name
+            applied.append((str(cmdr_id), old_name, new_name))
+            updated.append(info)
+        if not updated:
+            return []
+        self.save_seen_commanders()
+        log.info("Updated %s commander spellings from journals", len(updated))
+        if self._gui_listener:
+            try:
+                self._gui_listener(updated)
+            except Exception:
+                log.exception("Failed to show an updated commander spelling")
+        return applied
+
     def _process_departures(self):
         departed = location.departed
         if not departed:
             return
 
         location.departed = []
+
+        closed_at = utc_now()
+        closed = False
+        for cmdr_id in departed:
+            info = self.seen_data.get(cmdr_id)
+            if isinstance(info, dict) and close_seen_time(info, closed_at):
+                closed = True
+        if closed:
+            self.save_seen_commanders()
 
         if not self.beep_on_leave:
             return
@@ -685,6 +848,7 @@ class CommanderHistoryManager:
                     break
                 self._process_departures()
                 self.aggregated_commanders()
+                self._resolve_unknown_names()
             except Exception:
                 log.exception("Exception in CommanderHistoryManager worker loop, continuing")
 

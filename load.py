@@ -25,6 +25,7 @@ def plugin_app(parent):
 
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:
+    history_inst.note_journal_name(entry)
     event = entry.get("event")
     system = entry.get("StarSystem", system)
     

@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
+import os
+import sys
+import threading
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
-import os
-import sys
 from beep_beep_config import config
 from commander_history import history_inst
 from beep_beep import beep_inst
@@ -2067,6 +2068,383 @@ class SeenCommandersGUI:
             subprocess.Popen(["open", folder])
         else:
             subprocess.Popen(["xdg-open", folder])
+
+    def open_seen_commanders_folder(self):
+        import subprocess
+        import platform
+        folder = os.path.dirname(history_inst.json_file_path)
+        if not folder or not os.path.isdir(folder):
+            return
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(folder)
+        elif system == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+
+    def show_spelling_changes(self, parent, planned):
+        existing = getattr(self, "_spelling_changes_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.destroy()
+            except tk.TclError:
+                pass
+
+        grouped = []
+        by_change = {}
+        for cmdr_id, old_name, new_name in planned or []:
+            key = (old_name, new_name)
+            ids = by_change.get(key)
+            if ids is None:
+                ids = []
+                by_change[key] = ids
+                grouped.append((old_name, new_name, ids))
+            ids.append(str(cmdr_id))
+
+        window = tk.Toplevel(parent)
+        self._spelling_changes_window = window
+        window.title("Spelling changes")
+        window.geometry("520x460")
+        window.minsize(420, 280)
+        window.bind("<Escape>", lambda _event: window.destroy())
+
+        trust_var = tk.BooleanVar(value=bool(config.get_config("trust_spelling", False)))
+        saved = {"done": False}
+
+        def instruction_text():
+            if trust_var.get():
+                return (
+                    "Every suggestion starts selected. Uncheck any name you do not want. "
+                    "Nothing is saved until the final confirmation."
+                )
+            return (
+                "Check each name you want. Nothing is saved until the final confirmation. "
+                "Close leaves every name unchanged."
+            )
+
+        status = tk.Label(
+            window,
+            text=instruction_text(),
+            anchor="w",
+            justify="left",
+            wraplength=480,
+        )
+
+        body = tk.Frame(window)
+        body.grid_rowconfigure(0, weight=1)
+        body.grid_columnconfigure(0, weight=1)
+
+        canvas = tk.Canvas(body, highlightthickness=0, bd=0)
+        scroll = ThemedScrollbar(body, command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        inner = tk.Frame(canvas)
+        inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def fit_inner(event):
+            canvas.itemconfigure(inner_id, width=event.width)
+        def fit_scroll(_event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.bind("<Configure>", fit_inner)
+        inner.bind("<Configure>", fit_scroll)
+
+        rows = []
+
+        def add_review_row(old_name, new_name, ids):
+            var = tk.BooleanVar(value=False)
+            holder = tk.Frame(inner)
+            holder.pack(fill="x", pady=2)
+            size = 18
+            box_canvas = tk.Canvas(
+                holder, width=size, height=size, highlightthickness=0, bd=0, takefocus=0,
+            )
+            box_canvas.pack(side="left")
+            label = tk.Label(holder, text="%s → %s" % (old_name, new_name), anchor="w")
+            label.pack(side="left", padx=(8, 0), fill="x", expand=True)
+            box = box_canvas.create_rectangle(2, 2, size - 2, size - 2, width=2, outline="#13ec39")
+            tick = box_canvas.create_line(
+                size * 0.26, size * 0.52,
+                size * 0.44, size * 0.72,
+                size * 0.76, size * 0.28,
+                width=2, capstyle="round", joinstyle="round", fill="#13ec39",
+            )
+            box_canvas._beep_check_items = (box, tick)
+            row = {
+                "var": var,
+                "ids": ids,
+                "old": old_name,
+                "new": new_name,
+                "enabled": True,
+                "widgets": (holder, box_canvas, label),
+            }
+
+            def redraw():
+                box_canvas.itemconfigure(tick, state=("normal" if var.get() else "hidden"))
+
+            def toggle(_event=None):
+                if not row["enabled"]:
+                    return "break"
+                var.set(not bool(var.get()))
+                redraw()
+                return "break"
+
+            for widget in (box_canvas, label):
+                widget.bind("<Button-1>", toggle)
+            redraw()
+            row["redraw"] = redraw
+            rows.append(row)
+
+        for old_name, new_name, ids in grouped:
+            add_review_row(old_name, new_name, ids)
+
+        def on_mousewheel(event):
+            num = getattr(event, "num", None)
+            if num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif num == 5:
+                canvas.yview_scroll(1, "units")
+            else:
+                delta = getattr(event, "delta", 0) or 0
+                if delta:
+                    canvas.yview_scroll(int(-delta / 120), "units")
+            return "break"
+
+        scroll_targets = [window, canvas, inner, scroll]
+        for row in rows:
+            scroll_targets.extend(row["widgets"])
+        for widget in scroll_targets:
+            widget.bind("<MouseWheel>", on_mousewheel, add="+")
+            widget.bind("<Button-4>", on_mousewheel, add="+")
+            widget.bind("<Button-5>", on_mousewheel, add="+")
+
+        def set_verified(value):
+            for row in rows:
+                if not row["enabled"]:
+                    continue
+                row["var"].set(bool(value))
+                row["redraw"]()
+
+        def on_trust(value):
+            if value:
+                set_verified(True)
+            if not saved["done"]:
+                status.configure(text=instruction_text())
+
+        trust_row = tk.Frame(window)
+        self.add_checkbox(
+            trust_row,
+            0,
+            "Trust journal spelling",
+            trust_var,
+            attr="trust_spelling",
+            callback=on_trust,
+        )
+        if trust_var.get():
+            set_verified(True)
+
+        def open_final_confirmation():
+            chosen = []
+            picked = []
+            for row in rows:
+                if not row["enabled"] or not row["var"].get():
+                    continue
+                for cmdr_id in row["ids"]:
+                    chosen.append((cmdr_id, row["old"], row["new"]))
+                picked.append(row)
+            if not chosen:
+                status.configure(text="Select at least one name before the final confirmation.")
+                return
+            final = tk.Toplevel(window)
+            final.title("Confirm spelling changes")
+            final.transient(window)
+            final.resizable(False, False)
+            final.bind("<Escape>", lambda _event: final.destroy())
+            if trust_var.get():
+                lead = "Trust journal spelling selected these suggestions without checking each name."
+            else:
+                lead = "These are the names you selected."
+            tk.Label(
+                final,
+                text=(
+                    "%s\n\n"
+                    "Ready to save %s names. Nothing has been written yet.\n\n"
+                    "Confirm writes them. Go Back leaves every name unchanged."
+                ) % (lead, len(chosen)),
+                justify="left",
+                wraplength=420,
+            ).pack(padx=16, pady=(14, 8), anchor="w")
+            final_buttons = tk.Frame(final)
+            final_buttons.pack(padx=16, pady=(0, 14), fill="x")
+
+            def accept():
+                applied = history_inst.apply_spelling_updates(chosen)
+                if not applied:
+                    status.configure(text="None of the selected names could be saved.")
+                    final.destroy()
+                    return
+                applied_ids = {cmdr_id for cmdr_id, _old, _new in applied}
+                for row in picked:
+                    if any(cmdr_id in applied_ids for cmdr_id in row["ids"]):
+                        row["enabled"] = False
+                        row["var"].set(True)
+                        row["redraw"]()
+                self.add_or_update_commander([
+                    history_inst.seen_data[cmdr_id]
+                    for cmdr_id, _old, _new in applied
+                    if cmdr_id in history_inst.seen_data
+                ])
+                saved["done"] = True
+                status.configure(text="Saved %s names." % len(applied))
+                final.destroy()
+
+            tk.Button(final_buttons, text="Confirm", command=accept).pack(side="right")
+            tk.Button(final_buttons, text="Go Back", command=final.destroy).pack(side="right", padx=(0, 8))
+            try:
+                final.grab_set()
+            except tk.TclError:
+                pass
+            final.update_idletasks()
+            final.geometry("+%s+%s" % (window.winfo_rootx() + 60, window.winfo_rooty() + 60))
+            final.focus_set()
+            self.apply_edmc_theme(final)
+
+        buttons = tk.Frame(window)
+        tk.Button(buttons, text="Verify all", command=lambda: set_verified(True)).pack(side="left")
+        tk.Button(buttons, text="Clear", command=lambda: set_verified(False)).pack(side="left", padx=(8, 0))
+        tk.Button(buttons, text="Continue", command=open_final_confirmation).pack(side="right")
+        tk.Button(buttons, text="Close", command=window.destroy).pack(side="right", padx=(0, 8))
+
+        # Pack the fixed rows before the expanding list so the buttons stay visible.
+        buttons.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
+        trust_row.pack(side="bottom", fill="x", padx=7, pady=(0, 4))
+        status.pack(side="top", fill="x", padx=12, pady=(12, 6))
+        body.pack(side="top", fill="both", expand=True, padx=12, pady=(0, 8))
+
+        try:
+            window.geometry("+%s+%s" % (parent.winfo_rootx() + 80, parent.winfo_rooty() + 80))
+            window.lift()
+        except tk.TclError:
+            pass
+        self.apply_edmc_theme(window)
+
+    def confirm_spelling_update(self, parent):
+        from commander_history import edmc_journal_dir
+        from commander_names import collect_journal_spellings, plan_spelling_updates
+
+        dialog = tk.Toplevel(parent)
+        dialog.title("Update name spelling")
+        dialog.transient(parent)
+        dialog.resizable(False, False)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        message = tk.Label(
+            dialog,
+            text=(
+                "This is experimental.\n\n"
+                "Beep Beep can update a saved name when a ship scan, wing name, "
+                "kill, or interdiction shows that same name with the capitalization "
+                "and punctuation the commander used, such as Tishtech becoming "
+                "TishTech. A typed chat line is not used. Unknown commanders stay "
+                "unknown. A name is skipped when those logs disagree, or when two "
+                "saved rows already spell it differently.\n\n"
+                "Make a backup of seen_commanders.json before you continue. "
+                "Open the folder and copy that file somewhere safe.\n\n"
+                "Confirm opens the list. Nothing is saved until the final confirmation. "
+                "Trust journal spelling selects every suggestion for you, and that "
+                "still waits for the final confirmation."
+            ),
+            justify="left",
+            wraplength=460,
+        )
+        message.pack(padx=16, pady=(14, 8), anchor="w")
+
+        status = tk.Label(dialog, text="", justify="left", wraplength=460)
+        status.pack(padx=16, pady=(0, 8), anchor="w")
+
+        buttons = tk.Frame(dialog)
+        buttons.pack(padx=16, pady=(0, 14), fill="x")
+        tk.Button(
+            buttons,
+            text="Open Seen Commanders Folder",
+            command=self.open_seen_commanders_folder,
+        ).pack(side="left")
+
+        def go_back():
+            dialog.destroy()
+
+        confirm_holder = {"button": None}
+
+        def confirm():
+            button = confirm_holder["button"]
+            if button is not None:
+                button.configure(state="disabled")
+            journal_dir = edmc_journal_dir()
+            if not journal_dir or not os.path.isdir(journal_dir):
+                status.configure(text="The Elite journal folder was not found.")
+                if button is not None:
+                    button.configure(state="normal")
+                return
+            snapshot = {}
+            for cmdr_id, info in list(history_inst.seen_data.items()):
+                if isinstance(info, dict):
+                    snapshot[str(cmdr_id)] = {"name": info.get("name")}
+            status.configure(text="Reading journals...")
+
+            def work():
+                try:
+                    planned = plan_spelling_updates(snapshot, collect_journal_spellings(journal_dir))
+                    error = None
+                except Exception:
+                    planned = []
+                    error = "The journals could not be read."
+
+                def finish():
+                    if not dialog.winfo_exists():
+                        return
+                    if error:
+                        status.configure(text=error)
+                        if button is not None:
+                            button.configure(state="normal")
+                        return
+                    if not planned:
+                        status.configure(text="No saved names had a clearer spelling in the journals.")
+                    else:
+                        if bool(config.get_config("trust_spelling", False)):
+                            status.configure(text="Every suggestion is selected. Nothing is saved until the final confirmation.")
+                        else:
+                            status.configure(text="Check the names you want. Nothing is saved until the final confirmation.")
+                        try:
+                            dialog.grab_release()
+                        except tk.TclError:
+                            pass
+                        self.show_spelling_changes(parent, planned)
+                    if button is not None:
+                        button.configure(state="disabled")
+
+                try:
+                    dialog.after(0, finish)
+                except tk.TclError:
+                    return
+
+            threading.Thread(target=work, daemon=True).start()
+
+        confirm_holder["button"] = tk.Button(buttons, text="Confirm", command=confirm)
+        confirm_holder["button"].pack(side="right")
+        tk.Button(buttons, text="Go Back", command=go_back).pack(side="right", padx=(0, 8))
+
+        try:
+            dialog.grab_set()
+        except tk.TclError:
+            pass
+        dialog.update_idletasks()
+        dialog.geometry("+%s+%s" % (
+            parent.winfo_rootx() + 40,
+            parent.winfo_rooty() + 40,
+        ))
+        self.apply_edmc_theme(dialog)
     
 
     def add_checkbox(self, frame, row, text, var, *, target=None, attr=None, callback=None):
@@ -2344,6 +2722,25 @@ class SeenCommandersGUI:
             ),
             title="Wing Notify"
         )
+
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Autofill on Kill",
+            tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
+            attr="autofill_on_kill"
+        )
+
+        row = self.add_info_box(
+            frame,
+            row,
+            (
+                "When this is on, a PvP kill names the unknown commander who was "
+                "just killed. Turn it off to leave kill victims unknown. Ship scans, "
+                "wing adds, messages, and player interdictions still fill a name."
+            ),
+            title="Autofill on Kill"
+        )
     
         row = self.add_checkbox(
             frame,
@@ -2366,6 +2763,45 @@ class SeenCommandersGUI:
             ),
             title="Modern Overlay announcements"
         )
+
+        row = self.add_checkbox(
+            frame,
+            row,
+            "Trust journal spelling",
+            tk.BooleanVar(value=bool(config.get_config("trust_spelling", False))),
+            attr="trust_spelling",
+        )
+
+        row = self.add_info_box(
+            frame,
+            row,
+            (
+                "Experimental. Update spelling reads your Elite journals and can "
+                "change a saved name to the capitalization and punctuation from a "
+                "ship scan, wing name, kill, or interdiction. Typed chat is not "
+                "used. Unknown commanders are left unknown. Check each name in "
+                "the list, or turn on Trust journal spelling to select every "
+                "suggestion without checking them one by one. Nothing is saved "
+                "until the final confirmation. Make a backup of "
+                "seen_commanders.json first. Open Seen Commanders Folder and copy "
+                "that file somewhere safe."
+            ),
+            title="Journal spelling"
+        )
+
+        spelling_actions = tk.Frame(frame)
+        spelling_actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 8), sticky="w")
+        tk.Button(
+            spelling_actions,
+            text="Open Seen Commanders Folder",
+            command=self.open_seen_commanders_folder,
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            spelling_actions,
+            text="Update spelling from journals",
+            command=lambda: self.confirm_spelling_update(frame.winfo_toplevel()),
+        ).pack(side="left")
+        row += 1
     
         row = self.add_info_box(
             frame,
