@@ -68,6 +68,9 @@ def start_pipewire() -> bool:
 
 
 def start_pulse() -> bool:
+    runtime = "/tmp/beep-runtime"
+    os.makedirs(runtime, mode=0o700, exist_ok=True)
+    os.environ["XDG_RUNTIME_DIR"] = runtime
     subprocess.run(["pulseaudio", "-k"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     started = subprocess.run(
         ["pulseaudio", "-D", "--exit-idle-time=-1"],
@@ -79,7 +82,7 @@ def start_pulse() -> bool:
     print(info.stdout)
     print(started.stderr)
     print(info.stderr)
-    return info.returncode == 0
+    return info.returncode == 0 and "PulseAudio" in info.stdout and "PipeWire" not in info.stdout
 
 
 def sink_names() -> list[str]:
@@ -142,7 +145,10 @@ def capture(play_cmd: list[str], sink: str) -> float:
         stderr=subprocess.PIPE,
     )
     time.sleep(0.2)
-    played = subprocess.run(play_cmd, capture_output=True, text=True)
+    try:
+        played = subprocess.run(play_cmd, capture_output=True, text=True, timeout=8)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"play timed out {play_cmd}\n{exc.stderr}") from exc
     recorder.wait(timeout=8)
     error = recorder.stderr.read().decode("utf-8", "replace")
     if played.returncode != 0 or not os.path.isfile(RECORD):
@@ -175,12 +181,11 @@ def main() -> None:
         raise SystemExit(f"expected a scaled file at unity, got {quiet_path} {amplitude}")
     os.replace(cleanup, QUIET)
 
-    backend = "pipewire" if start_pipewire() else ""
-    if not backend:
-        print("PipeWire did not start, using PulseAudio")
-        if not start_pulse():
-            raise SystemExit("no audio server")
-        backend = "pulse"
+    # A private PulseAudio server can play and record. The GitHub PipeWire
+    # session accepts a null sink and then times out when a client plays to it.
+    if not start_pulse():
+        raise SystemExit("PulseAudio did not start")
+    backend = "pulse"
     print("backend", backend)
     sink = prepare_sink()
 
