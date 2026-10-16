@@ -69,5 +69,6 @@ def plugin_prefs(parent, cmdr, is_beta):
     return frame_container
 
 def plugin_stop():
+    beep_inst.stop_playback()
     history_inst.stop_worker()
     log.info("beep_beep plugin stopped!")

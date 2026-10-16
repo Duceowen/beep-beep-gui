@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.21
+- Mute stops a sound that is already playing. A long file started by paplay, pw-play, or another Linux player no longer keeps going after the mute button is pressed
+
 ## 1.0.20
 - Seen Commanders name editing works on Linux Mint. The edit dialog no longer calls grab before the window is visible
 

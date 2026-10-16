@@ -371,8 +371,7 @@ class SeenCommandersGUI:
 
         def toggle_mute():
             new_value = not config.get_config("mute", False)
-            config.set_config("mute", new_value)
-            config.save_config()
+            beep_inst.set_muted(new_value)
             update_mute_button(new_value)
 
         mute_btn.config(command=toggle_mute)
