@@ -4,7 +4,6 @@ Runs on a GitHub Ubuntu runner. The plugin must not import wave; this test may.
 """
 import math
 import os
-import signal
 import struct
 import subprocess
 import sys
@@ -131,17 +130,38 @@ def prepare_sink() -> str:
     return "beepvol"
 
 
+def monitor_name(sink: str) -> str:
+    listed = subprocess.run(["pactl", "list", "short", "sources"], capture_output=True, text=True)
+    print(listed.stdout, flush=True)
+    print(listed.stderr, flush=True)
+    for line in listed.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].startswith(sink):
+            return parts[1]
+    raise RuntimeError(f"no monitor source for {sink}")
+
+
+def graph() -> None:
+    for kind in ("sink-inputs", "source-outputs"):
+        listed = subprocess.run(["pactl", "list", "short", kind], capture_output=True, text=True)
+        print(kind, flush=True)
+        print(listed.stdout, flush=True)
+        print(listed.stderr, flush=True)
+
+
 def capture(play_cmd: list[str], sink: str) -> float:
     if os.path.exists(RECORD):
         os.remove(RECORD)
+    monitor = monitor_name(sink)
+    # parecord filled a whole WAV with zeros: its buffer outlived the tone.
+    # ffmpeg stops itself after 3 seconds, which covers the 1 second file.
     recorder = subprocess.Popen(
         [
-            "parecord",
-            f"--device={sink}.monitor",
-            "--file-format=wav",
-            "--channels=2",
-            "--rate=44100",
-            "--format=s16le",
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
+            "-fflags", "nobuffer",
+            "-f", "pulse", "-i", monitor,
+            "-t", "3",
+            "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
             RECORD,
         ],
         stdout=subprocess.DEVNULL,
@@ -150,29 +170,38 @@ def capture(play_cmd: list[str], sink: str) -> float:
     time.sleep(0.4)
     if recorder.poll() is not None:
         error = recorder.stderr.read().decode("utf-8", "replace")
-        raise RuntimeError(f"parecord exited early\n{error}")
+        raise RuntimeError(f"ffmpeg exited early for {monitor}\n{error}")
     try:
-        played = subprocess.run(play_cmd, capture_output=True, text=True, timeout=8)
-    except subprocess.TimeoutExpired as exc:
+        played = subprocess.Popen(play_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as exc:
         recorder.kill()
-        raise RuntimeError(f"play timed out {play_cmd}\n{exc}") from exc
-    time.sleep(0.3)
-    recorder.send_signal(signal.SIGINT)
+        raise RuntimeError(f"could not start {play_cmd}") from exc
+    time.sleep(0.4)
+    graph()
     try:
-        recorder.wait(timeout=5)
+        play_out, play_err = played.communicate(timeout=8)
+    except subprocess.TimeoutExpired as exc:
+        played.kill()
+        recorder.kill()
+        raise RuntimeError(f"play timed out {play_cmd}") from exc
+    try:
+        recorder.wait(timeout=8)
     except subprocess.TimeoutExpired:
         recorder.kill()
         recorder.wait(timeout=3)
     error = recorder.stderr.read().decode("utf-8", "replace")
     size = os.path.getsize(RECORD) if os.path.isfile(RECORD) else 0
-    if played.returncode != 0 or size < 100:
-        raise RuntimeError(
-            f"play failed {play_cmd}\n{played.stderr}\nrecorder:\n{error}\nsize={size}"
-        )
-    level = rms(RECORD)
-    print(f"{play_cmd} rms={level:.1f} bytes={size}", flush=True)
+    print(play_cmd, "rc", played.returncode, flush=True)
+    if play_out.strip():
+        print(play_out.strip(), flush=True)
+    if play_err.strip():
+        print(play_err.strip(), flush=True)
     if error.strip():
         print(error.strip(), flush=True)
+    if played.returncode != 0 or size < 100:
+        raise RuntimeError(f"play failed {play_cmd} size={size}")
+    level = rms(RECORD)
+    print(f"{play_cmd} rms={level:.1f} bytes={size}", flush=True)
     return level
 
 
