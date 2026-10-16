@@ -293,8 +293,8 @@ class SeenCommandersGUI:
         self.sound_vars = {}
         self.window = None
         self.parent = None
+        self.plugin_parent = None
         self.scrollbar = None
-        self.options_button = None
         self.resize_after_id = None
         self.row_offset = 0
         self.sort_field = "last_seen"
@@ -339,8 +339,11 @@ class SeenCommandersGUI:
     
 
     def build_plugin_button(self, parent):
-        # Leave this frame unmanaged. EDMC grids the widget plugin_app returns.
-        # Packing it here, or raising while it is built, makes EDMC drop the row.
+        # Leave this frame unmanaged. EDMC grids the widget plugin_app returns
+        # across the whole main window. Packing it here, or raising while it
+        # is built, makes EDMC drop the row. Children packed left and right
+        # land on the edges of that row.
+        self.plugin_parent = parent
         container = tk.Frame(parent)
 
         btn_show = tk.Button(
@@ -352,6 +355,13 @@ class SeenCommandersGUI:
 
         mute_btn = tk.Button(container, width=3)
         mute_btn.pack(side="left", padx=(4, 5), pady=5)
+
+        options_btn = tk.Button(
+            container,
+            text="Options",
+            command=self.open_options_popup,
+        )
+        options_btn.pack(side="right", padx=(5, 5), pady=5)
 
         def update_mute_button(muted):
             mute_btn.config(
@@ -1295,15 +1305,6 @@ class SeenCommandersGUI:
                 self.add_rows(new_ids)
     
         self.sort_rows(sort_field, sort_asc)
-        
-        self.options_button = tk.Button(
-            parent,
-            text="Options",
-            command=self.open_options_popup
-        )
-        self.options_button.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(5, 5))
-        
-        parent.grid_rowconfigure(2, weight=0)
 
         self.apply_edmc_theme_to_window(parent)
 
@@ -1479,10 +1480,38 @@ class SeenCommandersGUI:
         self.apply_edmc_theme(parent)
 
    
+    def _options_owner(self):
+        """Window that should own the Options dialog.
+
+        The button lives on the main EDMC row, and Seen Commanders may be
+        closed, so the dialog cannot depend on that window.
+        """
+        for candidate in (getattr(self, "plugin_parent", None), self.window):
+            if not candidate:
+                continue
+            try:
+                if not candidate.winfo_exists():
+                    continue
+                return candidate.winfo_toplevel()
+            except Exception:
+                continue
+        return None
+
     def open_options_popup(self):
-        popup = tk.Toplevel(self.window)
+        owner = self._options_owner()
+        if owner is None:
+            return
+        existing = getattr(self, "options_popup", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                existing.focus_set()
+                return
+        except Exception:
+            pass
+        popup = tk.Toplevel(owner)
         popup.title("Options")
-        popup.transient(self.window)
+        popup.transient(owner)
         popup.grab_set()
 
         self.options_popup = popup

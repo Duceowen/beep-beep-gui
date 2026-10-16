@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.17
+- Options is on the main EDMC window, aligned to the right
+
 ## 1.0.16
 - The column checkbox menu opens next to the right-click, including when the window is on another monitor
 
