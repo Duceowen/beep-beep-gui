@@ -543,6 +543,19 @@ class CommanderHistoryManager:
             if jump_recent and cmdr_id in location.jump_backup:
                 prev = location.jump_backup[cmdr_id]
                 if prev.get("here", False):
+                    # CommanderHistory bumps Epoch for people still listed when
+                    # you jump. They did not jump in. Keep the new Epoch so the
+                    # same refresh is not announced after the jump window.
+                    if existing is not None:
+                        info["seen_count"] = existing.get("seen_count", 1)
+                    self._remember_sighting(info, existing)
+                    self.seen_data[cmdr_id] = info
+                    self.last_interactions[cmdr_id] = current_flags
+                    changed_entries.append(info)
+                    log.info(
+                        "Not announcing %s; they were already here when you jumped",
+                        info.get("name") or cmdr_id,
+                    )
                     continue
     
             if is_wing and wing_recent:

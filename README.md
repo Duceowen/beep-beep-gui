@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.28
+- The jumped-in overlay is not shown again for a commander who was already in the instance when you jump away
+
 ## 1.0.27
 - Options is a shorter list. Sound is the only section heading
 - Spelling windows open in front of Options. Trust journal spelling is on the Update name spelling warning, after the warning. Open Seen Commanders Folder stays on Options

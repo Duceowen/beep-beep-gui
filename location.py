@@ -13,6 +13,8 @@ class Location:
         self.interdiction_ts = None
         self.interdiction_complete = False
         self.jump_backup = {}
+        self._jump_company = {}
+        self._jump_company_pending = False
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -34,11 +36,20 @@ class Location:
                 self.interdiction_ts = None
 
             
+        # StartJump calls set() before jump(). Dropping the instance here
+        # used to leave jump() snapshotting an empty dict, so commanders who
+        # were already here were announced again when you left.
+        self._jump_company_pending = False
         if state != self.state and system != self.system:
             self._record_departures()
+            self._jump_company = {
+                cmdr_id: dict(info) if isinstance(info, dict) else info
+                for cmdr_id, info in self.instance.items()
+            }
+            self._jump_company_pending = True
             self.instance = {}
-            self._fire_instance_reset() 
-            
+            self._fire_instance_reset()
+
         self.prev_system = self.system
         self.prev_state = self.state
         self.state = state
@@ -68,13 +79,25 @@ class Location:
         if self.prev_system != self.system:
             self.jump_ts = time.time()
             self._record_departures()
-            self.jump_backup = self.instance.copy()
+            if self.instance:
+                self.jump_backup = {
+                    cmdr_id: dict(info) if isinstance(info, dict) else info
+                    for cmdr_id, info in self.instance.items()
+                }
+            elif self._jump_company_pending:
+                self.jump_backup = self._jump_company
+            else:
+                self.jump_backup = {}
+            self._jump_company_pending = False
+            self._jump_company = {}
             self.instance.clear()
             self._fire_instance_reset()
-            
+
         else:
             self.jump_ts = None
             self.jump_backup = {}
+            self._jump_company_pending = False
+            self._jump_company = {}
             
     def wing_changed(self): 
         self.wing_join = time.time()
