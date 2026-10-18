@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 
 from logutil import log
 from beep_beep_config import config
@@ -11,6 +12,7 @@ ALERT_SIZE = "huge"
 ALERT_X = 640
 ALERT_Y = 192
 ID_PREFIX = "beepbeep-connect-"
+BATCH_ID = f"{ID_PREFIX}batch"
 PLUGIN_NAME = "BeepBeep"
 GROUP_NAME = "BeepBeep Connections"
 
@@ -20,6 +22,12 @@ _send = None
 _define_group = None
 _group_ready = False
 _missing_logged = False
+
+# Active announcement lines keyed by per-message id. Every announce call
+# prunes expired lines and re-sends the survivors as ONE multi-line payload
+# so Modern Overlay stacks them vertically instead of overlapping at x/y.
+_active_lock = threading.Lock()
+_active = {}
 
 
 def _import_edmcoverlay():
@@ -149,5 +157,24 @@ def announce_connected(entries) -> None:
 
     _ensure_group()
 
-    for entry in entries:
-        _send_message(_message_id(entry), _format_line(entry))
+    now = time.monotonic()
+    with _active_lock:
+        expired = [key for key, item in _active.items() if item["expires"] <= now]
+        for key in expired:
+            del _active[key]
+
+        for entry in entries:
+            item_id = _message_id(entry)
+            _active[item_id] = {
+                "line": _format_line(entry),
+                "expires": now + ALERT_TTL,
+            }
+
+        # Oldest first, newest last, so the newest line sits at the bottom
+        # of the multi-line block.
+        text = "\n".join(item["line"] for item in _active.values())
+
+    if not text:
+        return
+
+    _send_message(BATCH_ID, text)

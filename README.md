@@ -1,5 +1,9 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.29
+- Jump-in overlay announcements stack vertically. Alerts that arrive together are shown as one multi-line message in Modern Overlay instead of overlapping on the same line. Newest announcement is at the bottom; each line still disappears after 3 seconds
+- Hide from mouse (Windows): the Seen Commanders window can pass clicks through to the game. The Hide from mouse button in the EDMC main window cycles Detect, Hidden, and Off. Detect mode makes the window click-through whenever your commander is on foot. Hidden always passes clicks; Off always catches them. The title bar reads "Seen Commanders (hidden from mouse)" while clicks pass through
+
 ## 1.0.28
 - The jumped-in overlay is not shown again for a commander who was already in the instance when you jump away
 
@@ -81,6 +85,7 @@
 - Sounds are only played when a commander arrives in your instance (some edge cases may not be covered)
 - Optional setting to play sounds when commanders leave
 - Seen Commanders window opacity, from the Options menu
+- Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
 - Configurable alert settings
 
 ## How it works

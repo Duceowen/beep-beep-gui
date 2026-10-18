@@ -9,6 +9,7 @@ from beep_beep_config import config
 from commander_history import history_inst
 from beep_beep import beep_inst
 from sound_loader import sound_inst
+import clickthrough
 
 try:
     import theme as edmc_theme
@@ -303,6 +304,10 @@ class SeenCommandersGUI:
         self.refresh_interval = 5000        
         self.beep_inst = None
         self._refresh_id = None
+        self._on_foot = False
+        self._on_foot_seeded = False
+        self._hide_manual = "auto"  # session-only: auto / hidden / shown
+        self._hide_button = None
         self.ui_cache = {
             "name": {},
             "sound": {},
@@ -357,6 +362,11 @@ class SeenCommandersGUI:
         mute_btn = tk.Button(container, width=3)
         mute_btn.pack(side="left", padx=(4, 5), pady=5)
 
+        hide_btn = tk.Button(container, command=self.cycle_hide_manual)
+        hide_btn.pack(side="left", padx=(0, 5), pady=5)
+        self._hide_button = hide_btn
+        self._update_hide_button()
+
         options_btn = tk.Button(
             container,
             text="Options",
@@ -401,6 +411,7 @@ class SeenCommandersGUI:
             self.build_ui(self.window)
             self._apply_topmost()
             self.apply_seen_opacity()
+            self.refresh_clickthrough()
             self._sync_seen_list_with_options()
             return
     
@@ -410,6 +421,13 @@ class SeenCommandersGUI:
         self.window.geometry(f"{width}x{height}+{x}+{y}")
         self.window.minsize(100, 100)
         self.apply_seen_opacity()  
+        # Windows can reset the extended style after redraws, so make sure
+        # the click-through state survives every re-map.
+        self.window.bind(
+            "<Map>",
+            lambda _event: clickthrough.reapply(self.window.winfo_id()),
+            add="+",
+        )
     
         self.window.grid_rowconfigure(1, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
@@ -428,6 +446,7 @@ class SeenCommandersGUI:
 
         self._apply_topmost()
         self.apply_seen_opacity()
+        self.refresh_clickthrough()
         self.window.after(150, self._apply_topmost)
         self.window.after(150, self.apply_seen_opacity)
         self._sync_seen_list_with_options()
@@ -506,6 +525,82 @@ class SeenCommandersGUI:
     def _on_topmost_toggle(self, value):
         self._apply_topmost()
         self._apply_topmost(getattr(self, "options_popup", None))
+
+    # ------------------------------------------------------------------ #
+    # Hide from mouse (click-through)
+    # ------------------------------------------------------------------ #
+    _HIDE_MODES = ("auto", "hidden", "shown")
+    _HIDE_LABELS = {"auto": "Detect", "hidden": "Hidden", "shown": "Off"}
+
+    def set_on_foot(self, value):
+        """Called from journal_entry whenever EDMC's state changes."""
+        value = bool(value)
+        self._on_foot_seeded = True
+        if value == self._on_foot:
+            return
+        self._on_foot = value
+        self.refresh_clickthrough()
+
+    def _current_on_foot(self):
+        # Seed once from EDMC's live monitor state so the correct value is
+        # known even before the first journal line after startup.
+        if not self._on_foot_seeded:
+            self._on_foot_seeded = True
+            try:
+                from monitor import monitor
+                self._on_foot = bool(monitor.state.get("OnFoot"))
+            except Exception:
+                pass
+        return self._on_foot
+
+    def hide_from_mouse_active(self) -> bool:
+        if self._hide_manual == "hidden":
+            return True
+        if self._hide_manual == "shown":
+            return False
+        return self._current_on_foot()
+
+    def refresh_clickthrough(self):
+        """Apply the effective click-through state to the Seen window."""
+        active = self.hide_from_mouse_active()
+        win = self.window
+        if win is not None:
+            try:
+                if win.winfo_exists():
+                    clickthrough.apply(win.winfo_id(), active)
+                    win.title(
+                        "Seen Commanders" + (" (hidden from mouse)" if active else "")
+                    )
+            except tk.TclError:
+                pass
+        self._update_hide_button()
+
+    def cycle_hide_manual(self):
+        """Button bar control: auto -> hidden -> shown -> auto."""
+        try:
+            idx = self._HIDE_MODES.index(self._hide_manual)
+        except ValueError:
+            idx = 0
+        self._hide_manual = self._HIDE_MODES[(idx + 1) % len(self._HIDE_MODES)]
+        self.refresh_clickthrough()
+
+    def reset_hide_to_auto(self):
+        """Options or external control: hand control back to Detect."""
+        self._hide_manual = "auto"
+        self.refresh_clickthrough()
+
+    def _update_hide_button(self):
+        btn = self._hide_button
+        if btn is None:
+            return
+        try:
+            if not btn.winfo_exists():
+                return
+            btn.config(
+                text="Hide from mouse: %s" % self._HIDE_LABELS.get(self._hide_manual, "Detect")
+            )
+        except tk.TclError:
+            pass
 
     def _enforce_column_limits(self, _event=None):
         self._fit_columns()
@@ -1118,6 +1213,10 @@ class SeenCommandersGUI:
         self.window.bind("<Configure>", on_resize)
         
         def on_window_close():
+            try:
+                clickthrough.forget(self.window.winfo_id())
+            except Exception:
+                pass
             self.save_window_geometry()
             self.window.destroy()
     
@@ -1153,6 +1252,13 @@ class SeenCommandersGUI:
         try:
             window.attributes("-alpha", value / 100.0)
         except tk.TclError:
+            pass
+        # Tk's -alpha write can rebuild the extended style and drop the
+        # click-through bits set with SetWindowLong (observed at alpha 1.0),
+        # so re-assert the current state after every opacity change.
+        try:
+            self.refresh_clickthrough()
+        except Exception:
             pass
 
 
