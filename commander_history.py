@@ -28,6 +28,7 @@ _HISTORY_TAIL = (
 )
 _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
+_KILL_RESET_SUPPRESS_SECONDS = 60.0
 
 
 def _join_parts(parts: list[str]) -> str:
@@ -236,6 +237,7 @@ class CommanderHistoryManager:
         self._reset_timer: threading.Timer | None = None
         self._lock = threading.Lock()    
         self.last_interactions: dict[str, set[str]] = {}
+        self._kill_reset_until: dict[str, float] = {}
         self._names = UnknownNameResolver()
         location.on_instance_reset = self.forget_pending_names
 
@@ -540,23 +542,39 @@ class CommanderHistoryManager:
     
             beep_this_commander = True            
 
-            kill_reset = "Killed" in current_flags and (
-                pvp_kill_recent
-                or (
-                    killed_now
-                    and (inst is not None or cmdr_id in location.jump_backup)
-                )
+            suppress_until = self._kill_reset_until.get(cmdr_id)
+            if suppress_until is not None:
+                if now_ts < suppress_until:
+                    # Frontier updates the killed commander's Epoch again
+                    # after the kill. Keep them out of the instance until the
+                    # update settles, so the kill itself is not announced.
+                    location.forget(cmdr_id)
+                    self.last_interactions[cmdr_id] = current_flags
+                    self._remember_sighting(info, existing)
+                    self.seen_data[cmdr_id] = info
+                    changed_entries.append(info)
+                    continue
+                self._kill_reset_until.pop(cmdr_id, None)
+
+            kill_reset = (
+                killed_now
+                and "Killed" in current_flags
+                and (inst is not None or cmdr_id in location.jump_backup)
             )
             if kill_reset:
-                # A kill ends the visit. Clear every presence record so the
-                # next sighting is a fresh arrival, and consume the kill marker
-                # so the return itself is not mistaken for another kill. This
-                # runs before jump suppression: a victim who followed you
-                # through a jump is still dead and can come back.
+                # A kill ends the visit only when this commander first gains
+                # the Killed flag. A recent PvP kill of someone else must not
+                # reset commanders whose Killed flag is already on record.
+                # Clear every presence record so the next sighting is a fresh
+                # arrival, and consume the kill marker so the return itself is
+                # not mistaken for another kill. This runs before jump
+                # suppression: a victim who followed you through a jump is
+                # still dead and can come back.
                 location.forget(cmdr_id)
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
                 beep_this_commander = False
+                self._kill_reset_until[cmdr_id] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
                 self.last_interactions[cmdr_id] = current_flags
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -670,6 +688,13 @@ class CommanderHistoryManager:
             [cid for cid in killed_unknown_ids if cid in stored],
             [cid for cid in new_wing_unknown_ids if cid in stored],
         )
+
+        if self._kill_reset_until:
+            self._kill_reset_until = {
+                cid: until
+                for cid, until in self._kill_reset_until.items()
+                if until > now_ts
+            }
 
         if not changed_entries:
             return
