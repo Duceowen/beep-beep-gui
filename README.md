@@ -1,5 +1,8 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.32
+- Hide from mouse Detect no longer hides Seen Commanders when Elite Dangerous is closed. The mode checks that the game is running and clears on Shutdown or MainMenu, so leaving the game on foot and reopening EDMC does not leave the window click-through
+
 ## 1.0.31
 - A killed commander is not announced again a few seconds after the kill. Frontier refreshes the killed entry after combat, and Beep Beep now waits 60 seconds before treating that commander as a new arrival
 - A PvP kill no longer resets commanders who already had a Killed flag on record from an earlier encounter

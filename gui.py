@@ -597,6 +597,13 @@ class SeenCommandersGUI:
         self._on_foot = value
         self.refresh_clickthrough()
 
+    def _game_running(self):
+        try:
+            from monitor import monitor
+            return bool(monitor.game_running())
+        except Exception:
+            return True
+
     def _current_on_foot(self):
         # Seed once from EDMC's live monitor state so the correct value is
         # known even before the first journal line after startup.
@@ -607,6 +614,11 @@ class SeenCommandersGUI:
                 self._on_foot = bool(monitor.state.get("OnFoot"))
             except Exception:
                 pass
+        # EDMC catches up on the last journal at startup, which can leave
+        # OnFoot set from a session that has already ended. Do not hide the
+        # window for Detect mode unless the game process is actually running.
+        if not self._game_running():
+            return False
         return self._on_foot
 
     def hide_from_mouse_active(self) -> bool:

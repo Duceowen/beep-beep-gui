@@ -25,9 +25,14 @@ def plugin_app(parent):
 
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:
-    gui_inst.set_on_foot(bool(state.get("OnFoot")))
-    history_inst.note_journal_name(entry)
     event = entry.get("event")
+    on_foot = bool(state.get("OnFoot"))
+    if event in ("Shutdown", "ShutDown"):
+        on_foot = False
+    elif event == "Music" and entry.get("MusicTrack") == "MainMenu":
+        on_foot = False
+    gui_inst.set_on_foot(on_foot)
+    history_inst.note_journal_name(entry)
     system = entry.get("StarSystem", system)
     
     if event in ("StartUp", "LoadGame", "Resurrected", "Died"):
