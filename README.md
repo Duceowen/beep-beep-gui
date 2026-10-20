@@ -1,3 +1,5 @@
+<img width="774" height="883" alt="Screenshot 2026-10-19 220132" src="https://github.com/user-attachments/assets/1bc5a035-abfc-4027-9945-03c47ee6473a" />
+<img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
 ## 1.0.32
