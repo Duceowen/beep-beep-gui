@@ -20,6 +20,7 @@ except Exception:
 _WIN_DATETIME_FMT = None
 
 MIN_COL_WIDTH = 50
+TOPMOST_REASSERT_MS = 1000
 SEEN_COLUMNS = ("name", "sound", "seen_count", "last_seen")
 COLUMN_LABELS = (
     ("name", "Name"),
@@ -95,10 +96,12 @@ def _scale_parts(parts, budget):
     return scaled
 
 
-def set_always_on_top(window, enabled):
+def set_always_on_top(window, enabled, lift=True):
     """Keep a window above others so a fullscreen game cannot cover it."""
     try:
         window.wm_attributes("-topmost", bool(enabled))
+        if enabled and lift and window.winfo_viewable():
+            window.lift()
     except Exception:
         pass
 
@@ -428,6 +431,16 @@ class SeenCommandersGUI:
             lambda _event: clickthrough.reapply(self.window.winfo_id()),
             add="+",
         )
+        self.window.bind(
+            "<Map>",
+            lambda _event: self._apply_topmost(),
+            add="+",
+        )
+        self.window.bind(
+            "<FocusIn>",
+            lambda _event: self._apply_topmost(),
+            add="+",
+        )
     
         self.window.grid_rowconfigure(1, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
@@ -461,7 +474,50 @@ class SeenCommandersGUI:
                 return
         except Exception:
             return
-        set_always_on_top(win, bool(config.get_config("stay_on_top", False)))
+        enabled = bool(config.get_config("stay_on_top", False))
+        set_always_on_top(win, enabled)
+        self._schedule_topmost(win, enabled)
+
+    def _schedule_topmost(self, win, enabled):
+        """Reassert the X11 above flag while the window is visible.
+
+        Some Linux window managers drop the above state when another window
+        takes focus. Reapplying it keeps the window above normal windows; a
+        focused fullscreen window still wins because the window manager owns
+        that layer.
+        """
+        job = getattr(win, "_beep_topmost_job", None)
+        if not enabled:
+            if job:
+                try:
+                    win.after_cancel(job)
+                except Exception:
+                    pass
+                win._beep_topmost_job = None
+            return
+        if job or not sys.platform.startswith("linux"):
+            return
+
+        def tick():
+            win._beep_topmost_job = None
+            try:
+                if not win.winfo_exists():
+                    return
+            except Exception:
+                return
+            if not bool(config.get_config("stay_on_top", False)):
+                set_always_on_top(win, False)
+                return
+            set_always_on_top(win, True, lift=False)
+            try:
+                win._beep_topmost_job = win.after(TOPMOST_REASSERT_MS, tick)
+            except Exception:
+                win._beep_topmost_job = None
+
+        try:
+            win._beep_topmost_job = win.after(TOPMOST_REASSERT_MS, tick)
+        except Exception:
+            win._beep_topmost_job = None
 
     def _grab_when_viewable(self, popup):
         """Grab a dialog after the window manager has mapped it.
@@ -1213,6 +1269,13 @@ class SeenCommandersGUI:
         self.window.bind("<Configure>", on_resize)
         
         def on_window_close():
+            job = getattr(self.window, "_beep_topmost_job", None)
+            if job:
+                try:
+                    self.window.after_cancel(job)
+                except Exception:
+                    pass
+                self.window._beep_topmost_job = None
             try:
                 clickthrough.forget(self.window.winfo_id())
             except Exception:
@@ -2980,7 +3043,11 @@ class SeenCommandersGUI:
             attr="stay_on_top",
             callback=self._on_topmost_toggle
         )
-        row = self.add_hint(frame, row, "Windowed and borderless. Exclusive fullscreen covers this window.")
+        row = self.add_hint(
+            frame,
+            row,
+            "Windowed and borderless. On Linux, a focused fullscreen game can still stay above this window.",
+        )
         row = self.add_checkbox(
             frame,
             row,
