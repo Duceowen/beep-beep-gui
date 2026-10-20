@@ -1,5 +1,9 @@
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.30
+- A commander you kill is reset, so their next arrival announces again. The kill marker is consumed by the kill instead of leaking into the next sighting
+- Stay on top is reapplied on Linux, so focusing another window does not drop the Seen Commanders window below normal windows. A focused fullscreen or borderless-fullscreen game still owns the fullscreen layer. On KDE Plasma 6, add a window rule for Seen Commanders and set Layer to Overlay
+
 ## 1.0.29
 - Jump-in overlay announcements stack vertically. Alerts that arrive together are shown as one multi-line message in Modern Overlay instead of overlapping on the same line. Newest announcement is at the bottom; each line still disappears after 3 seconds
 - Hide from mouse (Windows): the Seen Commanders window can pass clicks through to the game. The Hide from mouse button in the EDMC main window cycles Detect, Hidden, and Off. Detect mode makes the window click-through whenever your commander is on foot. Hidden always passes clicks; Off always catches them. The title bar reads "Seen Commanders (hidden from mouse)" while clicks pass through
