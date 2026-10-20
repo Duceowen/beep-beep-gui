@@ -88,6 +88,15 @@
 - Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
 - Configurable alert settings
 
+## Stay on top on Linux
+
+The stay-on-top option uses the window manager's above flag. Beep Beep keeps
+reapplying it while the window is open, but the window manager gives a focused
+fullscreen or borderless-fullscreen game its own layer. On KDE Plasma 6, add a
+window rule for the **Seen Commanders** window and set **Layer** to **Overlay**;
+that places it above a fullscreen game. On other desktops, use windowed mode or
+Modern Overlay for alerts. Exclusive fullscreen always covers normal windows.
+
 ## How it works
 By reading a file inside the Frontier Developments folder, we can detect events when a Commander appears in or leaves our instance.
 The main issue is that there is no reliable way to distinguish these events using the CommanderHistory file alone.
