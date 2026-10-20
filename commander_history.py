@@ -540,6 +540,33 @@ class CommanderHistoryManager:
     
             beep_this_commander = True            
 
+            kill_reset = "Killed" in current_flags and (
+                pvp_kill_recent
+                or (
+                    killed_now
+                    and (inst is not None or cmdr_id in location.jump_backup)
+                )
+            )
+            if kill_reset:
+                # A kill ends the visit. Clear every presence record so the
+                # next sighting is a fresh arrival, and consume the kill marker
+                # so the return itself is not mistaken for another kill. This
+                # runs before jump suppression: a victim who followed you
+                # through a jump is still dead and can come back.
+                location.forget(cmdr_id)
+                location.pvp_kill_ts = None
+                location.pvp_kill_victim = None
+                beep_this_commander = False
+                self.last_interactions[cmdr_id] = current_flags
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                changed_entries.append(info)
+                log.info(
+                    "Kill reset for %s; next sighting will be announced",
+                    info.get("name") or cmdr_id,
+                )
+                continue
+
             if jump_recent and cmdr_id in location.jump_backup:
                 prev = location.jump_backup[cmdr_id]
                 if prev.get("here", False):
@@ -662,8 +689,6 @@ class CommanderHistoryManager:
         location.jump_backup = {}
         location.jump_ts = None
         location.wing_join = None
-        location.pvp_kill_ts = None
-        location.pvp_kill_victim = None
         location.interdiction_ts = None
 
         

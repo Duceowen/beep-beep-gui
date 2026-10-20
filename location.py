@@ -109,6 +109,11 @@ class Location:
         self.pvp_kill_ts = time.time()
         self.pvp_kill_victim = victim
 
+    def forget(self, cmdr_id):
+        self.instance.pop(cmdr_id, None)
+        self.jump_backup.pop(cmdr_id, None)
+        self._jump_company.pop(cmdr_id, None)
+
     def _fire_instance_reset(self):
         callback = self.on_instance_reset
         if callback is not None:
