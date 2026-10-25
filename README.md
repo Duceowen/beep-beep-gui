@@ -2,6 +2,10 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.33
+- Alerts play on Windows when BeepBeepPlay.dll cannot be loaded. The 64-bit DLL fails with WinError 193 on a 32-bit EDMC install, or when a 32-bit Visual C++ runtime is found first on PATH. Beep Beep now logs the failure and plays the WAV through winsound with the alert volume baked into a temporary copy, instead of stopping every alert
+- The included BeepBeepPlay.dll is built with the static Visual C++ runtime, so it no longer needs MSVCP140.dll or VCRUNTIME140.dll
+
 ## 1.0.32
 - Hide from mouse Detect no longer hides Seen Commanders when Elite Dangerous is closed. The mode checks that the game is running and clears on Shutdown or MainMenu, so leaving the game on foot and reopening EDMC does not leave the window click-through
 
@@ -119,7 +123,7 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI. A row saved as unknown keeps its commander ID. The row records the first time that commander was seen, the last time, and up to eight recent visits, so a journal line can be matched to that visit without the file growing without limit. When a journal event names a player and only one unknown row matches that visit, the journal spelling is saved on the row. A ship scan, wing add, direct message, or player interdiction can supply the name. A PvP kill can supply it too, unless Autofill on Kill is turned off in Options. The name is saved after a short wait, so two unknown commanders in the same visit keep both rows unknown. Options can also update a saved name from a ship scan or similar journal event when that event shows the capitalization the commander used. The list lets you check each change, or Trust journal spelling can select every suggestion without checking them one by one. Nothing is saved until the final confirmation. A successful save closes the spelling windows and shows how many names were written. Go Back and Close leave every saved name as it is. That tool is experimental, so copy seen_commanders.json somewhere safe before using it.
 
-On Windows, sound playback uses the included DLL so each alert can have its own volume. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. If one Linux player cannot play the copy, the next player is tried. macOS uses the system sound player.
+On Windows, sound playback uses the included DLL so each alert can have its own volume. If the DLL cannot load, Beep Beep makes a quieter copy of a WAV and plays it with winsound instead of dropping the alert. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. If one Linux player cannot play the copy, the next player is tried. macOS uses the system sound player.
 
 ## Installation
 1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**

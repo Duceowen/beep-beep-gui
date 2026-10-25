@@ -21,6 +21,9 @@ class BeepBeep:
         self._players: list[subprocess.Popen] = []
         self._timers: list[threading.Timer] = []
         self._winsound_active = False
+        self._winsound_files: set[str] = set()
+        self._dll = None
+        self._dll_checked = False
 
     @property
     def volume(self) -> float:
@@ -332,12 +335,16 @@ class BeepBeep:
             self._players = []
             winsound_active = self._winsound_active
             self._winsound_active = False
+            winsound_files = list(self._winsound_files)
+            self._winsound_files.clear()
         for timer in timers:
             timer.cancel()
         for proc in players:
             self._terminate_player(proc)
         if winsound_active:
             self._purge_winsound()
+        for path in winsound_files:
+            self._forget_temp(path)
 
     def _terminate_player(self, proc: subprocess.Popen) -> None:
         if proc.poll() is not None:
@@ -577,27 +584,109 @@ class BeepBeep:
         finally:
             self._forget_temp(cleanup)
 
+    def _load_windows_dll(self):
+        """Load the volume-capable player once, or fall back to winsound.
+
+        The DLL can fail to load with WinError 193 when another program has
+        put a Visual C++ runtime for the other architecture on PATH, or when
+        EDMC itself is 32-bit. A load failure must not abort playback.
+        """
+        if self._dll_checked:
+            return self._dll
+        self._dll_checked = True
+        dll_path = os.path.join(self.plugin_dir, "BeepBeepPlay.dll")
+        if not os.path.isfile(dll_path):
+            log.warning("BeepBeepPlay.dll not found, using the Windows sound fallback")
+            return None
+        try:
+            import ctypes
+            dll = ctypes.CDLL(dll_path)
+            dll.BeepBeepPlay.argtypes = [ctypes.c_char_p, ctypes.c_float]
+            dll.BeepBeepPlay.restype = ctypes.c_int
+        except (OSError, AttributeError) as exc:
+            import ctypes
+            log.warning(
+                "BeepBeepPlay.dll could not be loaded (%s) in %s-bit EDMC; "
+                "using the Windows sound fallback",
+                exc,
+                ctypes.sizeof(ctypes.c_void_p) * 8,
+            )
+            return None
+        self._dll = dll
+        return dll
+
+    def _play_windows(self, full_path: str, amplitude: float) -> None:
+        dll = self._load_windows_dll()
+        if dll is not None:
+            try:
+                if self.mute:
+                    return
+                dll.BeepBeepPlay(full_path.encode("utf-8"), self._dll_volume(amplitude))
+                return
+            except Exception:
+                log.exception("BeepBeepPlay.dll failed, using the Windows sound fallback")
+        self._play_windows_fallback(full_path, amplitude)
+
+    def _play_windows_fallback(self, full_path: str, amplitude: float) -> None:
+        """Play through winsound when the DLL cannot be used.
+
+        winsound takes a file, so the slider is baked into a temporary copy.
+        The copy is removed once the WAV should have finished playing.
+        """
+        import winsound
+        cleanup = None
+        play_path = full_path
+        try:
+            try:
+                play_path, _ignored, cleanup = self._prepare_playback(full_path, amplitude)
+            except Exception:
+                log.exception("Could not scale %s", full_path)
+                self._forget_temp(cleanup)
+                cleanup = None
+                play_path = full_path
+            with self._play_lock:
+                if self.mute:
+                    self._forget_temp(cleanup)
+                    return
+                winsound.PlaySound(play_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                self._winsound_active = True
+                if cleanup:
+                    self._winsound_files.add(cleanup)
+            log.info("Playing %s with winsound", os.path.basename(full_path))
+        except Exception as e:
+            log.error("Failed to play sound %s: %s", full_path, e)
+            self._forget_temp(cleanup)
+            return
+        if cleanup:
+            timer = threading.Timer(
+                self._wav_duration(play_path) + 1.0,
+                self._delete_winsound_file,
+                args=(cleanup,),
+            )
+            timer.daemon = True
+            timer.start()
+
+    def _wav_duration(self, path: str) -> float:
+        try:
+            import wave
+            with wave.open(path, "rb") as handle:
+                rate = handle.getframerate()
+                if rate:
+                    return handle.getnframes() / float(rate)
+        except Exception:
+            pass
+        return 10.0
+
+    def _delete_winsound_file(self, path: str) -> None:
+        with self._play_lock:
+            self._winsound_files.discard(path)
+        self._forget_temp(path)
+
     def _play_sound_cross_platform(self, full_path: str, amplitude: float):
         system = platform.system()
         try:
             if system == "Windows":
-                dll_path = os.path.join(self.plugin_dir, "BeepBeepPlay.dll")
-                if os.path.isfile(dll_path):
-                    if self.mute:
-                        return
-                    import ctypes
-                    dll = ctypes.CDLL(dll_path)
-                    dll.BeepBeepPlay.argtypes = [ctypes.c_char_p, ctypes.c_float]
-                    dll.BeepBeepPlay.restype = ctypes.c_int
-                    dll.BeepBeepPlay(full_path.encode("utf-8"), self._dll_volume(amplitude))
-                    return
-                log.warning("BeepBeepPlay.dll not found, using fallback")
-                import winsound
-                with self._play_lock:
-                    if self.mute:
-                        return
-                    winsound.PlaySound(full_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                    self._winsound_active = True
+                self._play_windows(full_path, amplitude)
                 return
 
             if system == "Linux":
