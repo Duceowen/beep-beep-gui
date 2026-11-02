@@ -2,6 +2,14 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.37
+- Arrivals are announced when you drop back into normal space from supercruise in the same system. Entering supercruise clears the instance, so the return is not treated as a stale re-add
+- The first arrivals after Beep Beep loads, and the first after a game load, are announced. The post-load silence is now 5 seconds from the game's own timestamp, so EDMC's delivery delay no longer swallows them
+- Several arrivals at once are no longer ignored after a supercruise drop-in or the first update after loading
+- Commander names come only from local chat. Direct messages no longer name a commander who may not be in your instance
+- Seen Commanders checks who is present every 250 ms, so the Now group updates much sooner. The full row refresh stays on its 5 second timer
+- Dying clears the instance right away, so the Now tag drops when you are killed. Your own death does not play departure sounds
+
 ## 1.0.36
 - A commander who drops out of the instance and returns within 60 seconds is not announced again, so stale re-adds after an interdiction, high wake or state change no longer beep
 - Several arrivals at once with no jump or interdiction behind them are ignored, so a stale batch no longer plays several sounds
