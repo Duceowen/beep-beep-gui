@@ -324,7 +324,7 @@ class SeenCommandersGUI:
         
     def display_last_seen(self, cmdr_id, info: dict) -> str:
         """Show Now for commanders in your instance, otherwise the last encounter time."""
-        if history_inst.is_present(cmdr_id):
+        if history_inst.is_shown_present(cmdr_id):
             return "Now"
         return self.format_last_seen(info.get("last_seen"))
 
@@ -1165,16 +1165,47 @@ class SeenCommandersGUI:
         except Exception:
             return 0, 0, int(widget.winfo_screenwidth()), int(widget.winfo_screenheight())
 
-    def _move_popup(self, popup, x, y):
+    def _work_area(self, widget):
+        """Usable area of the monitor the widget is on (excludes the taskbar)."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                import ctypes.wintypes as wt
+
+                class MONITORINFO(ctypes.Structure):
+                    _fields_ = [
+                        ("cbSize", wt.DWORD),
+                        ("rcMonitor", wt.RECT),
+                        ("rcWork", wt.RECT),
+                        ("dwFlags", wt.DWORD),
+                    ]
+
+                user32 = ctypes.windll.user32
+                monitor = user32.MonitorFromWindow(int(widget.winfo_toplevel().winfo_id()), 2)
+                info = MONITORINFO()
+                info.cbSize = ctypes.sizeof(MONITORINFO)
+                if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                    work = info.rcWork
+                    return work.left, work.top, work.right, work.bottom
+            except Exception:
+                pass
+        return self._screen_bounds(widget)
+
+    def _move_popup(self, popup, x, y, keep_above=None):
+        """Place a popup at x, y. keep_above is a screen y that the popup's bottom
+        should not pass when it fits (the bottom edge of the window it belongs to)."""
         popup.update_idletasks()
         width = max(1, popup.winfo_reqwidth())
         height = max(1, popup.winfo_reqheight())
-        left, top, right, bottom = self._screen_bounds(popup)
-        # Leave room for the window title bar and taskbar, which sit outside
-        # the geometry we set.
+        left, top, right, bottom = self._work_area(popup)
+        # Leave room for the window title bar, which sits outside the geometry we set.
         title_allowance = 40
-        x = min(max(int(x), left), max(left, right - width))
-        y = min(max(int(y), top), max(top, bottom - height - title_allowance))
+        x = int(x)
+        y = int(y)
+        if keep_above is not None and y + height > keep_above:
+            y = int(keep_above) - height
+        x = min(max(x, left), max(left, right - width))
+        y = min(max(y, top), max(top, bottom - height - title_allowance))
         popup.geometry(f"{width}x{height}+{x}+{y}")
         return x, y
 
@@ -1473,7 +1504,8 @@ class SeenCommandersGUI:
         # Theme and topmost first, so the size used for placement is final.
         self._apply_topmost(popup)
         self.apply_edmc_theme(popup)
-        self._move_popup(popup, event.x_root, event.y_root)
+        window_bottom = self.window.winfo_rooty() + self.window.winfo_height()
+        self._move_popup(popup, event.x_root, event.y_root, keep_above=window_bottom)
         name_entry.focus_set()
         self._grab_when_viewable(popup)
 
@@ -2117,7 +2149,7 @@ class SeenCommandersGUI:
                 except Exception:
                     ts = datetime(1, 1, 1, tzinfo=timezone.utc)
                 # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_present(cmdr_id) else 0, ts)
+                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
             return cmdr_id
     
         all_ids = list(history_inst.seen_data.keys())
@@ -2251,7 +2283,7 @@ class SeenCommandersGUI:
                 except Exception:
                     ts = datetime(1, 1, 1, tzinfo=timezone.utc)
                 # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_present(cmdr_id) else 0, ts)
+                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
             return cmdr_id
     
         sorted_ids = sorted(history_inst.seen_data.keys(), key=sort_key, reverse=not sort_asc)
@@ -2291,7 +2323,7 @@ class SeenCommandersGUI:
     def refresh_gui(self):
         if not self.tree or not self.tree.winfo_exists():
             return
-        present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_present(cid))
+        present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_shown_present(cid))
         if present != getattr(self, "_sorted_present", None):
             self._sorted_present = present
             self.sort_rows(config.get_config("sort_field", "last_seen"), config.get_config("sort_asc", False))

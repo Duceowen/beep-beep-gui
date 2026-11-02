@@ -341,6 +341,7 @@ class CommanderHistoryManager:
         self._batch_until = 0.0
         self._announced_at: dict[str, float] = {}
         self._departed: set[str] = set()
+        self._left_at: dict[str, float] = {}
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
@@ -363,6 +364,12 @@ class CommanderHistoryManager:
         previous = self._presence_saved or set()
         if present == previous:
             return
+        jumping = location.jump_ts is not None and (time.time() - location.jump_ts <= 60)
+        for cid in sorted(previous - present):
+            # Any drop outside a jump counts as leaving, whatever the cause. A quick
+            # re-add afterwards is a stale snapshot, not an arrival.
+            if not jumping:
+                self._left_at[cid] = time.monotonic()
         for cid in sorted(present - previous) + sorted(previous - present):
             info = self.seen_data.get(cid)
             name = info.get("name", cid) if isinstance(info, dict) else cid
@@ -374,6 +381,11 @@ class CommanderHistoryManager:
 
         A leave or a kill counts as leaving, so a quick return after a kill is still announced.
         """
+        left = self._left_at.get(cmdr_id)
+        if left is not None and now - left < _REANNOUNCE_SECONDS:
+            # Left by interdiction, high wake or similar and back within the window.
+            # A return this soon is a stale re-add, not a new arrival.
+            return False
         last = self._announced_at.get(cmdr_id)
         if last is None or cmdr_id in self._departed or now - last >= _REANNOUNCE_SECONDS:
             self._announced_at[cmdr_id] = now
@@ -416,6 +428,7 @@ class CommanderHistoryManager:
         self._batch_until = time.monotonic() + _LOAD_BATCH_SECONDS
         self._announced_at.clear()
         self._departed.clear()
+        self._left_at.clear()
         self._last_signal.clear()
         location.instance.clear()
 
@@ -427,7 +440,17 @@ class CommanderHistoryManager:
         self._last_jump = jump_at
         self._announced_at.clear()
         self._departed.clear()
+        self._left_at.clear()
         self._last_signal.clear()
+
+    def is_shown_present(self, cmdr_id) -> bool:
+        """Present for display: in the instance and heard within the quiet window."""
+        if not self.is_present(cmdr_id):
+            return False
+        last = self._last_signal.get(str(cmdr_id))
+        if last is None:
+            return True
+        return time.monotonic() - last < _PRESENCE_QUIET_SECONDS
 
     def is_present(self, cmdr_id) -> bool:
         """True while the commander is recorded as in your current instance."""
@@ -880,6 +903,7 @@ class CommanderHistoryManager:
                     inst["here"] = False
                     location.departed.append(cmdr_id)
                     self._departed.add(cmdr_id)
+                    self._left_at[cmdr_id] = time.monotonic()
                     beep_this_commander = False
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
@@ -941,6 +965,17 @@ class CommanderHistoryManager:
 
         if not changed_entries:
             return
+
+        # Several arrivals at once with no jump or interdiction behind them are a
+        # stale presence snapshot (for example after a state change), not real arrivals.
+        if len(beeps_to_play) > 1 and not jump_recent and not interdiction_recent:
+            log.info(
+                "Ignoring %d bulk arrivals with no jump: %s",
+                len(beeps_to_play),
+                ", ".join(str(info.get("name", "unknown")) for info in beeps_to_play),
+            )
+            beeps_to_play = []
+            connected_entries = []
     
         if beeps_to_play and self._sound_listener:
             self._sound_listener(beeps_to_play)

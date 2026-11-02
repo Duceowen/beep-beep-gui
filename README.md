@@ -2,6 +2,13 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.36
+- A commander who drops out of the instance and returns within 60 seconds is not announced again, so stale re-adds after an interdiction, high wake or state change no longer beep
+- Several arrivals at once with no jump or interdiction behind them are ignored, so a stale batch no longer plays several sounds
+- Now only shows commanders heard in the last 10 minutes, so people who have left no longer stay marked as here
+- The edit popup stays above the bottom of the Seen Commanders window and inside the monitor's work area, so it no longer drops below the window or under the taskbar
+- Fixed garbled text on the Play button and the sound-change arrow
+
 ## 1.0.35
 - The saved commander list is written in a smaller format, at most every 5 seconds, and through a safe write so a crash cannot leave it half-written
 - The saved list is backed up at each EDMC start (the newest 10 copies are kept in the plugin's backups folder). If the main file cannot be read, the newest backup is restored instead of starting empty
