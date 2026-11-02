@@ -20,7 +20,7 @@ _OVERLAP_SLACK_SECONDS = 120.0
 
 _CMDR_DECORATE = re.compile(r"\$cmdr_decorate:#name=([^;]*)", re.IGNORECASE)
 _CMDR_PREFIX = re.compile(r"^cmdr\s+", re.IGNORECASE)
-_CHAT_CHANNELS = {"local", "player", "voicechat"}
+_CHAT_CHANNELS = {"local"}
 _SEND_SKIP = {"local", "wing", "squadron", "system", "starsystem", "voicechat", "friend", "npc", "player"}
 _KIND_RANK = {
     "scan": 50,
@@ -396,10 +396,6 @@ def journal_player_names(entry: dict) -> list[tuple[str, str]]:
         channel = str(entry.get("Channel") or "").strip().lower()
         if channel in _CHAT_CHANNELS:
             _append_name(found, "chat", entry.get("From_Localised") or entry.get("From"))
-    elif event == "SendText":
-        target = entry.get("To_Localised") or entry.get("To")
-        if isinstance(target, str) and target.strip().lower() not in _SEND_SKIP:
-            _append_name(found, "chat", target)
     elif event == "PVPKill":
         _append_name(found, "pvp", entry.get("Victim_Localised") or entry.get("Victim"))
     elif event in ("Interdicted", "EscapeInterdiction"):
