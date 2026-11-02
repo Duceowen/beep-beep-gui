@@ -15,6 +15,9 @@ class Location:
         self.jump_backup = {}
         self._jump_company = {}
         self._jump_company_pending = False
+        # Set when you leave the instance for supercruise in the same system. Until
+        # you drop back into normal space, the instance is empty and updates wait.
+        self.instance_reset_pending = False
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -42,10 +45,13 @@ class Location:
         self._jump_company_pending = False
         if state != self.state and system != self.system:
             self._record_departures()
-            self._jump_company = {
-                cmdr_id: dict(info) if isinstance(info, dict) else info
-                for cmdr_id, info in self.instance.items()
-            }
+            if self.instance or not self._jump_company:
+                # An empty instance here means it was already left for supercruise,
+                # so keep the snapshot taken then.
+                self._jump_company = {
+                    cmdr_id: dict(info) if isinstance(info, dict) else info
+                    for cmdr_id, info in self.instance.items()
+                }
             self._jump_company_pending = True
             self.instance = {}
             self._fire_instance_reset()
@@ -75,16 +81,36 @@ class Location:
             "here": here
         }
          
+    def leave_instance(self):
+        """Entering supercruise in the same system takes you out of the instance.
+
+        Everyone in it is gone until you drop back into normal space, so they are
+        cleared now and their return counts as a new arrival. A later jump still
+        uses this snapshot as its jump backup if the instance is empty by then.
+        """
+        self._record_departures()
+        if self.instance:
+            self._jump_company = {
+                cmdr_id: dict(info) if isinstance(info, dict) else info
+                for cmdr_id, info in self.instance.items()
+            }
+        self.instance.clear()
+        self._jump_company_pending = False
+        self.instance_reset_pending = True
+        self._fire_instance_reset()
+
     def jump(self):
         if self.prev_system != self.system:
             self.jump_ts = time.time()
+            # A jump supersedes a pending supercruise drop-out.
+            self.instance_reset_pending = False
             self._record_departures()
             if self.instance:
                 self.jump_backup = {
                     cmdr_id: dict(info) if isinstance(info, dict) else info
                     for cmdr_id, info in self.instance.items()
                 }
-            elif self._jump_company_pending:
+            elif self._jump_company_pending or self._jump_company:
                 self.jump_backup = self._jump_company
             else:
                 self.jump_backup = {}

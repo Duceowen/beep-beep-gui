@@ -345,6 +345,8 @@ class CommanderHistoryManager:
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
+        # The first update after the plugin loads is real arrivals, not a stale snapshot.
+        self._first_update_pending = True
         self._live_kills: dict[str, int] = {}
         self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
         self._kill_tally: dict[str, int] = self._read_kill_tally()
@@ -365,6 +367,8 @@ class CommanderHistoryManager:
         if present == previous:
             return
         jumping = location.jump_ts is not None and (time.time() - location.jump_ts <= 60)
+        # Leaving for supercruise clears the instance too, so it is not a departure.
+        jumping = jumping or location.instance_reset_pending
         for cid in sorted(previous - present):
             # Any drop outside a jump counts as leaving, whatever the cause. A quick
             # re-add afterwards is a stale snapshot, not an arrival.
@@ -438,6 +442,13 @@ class CommanderHistoryManager:
         if jump_at is None:
             return
         self._last_jump = jump_at
+        self._announced_at.clear()
+        self._departed.clear()
+        self._left_at.clear()
+        self._last_signal.clear()
+
+    def note_instance_reset(self) -> None:
+        """Entering supercruise left the instance, so nobody there is a stale re-add."""
         self._announced_at.clear()
         self._departed.clear()
         self._left_at.clear()
@@ -728,6 +739,10 @@ class CommanderHistoryManager:
         if location.system is None:
             # Wait for the game's StartUp. Arrivals read before it are wiped by the reset.
             return
+        if location.instance_reset_pending and location.state == 1:
+            # In supercruise you are outside the instance. Leave the update unread
+            # and handle it when you drop back into normal space.
+            return
         data = self.aggregate_most_recent_commanders(False)
     
         if not data:
@@ -748,6 +763,9 @@ class CommanderHistoryManager:
         wing_recent = location.wing_join is not None and (now_ts - location.wing_join <= 60)
         interdiction_recent = location.interdiction_ts is not None and (now_ts - location.interdiction_ts <= 60)
         pvp_kill_recent = location.pvp_kill_ts is not None and (now_ts - location.pvp_kill_ts <= 60)
+        # Dropping back in from supercruise, or the first update after the plugin
+        # loads, is an arrival event like a jump.
+        reset_recent = location.instance_reset_pending or self._first_update_pending
         in_batch = time.monotonic() < self._batch_until
 
     
@@ -950,6 +968,10 @@ class CommanderHistoryManager:
                             
             self.last_interactions[cmdr_id] = current_flags
     
+        # The supercruise drop-out has been handled, so the next update is ordinary.
+        location.instance_reset_pending = False
+        self._first_update_pending = False
+
         stored = set(self.seen_data)
         self._resolve_unknown_names(
             [cid for cid in killed_unknown_ids if cid in stored],
@@ -968,7 +990,7 @@ class CommanderHistoryManager:
 
         # Several arrivals at once with no jump or interdiction behind them are a
         # stale presence snapshot (for example after a state change), not real arrivals.
-        if len(beeps_to_play) > 1 and not jump_recent and not interdiction_recent:
+        if len(beeps_to_play) > 1 and not jump_recent and not interdiction_recent and not reset_recent:
             log.info(
                 "Ignoring %d bulk arrivals with no jump: %s",
                 len(beeps_to_play),

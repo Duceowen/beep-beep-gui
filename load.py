@@ -56,6 +56,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
 
     elif event == "SupercruiseEntry":        
         location.set(1, system)
+        location.leave_instance()
+        history_inst.note_instance_reset()
         history_inst.trigger()
 
     elif event in ("SupercruiseExit", "Location", "CarrierJump"): 
