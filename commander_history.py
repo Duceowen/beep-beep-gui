@@ -747,10 +747,6 @@ class CommanderHistoryManager:
         if location.system is None:
             # Wait for the game's StartUp. Arrivals read before it are wiped by the reset.
             return
-        if location.instance_reset_pending and location.state == 1:
-            # In supercruise you are outside the instance. Leave the update unread
-            # and handle it when you drop back into normal space.
-            return
         data = self.aggregate_most_recent_commanders(False)
     
         if not data:
