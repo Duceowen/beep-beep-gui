@@ -747,10 +747,6 @@ class CommanderHistoryManager:
         if location.system is None:
             # Wait for the game's StartUp. Arrivals read before it are wiped by the reset.
             return
-        if location.instance_reset_pending and location.state == 1:
-            # In supercruise you are outside the instance. Leave the update unread
-            # and handle it when you drop back into normal space.
-            return
         data = self.aggregate_most_recent_commanders(False)
     
         if not data:
@@ -823,6 +819,13 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
+            if location.instance_reset_pending and location.state == 1 and cmdr_id in location.leave_snapshot:
+                # Supercruise re-lists the commanders you just left. They are not new arrivals.
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                self.last_interactions[cmdr_id] = current_flags
+                changed_entries.append(info)
+                continue
             inst = location.get_instance().get(cmdr_id)
     
             beep_this_commander = True            

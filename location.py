@@ -18,6 +18,8 @@ class Location:
         # Set when you leave the instance for supercruise in the same system. Until
         # you drop back into normal space, the instance is empty and updates wait.
         self.instance_reset_pending = False
+        # Commanders in the instance when supercruise was entered (see leave_instance).
+        self.leave_snapshot: set[str] = set()
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -95,6 +97,7 @@ class Location:
                 cmdr_id: dict(info) if isinstance(info, dict) else info
                 for cmdr_id, info in self.instance.items()
             }
+        self.leave_snapshot = {str(cid) for cid in self.instance}
         self.instance.clear()
         self._jump_company_pending = False
         self.instance_reset_pending = True
