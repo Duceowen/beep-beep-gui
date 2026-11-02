@@ -1306,10 +1306,9 @@ class CommanderHistoryManager:
 
     def _check_reset(self):
         with self._lock:
-            if not self.data_received:
-                location._record_departures()
-                location.instance = {}
-
+            # The instance is not cleared here. Commanders stay until the quiet timeout in
+            # _expire_quiet_presence, because the game does not always show a leave.
+            # Jumps, supercruise, load and death clear the instance on their own events.
             self.data_received = False
             self._trigger = False
 
