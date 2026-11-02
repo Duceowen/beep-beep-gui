@@ -2,6 +2,11 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.35
+- The saved commander list is written in a smaller format, at most every 5 seconds, and through a safe write so a crash cannot leave it half-written
+- The saved list is backed up at each EDMC start (the newest 10 copies are kept in the plugin's backups folder). If the main file cannot be read, the newest backup is restored instead of starting empty
+- Kill counts are saved the same safe way
+
 ## 1.0.34
 - Overlay connection announcements follow the wing setting. Wing members hidden by "Beep for wing members" are no longer shown on the overlay either
 - The overlay clears on jumps, carrier jumps, shutdown, and plugin stop, so an old "has jumped in" line no longer hangs around

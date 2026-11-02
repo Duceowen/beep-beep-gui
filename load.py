@@ -15,6 +15,7 @@ def plugin_start3(plugin_dir):
     location.set_wing(bool(wing))
     history_inst.set_session_start(session_start)
     log.info("Startup from journal: wing=%s session_start=%s", wing, session_start)
+    history_inst.backup_seen_commanders()
     history_inst.load_seen_commanders()
     history_inst.subscribe_sound(beep_inst.handle_event)       
     history_inst.subscribe_gui(gui_inst.add_or_update_commander)

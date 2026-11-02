@@ -4,3 +4,4 @@ __pycache__/
 seen_commanders.json
 beepbeep_config.json
 beep-beep-*.wav
+backups/

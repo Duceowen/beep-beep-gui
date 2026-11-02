@@ -3,6 +3,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import threading
 import time
 from typing import Callable, Dict, NotRequired, TypedDict
@@ -33,6 +34,16 @@ _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
 _KILL_RESET_SUPPRESS_SECONDS = 60.0
 _LOAD_BATCH_SECONDS = 15.0
 _REANNOUNCE_SECONDS = 60.0
+_BACKUP_KEEP = 10
+_SAVE_INTERVAL_SECONDS = 5.0
+
+
+def _atomic_write_json(path: str, data) -> None:
+    """Write to a temp file, then swap it in, so a crash never leaves a half-written file."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, separators=(",", ":"))
+    os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
@@ -331,6 +342,8 @@ class CommanderHistoryManager:
         self._announced_at: dict[str, float] = {}
         self._departed: set[str] = set()
         self._last_signal: dict[str, float] = {}
+        self._seen_dirty = False
+        self._seen_saved_at = 0.0
         self._live_kills: dict[str, int] = {}
         self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
         self._kill_tally: dict[str, int] = self._read_kill_tally()
@@ -455,8 +468,8 @@ class CommanderHistoryManager:
             with open(self.json_file_path, "r", encoding="utf-8") as f:
                 self.seen_data = json.load(f)
         except (OSError, json.JSONDecodeError):
-            log.exception("Failed to load seen_commanders.json, starting empty")
-            self.seen_data = {}
+            log.exception("Failed to load seen_commanders.json, trying the newest backup")
+            self.seen_data = self._load_latest_backup() or {}
                 
         changed = False
         for cmdr_id, entry in self.seen_data.items():
@@ -473,15 +486,60 @@ class CommanderHistoryManager:
         if changed:
             self.save_seen_commanders()
 
-    def save_seen_commanders(self):
-        if self.json_file_path is None:
-            return
-    
+    @property
+    def backup_dir(self) -> str:
+        return os.path.join(self.plugin_dir, "backups")
+
+    def _backup_names(self) -> list[str]:
         try:
-            with open(self.json_file_path, "w", encoding="utf-8") as f:
-                json.dump(self.seen_data, f, indent=2)
-        except (OSError, TypeError):
+            return sorted(
+                name for name in os.listdir(self.backup_dir)
+                if name.startswith("seen_commanders-") and name.endswith(".json")
+            )
+        except OSError:
+            return []
+
+    def backup_seen_commanders(self) -> None:
+        """Copy the saved file aside at startup and keep only the newest few copies."""
+        if not os.path.isfile(self.json_file_path) or os.path.getsize(self.json_file_path) == 0:
+            return
+        try:
+            os.makedirs(self.backup_dir, exist_ok=True)
+            stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(self.json_file_path, os.path.join(self.backup_dir, f"seen_commanders-{stamp}.json"))
+            for old in self._backup_names()[:-_BACKUP_KEEP]:
+                os.remove(os.path.join(self.backup_dir, old))
+        except OSError:
+            log.exception("Failed to back up seen_commanders.json")
+
+    def _load_latest_backup(self):
+        for name in reversed(self._backup_names()):
+            try:
+                with open(os.path.join(self.backup_dir, name), "r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                log.error("Restored seen commanders from backup %s", name)
+                return data
+        return None
+
+    def save_seen_commanders(self):
+        """Mark the data as changed. The worker writes it out at most every few seconds."""
+        self._seen_dirty = True
+
+    def flush_seen_commanders(self, force: bool = False) -> None:
+        if not self._seen_dirty or self.json_file_path is None:
+            return
+        if not force and time.monotonic() - self._seen_saved_at < _SAVE_INTERVAL_SECONDS:
+            return
+        try:
+            _atomic_write_json(self.json_file_path, self.seen_data)
+        except (OSError, TypeError, RuntimeError):
             log.exception("Failed to save seen_commanders.json")
+            return
+        self._seen_dirty = False
+        self._seen_saved_at = time.monotonic()
             
     def resolve_commander_history_dir(self) -> str | None:
         if self._resolved_history_dir and os.path.isdir(self._resolved_history_dir):
@@ -1088,8 +1146,7 @@ class CommanderHistoryManager:
 
     def _save_kill_tally(self) -> None:
         try:
-            with open(self.kill_tally_path, "w", encoding="utf-8") as handle:
-                json.dump(self._kill_tally, handle, indent=2)
+            _atomic_write_json(self.kill_tally_path, self._kill_tally)
         except OSError:
             log.exception("Failed to save kill tally")
 
@@ -1219,6 +1276,7 @@ class CommanderHistoryManager:
         if self.worker_thread:
             self.worker_thread.join(timeout=3)
             log.info("Beepbeep worker stopped.")
+        self.flush_seen_commanders(force=True)
 
     def worker_loop(self):
         while not self.worker_stop_event.is_set():
@@ -1232,6 +1290,7 @@ class CommanderHistoryManager:
                 if self._tick % 5 == 0:
                     self._apply_kill_tally()
                 self._expire_quiet_presence()
+                self.flush_seen_commanders()
                 self._log_presence_changes()
             except Exception:
                 log.exception("Exception in CommanderHistoryManager worker loop, continuing")
