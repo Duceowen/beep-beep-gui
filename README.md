@@ -2,6 +2,20 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.34
+- Overlay connection announcements follow the wing setting. Wing members hidden by "Beep for wing members" are no longer shown on the overlay either
+- The overlay clears on jumps, carrier jumps, shutdown, and plugin stop, so an old "has jumped in" line no longer hangs around
+- Departure sounds respect the wing setting. Wing state is read from the newest journal at startup, so starting EDMC while already in a wing no longer treats wing members as normal
+- Now in Last Encounter shows for commanders in your current instance. Presence clears on jumps, main-menu return, game load, and shutdown. A commander not seen for 10 minutes goes back to their last encounter time. Restarting EDMC starts with nobody marked Now until the game or the journal shows them
+- A commander who was just announced is not announced again within 60 seconds unless they have left or been killed since
+- Commanders who arrive after your interdiction are announced. Commanders already in your instance are not
+- Kills column counts PvP kills per commander. Kills are matched by name, so a kill still counts when the name is filled in later. A one-time journal scan fills in kills from earlier sessions
+- The sorted column header shows an up or down arrow
+- The edit popup stays on screen near the bottom of the window
+- Column widths are cached, so the list re-layouts faster
+- Jump reset now runs after each FSD jump (the event name was misspelled before)
+- Removed unused code
+
 ## 1.0.33
 - Alerts play on Windows when BeepBeepPlay.dll cannot be loaded. The 64-bit DLL fails with WinError 193 on a 32-bit EDMC install, or when a 32-bit Visual C++ runtime is found first on PATH. Beep Beep now logs the failure and plays the WAV through winsound with the alert volume baked into a temporary copy, instead of stopping every alert
 - The included BeepBeepPlay.dll is built with the static Visual C++ runtime, so it no longer needs MSVCP140.dll or VCRUNTIME140.dll

@@ -21,11 +21,12 @@ _WIN_DATETIME_FMT = None
 
 MIN_COL_WIDTH = 50
 TOPMOST_REASSERT_MS = 1000
-SEEN_COLUMNS = ("name", "sound", "seen_count", "last_seen")
+SEEN_COLUMNS = ("name", "sound", "seen_count", "kills", "last_seen")
 COLUMN_LABELS = (
     ("name", "Name"),
     ("sound", "Sound"),
     ("seen_count", "Seen"),
+    ("kills", "Kills"),
     ("last_seen", "Last Encounter"),
 )
 COLUMN_BUFFER = 24
@@ -42,9 +43,9 @@ def layout_seen_columns(available, visible, fixed, mins):
     """
     order = [col for col in SEEN_COLUMNS if col in visible]
     if not order:
-        return [0, 0, 0, 0]
+        return [0] * len(SEEN_COLUMNS)
     available = max(len(order), int(available))
-    held = [col for col in ("sound", "seen_count", "last_seen") if col in order]
+    held = [col for col in ("sound", "seen_count", "kills", "last_seen") if col in order]
     slack = "name" if "name" in order else order[0]
     if slack in held:
         held = [col for col in held if col != slack]
@@ -294,6 +295,7 @@ class SeenCommandersGUI:
         self.name_vars = {}
         self.last_seen_vars = {}
         self.seen_count_vars = {}
+        self.kills_vars = {}
         self.widgets = {}
         self.sound_vars = {}
         self.window = None
@@ -315,24 +317,16 @@ class SeenCommandersGUI:
             "name": {},
             "sound": {},
             "seen_count": {},
+            "kills": {},
             "last_seen": {},
         }        
 
         
-    def on_history_event(self, data):
-        if not self.window or not self.window.winfo_exists():
-            return
-    
-        self.window.after(
-            0,
-            lambda: self._handle_history_event(data)
-        )
-    
-    
-    def _handle_history_event(self, data):
-        self.add_or_update_commander(data)
-        self.refresh_gui()
-
+    def display_last_seen(self, cmdr_id, info: dict) -> str:
+        """Show Now for commanders in your instance, otherwise the last encounter time."""
+        if history_inst.is_present(cmdr_id):
+            return "Now"
+        return self.format_last_seen(info.get("last_seen"))
 
     def format_last_seen(self, ts_iso: str) -> str:
         try:
@@ -652,11 +646,6 @@ class SeenCommandersGUI:
         self._hide_manual = self._HIDE_MODES[(idx + 1) % len(self._HIDE_MODES)]
         self.refresh_clickthrough()
 
-    def reset_hide_to_auto(self):
-        """Options or external control: hand control back to Detect."""
-        self._hide_manual = "auto"
-        self.refresh_clickthrough()
-
     def _update_hide_button(self):
         btn = self._hide_button
         if btn is None:
@@ -725,7 +714,7 @@ class SeenCommandersGUI:
         if isinstance(cached, dict):
             return cached
         saved = self._saved_col_widths()
-        keys = ("seen_count", "last_seen")
+        keys = ("seen_count", "kills", "last_seen")
         if not self._legacy_share_save(saved):
             keys = ("sound",) + keys
         fixed = {}
@@ -774,10 +763,11 @@ class SeenCommandersGUI:
             return
         content = self._locked_widths()
         seen = int(user.get("seen_count", content.get("seen_count", 0)))
+        kills = int(user.get("kills", content.get("kills", 0)))
         last_floor = int(content.get("last_seen", 0))
         last_user = user.get("last_seen")
         last = last_floor if last_user is None else max(last_floor, int(last_user))
-        flex = int(available) - seen - last
+        flex = int(available) - seen - kills - last
         sound = int(round(share * flex))
         name_min = self._min_label_width("name")
         sound_min = self._min_label_width("sound")
@@ -800,10 +790,11 @@ class SeenCommandersGUI:
         user = self._user_fixed_widths()
         sound = user.get("sound", content.get("sound", 0))
         seen = user.get("seen_count", content.get("seen_count", 0))
+        kills = user.get("kills", content.get("kills", 0))
         last_floor = int(content.get("last_seen", 0))
         last_user = user.get("last_seen")
         last = last_floor if last_user is None else max(last_floor, int(last_user))
-        return {"sound": int(sound), "seen_count": int(seen), "last_seen": int(last)}
+        return {"sound": int(sound), "seen_count": int(seen), "kills": int(kills), "last_seen": int(last)}
 
     def _fixed_floor(self, col):
         if col == "last_seen":
@@ -811,9 +802,20 @@ class SeenCommandersGUI:
         return max(1, self._min_label_width(col))
 
     def _text_px(self, text):
+        """Pixel width of text in the default font. Results are remembered, because
+        column fitting measures every row and most of the same strings come back."""
         try:
             font = tkFont.nametofont("TkDefaultFont")
-            return font.measure("" if text is None else str(text))
+            value = "" if text is None else str(text)
+            key = (font.cget("family"), font.cget("size"), value)
+            memo = self.__dict__.setdefault("_px_memo", {})
+            px = memo.get(key)
+            if px is None:
+                if len(memo) > 20000:
+                    memo.clear()
+                px = font.measure(value)
+                memo[key] = px
+            return px
         except Exception:
             return MIN_COL_WIDTH
 
@@ -844,7 +846,7 @@ class SeenCommandersGUI:
         for col, label in COLUMN_LABELS:
             if col == "name":
                 continue
-            widest = self._text_px(label)
+            widest = self._text_px(label) + self._text_px(" \u25bc")
             if col == "last_seen":
                 widest = max(widest, self._text_px(self._wide_timestamp_sample()))
             if tree_ok:
@@ -861,17 +863,7 @@ class SeenCommandersGUI:
 
     def _min_label_width(self, col):
         label = dict(COLUMN_LABELS).get(col, col)
-        return max(36, self._text_px(label) + 12)
-
-    def _layout_signature(self, available):
-        preferred = self._preferred_fixed()
-        return (
-            available,
-            tuple(self._visible_columns()),
-            preferred.get("sound"),
-            preferred.get("seen_count"),
-            preferred.get("last_seen"),
-        )
+        return max(36, self._text_px(label) + self._text_px(" \u25bc") + 12)
 
     def _column_floor(self, col):
         if col == "name":
@@ -951,6 +943,7 @@ class SeenCommandersGUI:
             tuple(self._visible_columns()),
             user.get("sound"),
             user.get("seen_count"),
+            user.get("kills"),
             user.get("last_seen"),
             header_h,
         )
@@ -1177,8 +1170,11 @@ class SeenCommandersGUI:
         width = max(1, popup.winfo_reqwidth())
         height = max(1, popup.winfo_reqheight())
         left, top, right, bottom = self._screen_bounds(popup)
+        # Leave room for the window title bar and taskbar, which sit outside
+        # the geometry we set.
+        title_allowance = 40
         x = min(max(int(x), left), max(left, right - width))
-        y = min(max(int(y), top), max(top, bottom - height))
+        y = min(max(int(y), top), max(top, bottom - height - title_allowance))
         popup.geometry(f"{width}x{height}+{x}+{y}")
         return x, y
 
@@ -1474,9 +1470,10 @@ class SeenCommandersGUI:
         combo.bind("<Return>", on_combo_enter)
         combo.bind("<KP_Enter>", on_combo_enter)
 
-        self._move_popup(popup, event.x_root, event.y_root)
+        # Theme and topmost first, so the size used for placement is final.
         self._apply_topmost(popup)
         self.apply_edmc_theme(popup)
+        self._move_popup(popup, event.x_root, event.y_root)
         name_entry.focus_set()
         self._grab_when_viewable(popup)
 
@@ -1494,7 +1491,7 @@ class SeenCommandersGUI:
             row_height = default_font.metrics("linespace") + 4
             style.configure("Treeview", rowheight=row_height)
     
-            self.tree = ttk.Treeview(parent, columns=("name", "sound", "seen_count", "last_seen"), show="", style="Beep.Treeview")
+            self.tree = ttk.Treeview(parent, columns=SEEN_COLUMNS, show="", style="Beep.Treeview")
             self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
 
             self.header_frame = tk.Frame(parent, height=row_height + 6)
@@ -1518,7 +1515,7 @@ class SeenCommandersGUI:
                 _lbl.bind("<Button-3>", self._popup_column_menu)
                 _lbl.bind("<Control-Button-1>", self._popup_column_menu)
                 self.header_labels[_col] = _lbl
-            for _col in ("sound", "seen_count", "last_seen"):
+            for _col in ("sound", "seen_count", "kills", "last_seen"):
                 _handle = HeaderDivider(self.header_frame)
                 self._bind_divider(_handle, _col)
                 self.header_handles[_col] = _handle
@@ -1526,6 +1523,7 @@ class SeenCommandersGUI:
             self.tree.column("name", anchor="w")
             self.tree.column("sound", anchor="w")
             self.tree.column("seen_count", anchor="w")
+            self.tree.column("kills", anchor="w")
             self.tree.column("last_seen", anchor="w")
 
             for _col in SEEN_COLUMNS:
@@ -1552,6 +1550,7 @@ class SeenCommandersGUI:
             self.name_vars.clear()
             self.last_seen_vars.clear()
             self.seen_count_vars.clear()
+            self.kills_vars.clear()
             self.tree_items = {}
 
         if history_inst.seen_data:
@@ -1697,7 +1696,7 @@ class SeenCommandersGUI:
             return
         applied = getattr(self, "_applied_widths", None) or {}
         start = getattr(self, "_resize_start", None) or {}
-        if col in ("sound", "seen_count", "last_seen"):
+        if col in ("sound", "seen_count", "kills", "last_seen"):
             new_w = int(applied.get(col, 0))
             if abs(new_w - int(start.get(col, new_w))) >= 2:
                 self._set_user_fixed(col, new_w)
@@ -2100,12 +2099,20 @@ class SeenCommandersGUI:
                 return self.name_vars[cmdr_id].get().lower()
             if sort_field == "sound":
                 return self.sound_vars[cmdr_id].get().lower()
+            if sort_field == "kills":
+                try:
+                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
+                except (TypeError, ValueError):
+                    return 0
             if sort_field == "seen_count":
                 try:
                     return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
                 except (TypeError, ValueError):
                     return 0
             if sort_field == "last_seen":
+                if history_inst.is_present(cmdr_id):
+                    # Commanders in your instance sort above everyone else.
+                    return datetime.max.replace(tzinfo=timezone.utc)
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
                     if ts.tzinfo is None:
@@ -2131,8 +2138,9 @@ class SeenCommandersGUI:
                 self.sound_vars[cmdr_id] = tk.StringVar(value=sound_key)
 
 
-            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.format_last_seen(info.get("last_seen"))))
+            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.display_last_seen(cmdr_id, info)))
             self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("seen_count", 0))))
+            self.kills_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("kills", 0))))
     
             index = 0
             for sid in sorted_ids:
@@ -2145,6 +2153,7 @@ class SeenCommandersGUI:
                 self.name_vars[cmdr_id].get(),
                 self.sound_vars[cmdr_id].get().capitalize(),
                 self.seen_count_vars[cmdr_id].get(),
+                self.kills_vars[cmdr_id].get(),
                 self.last_seen_vars[cmdr_id].get()
             )
             item = self.tree.insert("", index, values=values)
@@ -2166,8 +2175,9 @@ class SeenCommandersGUI:
     
             self.name_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("name", "unknown"))
             self.sound_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("sound", sound_inst.neutral).lower())
-            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.format_last_seen(info["last_seen"]))
+            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.display_last_seen(cmdr_id_str, info))
             self.seen_count_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("seen_count", 0)))
+            self.kills_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("kills", 0)))
     
             item_id = self.tree_items.get(cmdr_id_str)
             if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
@@ -2176,14 +2186,16 @@ class SeenCommandersGUI:
                         info.get("name", "unknown"),
                         info.get("sound", sound_inst.neutral).capitalize(),
                         str(info.get("seen_count", 0)),
-                        self.format_last_seen(info["last_seen"]),
+                        str(info.get("kills", 0)),
+                        self.display_last_seen(cmdr_id_str, info),
                     )
                     prev = (getattr(self, "_cell_snapshot", {}) or {}).get(cmdr_id_str)
                     if prev != values:
                         self.tree.set(item_id, "name", values[0])
                         self.tree.set(item_id, "sound", values[1])
                         self.tree.set(item_id, "seen_count", values[2])
-                        self.tree.set(item_id, "last_seen", values[3])
+                        self.tree.set(item_id, "kills", values[3])
+                        self.tree.set(item_id, "last_seen", values[4])
                         self._remember_cells(cmdr_id_str, values)
                         if prev is None or prev[1:] != values[1:]:
                             self._content_dirty = True
@@ -2199,7 +2211,22 @@ class SeenCommandersGUI:
             sort_asc = config.get_config("sort_asc", False)
             self.sort_rows(sort_field, sort_asc)
        
+    def _refresh_header_text(self, sort_field, sort_asc):
+        """Mark the sorted column with an arrow: up for ascending, down for descending."""
+        labels = getattr(self, "header_labels", None) or {}
+        names = dict(COLUMN_LABELS)
+        for col, label in labels.items():
+            text = names.get(col, col)
+            if col == sort_field:
+                text += " \u25b2" if sort_asc else " \u25bc"
+            try:
+                if label.cget("text") != text:
+                    label.configure(text=text)
+            except Exception:
+                pass
+
     def sort_rows(self, sort_field, sort_asc):
+        self._refresh_header_text(sort_field, sort_asc)
         if not hasattr(self, "tree") or not self.window or not self.window.winfo_exists():
             return        
         
@@ -2208,12 +2235,20 @@ class SeenCommandersGUI:
                 return self.name_vars[cmdr_id].get().lower()
             if sort_field == "sound":
                 return self.sound_vars[cmdr_id].get().lower()
+            if sort_field == "kills":
+                try:
+                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
+                except (TypeError, ValueError):
+                    return 0
             if sort_field == "seen_count":
                 try:
                     return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
                 except (TypeError, ValueError):
                     return 0
             if sort_field == "last_seen":
+                if history_inst.is_present(cmdr_id):
+                    # Commanders in your instance sort above everyone else.
+                    return datetime.max.replace(tzinfo=timezone.utc)
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
                     if ts.tzinfo is None:
@@ -2260,6 +2295,10 @@ class SeenCommandersGUI:
     def refresh_gui(self):
         if not self.tree or not self.tree.winfo_exists():
             return
+        present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_present(cid))
+        if present != getattr(self, "_sorted_present", None):
+            self._sorted_present = present
+            self.sort_rows(config.get_config("sort_field", "last_seen"), config.get_config("sort_asc", False))
         snapshot = getattr(self, "_cell_snapshot", None)
         if not isinstance(snapshot, dict):
             snapshot = {}
@@ -2270,22 +2309,24 @@ class SeenCommandersGUI:
             if not item_id:
                 continue
             try:
-                new_time = self.format_last_seen(data["last_seen"])
+                new_time = self.display_last_seen(cmdr_id, data)
                 new_count = str(data.get("seen_count", 0))
+                new_kills = str(data.get("kills", 0))
             except Exception:
                 continue
             prev = snapshot.get(cmdr_id)
-            if prev and prev[2] == new_count and prev[3] == new_time:
+            if prev and prev[2] == new_count and prev[3] == new_kills and prev[4] == new_time:
                 continue
             try:
                 self.tree.set(item_id, "last_seen", new_time)
                 self.tree.set(item_id, "seen_count", new_count)
+                self.tree.set(item_id, "kills", new_kills)
             except Exception:
                 continue
             if prev:
-                snapshot[cmdr_id] = (prev[0], prev[1], new_count, new_time)
+                snapshot[cmdr_id] = (prev[0], prev[1], new_count, new_kills, new_time)
             else:
-                snapshot[cmdr_id] = ("", "", new_count, new_time)
+                snapshot[cmdr_id] = ("", "", new_count, new_kills, new_time)
             changed = True
         if not changed:
             return

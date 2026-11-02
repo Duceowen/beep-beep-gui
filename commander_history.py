@@ -11,12 +11,14 @@ from beep_beep_config import config
 from location import location
 from commander_names import (
     UnknownNameResolver,
+    journal_player_names,
     backfill_seen_record,
     candidate_unknown_ids,
     close_seen_time,
     is_unknown_name,
     name_key,
     note_seen_time,
+    parse_seen_time,
     utc_now,
     visit_is_new,
 )
@@ -29,6 +31,10 @@ _HISTORY_TAIL = (
 _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
 _KILL_RESET_SUPPRESS_SECONDS = 60.0
+_LOAD_BATCH_SECONDS = 15.0
+_REANNOUNCE_SECONDS = 60.0
+_PRESENCE_QUIET_SECONDS = 600.0
+_KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
 
 def _join_parts(parts: list[str]) -> str:
@@ -84,6 +90,83 @@ def edmc_journal_dir() -> str | None:
         return None
     expanded = os.path.expanduser(str(raw))
     return expanded or None
+
+
+_JOURNAL_FILE = re.compile(r"^Journal\..+\.log$")
+_WING_ON_EVENTS = frozenset(("WingJoin", "WingAdd"))
+# Leaving a wing also happens when the game quits or starts a new session.
+_WING_OFF_EVENTS = frozenset(("WingLeave", "Shutdown", "ShutDown", "LoadGame", "StartUp"))
+_JOURNAL_TAIL_BYTES = 4 * 1024 * 1024
+
+
+_SESSION_START_EVENTS = frozenset(("LoadGame", "StartUp"))
+_SESSION_END_EVENTS = frozenset(("Shutdown", "ShutDown"))
+
+
+def _journal_time(value) -> datetime.datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+
+
+def read_session_state(journal_dir: str | None = None) -> tuple[bool | None, datetime.datetime | None]:
+    """Read the wing state and game session start from the newest journal.
+
+    EDMC does not replay old journal lines, so a plugin started mid-session
+    never sees the WingJoin or the LoadGame. Returns (in_wing, session_start):
+    - in_wing: True/False from the last wing event, None if there is none.
+    - session_start: UTC time of the last LoadGame/StartUp, or None when the
+      game is not running (a Shutdown came after it, or none was found).
+    """
+    journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
+    if not journal_dir or not os.path.isdir(journal_dir):
+        return None, None
+    try:
+        names = [name for name in os.listdir(journal_dir) if _JOURNAL_FILE.match(name)]
+    except OSError:
+        return None, None
+    if not names:
+        return None, None
+    # Journal names embed the session start time, so the newest sorts last.
+    path = os.path.join(journal_dir, max(names))
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - _JOURNAL_TAIL_BYTES))
+            tail = handle.read()
+    except OSError:
+        return None, None
+
+    in_wing = None
+    session_start = None
+    wing_known = False
+    session_known = False
+    for raw in reversed(tail.splitlines()):
+        if b'"event"' not in raw:
+            continue
+        try:
+            entry = json.loads(raw)
+            event = entry.get("event")
+        except (ValueError, AttributeError):
+            continue
+        if not wing_known:
+            if event in _WING_ON_EVENTS:
+                in_wing, wing_known = True, True
+            elif event in _WING_OFF_EVENTS:
+                in_wing, wing_known = False, True
+        if not session_known:
+            if event in _SESSION_END_EVENTS:
+                session_known = True
+            elif event in _SESSION_START_EVENTS:
+                session_start = _journal_time(entry.get("timestamp"))
+                session_known = True
+        if wing_known and session_known:
+            break
+    return in_wing, session_start
 
 
 def platform_default_history_dir(system: str | None = None, home: str | None = None) -> str:
@@ -224,7 +307,6 @@ class CommanderHistoryManager:
         self._missing_history_logged = False
         self.json_file_path = os.path.join(self.plugin_dir, "seen_commanders.json")
         self.last_modified_timestamp: datetime.datetime = datetime.datetime.min
-        self.listeners: list[Callable[[list[CommanderEntry]], None]] = []
         self._gui_listener: Callable[[dict], None] | None = None
         self._sound_listener: Callable[[dict], None] | None = None
         self._overlay_listener: Callable[[list], None] | None = None        
@@ -240,7 +322,104 @@ class CommanderHistoryManager:
         self._kill_reset_until: dict[str, float] = {}
         self._names = UnknownNameResolver()
         location.on_instance_reset = self.forget_pending_names
+        self._session_start: datetime.datetime | None = None
+        self._last_jump: datetime.datetime | None = None
+        self._presence_saved: set[str] | None = None
+        self._kills_lock = threading.Lock()
+        self._tick = 0
+        self._batch_until = 0.0
+        self._announced_at: dict[str, float] = {}
+        self._departed: set[str] = set()
+        self._last_signal: dict[str, float] = {}
+        self._live_kills: dict[str, int] = {}
+        self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
+        self._kill_tally: dict[str, int] = self._read_kill_tally()
 
+    def set_session_start(
+        self,
+        session_start: datetime.datetime | None,
+        last_jump: datetime.datetime | None = None,
+    ) -> None:
+        """UTC time the game session began (None if not running) and the last jump."""
+        self._session_start = session_start
+        self._last_jump = last_jump
+
+    def _log_presence_changes(self) -> None:
+        """Log who joins or leaves the instance, so presence can be checked in the log."""
+        present = {str(cid) for cid, inst in location.instance.items() if isinstance(inst, dict) and inst.get("here")}
+        previous = self._presence_saved or set()
+        if present == previous:
+            return
+        for cid in sorted(present - previous) + sorted(previous - present):
+            info = self.seen_data.get(cid)
+            name = info.get("name", cid) if isinstance(info, dict) else cid
+            log.info("Presence %s: %s", "added" if cid in present else "removed", name)
+        self._presence_saved = present
+
+    def _should_announce(self, cmdr_id: str, now: float) -> bool:
+        """Announce an arrival unless they were announced recently and have not left since.
+
+        A leave or a kill counts as leaving, so a quick return after a kill is still announced.
+        """
+        last = self._announced_at.get(cmdr_id)
+        if last is None or cmdr_id in self._departed or now - last >= _REANNOUNCE_SECONDS:
+            self._announced_at[cmdr_id] = now
+            self._departed.discard(cmdr_id)
+            return True
+        return False
+
+    def _touch(self, cmdr_id) -> None:
+        """Note that the game or the journal just showed this commander."""
+        self._last_signal[str(cmdr_id)] = time.monotonic()
+
+    def _touch_names(self, names) -> None:
+        keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
+        if not keys:
+            return
+        for cid, info in self.seen_data.items():
+            if isinstance(info, dict) and isinstance(info.get("name"), str) and name_key(info["name"]) in keys:
+                self._touch(cid)
+
+    def _expire_quiet_presence(self) -> None:
+        """Drop anyone not seen for a while. The game gives no leave signal for some
+        departures, so silence is the fallback. A later return is announced again."""
+        now = time.monotonic()
+        for cid, inst in list(location.instance.items()):
+            if not (isinstance(inst, dict) and inst.get("here")):
+                continue
+            last = self._last_signal.get(cid)
+            if last is None:
+                self._last_signal[cid] = now
+                continue
+            if now - last >= _PRESENCE_QUIET_SECONDS:
+                inst["here"] = False
+                self._departed.add(cid)
+                info = self.seen_data.get(cid)
+                name = info.get("name", cid) if isinstance(info, dict) else cid
+                log.info("No signal from %s for %d minutes; no longer marked here", name, _PRESENCE_QUIET_SECONDS // 60)
+
+    def clear_presence(self) -> None:
+        """Forget everyone in the instance, e.g. after the main menu or a game load."""
+        self._batch_until = time.monotonic() + _LOAD_BATCH_SECONDS
+        self._announced_at.clear()
+        self._departed.clear()
+        self._last_signal.clear()
+        location.instance.clear()
+
+    def note_jump(self, timestamp) -> None:
+        """A jump starts a new instance, so presence from the old one no longer applies."""
+        jump_at = _journal_time(timestamp)
+        if jump_at is None:
+            return
+        self._last_jump = jump_at
+        self._announced_at.clear()
+        self._departed.clear()
+        self._last_signal.clear()
+
+    def is_present(self, cmdr_id) -> bool:
+        """True while the commander is recorded as in your current instance."""
+        inst = location.instance.get(str(cmdr_id))
+        return bool(isinstance(inst, dict) and inst.get("here"))
 
     @property
     def wing_notify(self) -> bool:
@@ -257,11 +436,6 @@ class CommanderHistoryManager:
     @staticmethod
     def is_cmdr_history_file(name: str) -> bool:
         return re.match(r"^Commander\d*\.cmdrHistory$", name) is not None
-
-    @staticmethod
-    def check_if_file_is_newer_than_timestamp(filepath: str, timestamp: datetime.datetime) -> bool:
-        file_mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
-        return file_mtime > timestamp
 
     def subscribe_gui(self, cb: Callable[[dict], None]):
         self._gui_listener = cb
@@ -450,13 +624,14 @@ class CommanderHistoryManager:
                     if ts <= last_seen_existing:
                         continue
         
-         
+          
                 info: CommanderEntry = {
                     "commander_id": cmdr_id,
                     "name": existing.get("name", "unknown") if existing else "unknown",
                     "sound": existing.get("sound", "neutral") if existing else "neutral",
                     "last_seen": ts.isoformat(),
                     "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
+                    "kills": int(existing.get("kills", 0)) if existing else 0,
                 }
         
                 self._remember_sighting(info, existing)
@@ -469,6 +644,9 @@ class CommanderHistoryManager:
     
     
     def aggregated_commanders(self):
+        if location.system is None:
+            # Wait for the game's StartUp. Arrivals read before it are wiped by the reset.
+            return
         data = self.aggregate_most_recent_commanders(False)
     
         if not data:
@@ -489,6 +667,7 @@ class CommanderHistoryManager:
         wing_recent = location.wing_join is not None and (now_ts - location.wing_join <= 60)
         interdiction_recent = location.interdiction_ts is not None and (now_ts - location.interdiction_ts <= 60)
         pvp_kill_recent = location.pvp_kill_ts is not None and (now_ts - location.pvp_kill_ts <= 60)
+        in_batch = time.monotonic() < self._batch_until
 
     
         log.info(
@@ -517,6 +696,7 @@ class CommanderHistoryManager:
                     continue
                 
                 
+            self._touch(cmdr_id)
             current_flags = set(interactions)
             previous_flags = self.last_interactions.get(cmdr_id, set())
             
@@ -531,6 +711,7 @@ class CommanderHistoryManager:
                 "sound": existing.get("sound", "neutral") if existing else "neutral",
                 "last_seen": ts.isoformat(),
                 "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
+                "kills": int(existing.get("kills", 0)) if existing else 0,
             }
 
             if killed_now and is_unknown_name(info.get("name")):
@@ -573,6 +754,7 @@ class CommanderHistoryManager:
                 location.forget(cmdr_id)
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
+                self._departed.add(cmdr_id)
                 beep_this_commander = False
                 self._kill_reset_until[cmdr_id] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
                 self.last_interactions[cmdr_id] = current_flags
@@ -608,13 +790,6 @@ class CommanderHistoryManager:
                 continue
 
             if inst:
-                if interdiction_recent:
-                    # An interdiction carries a commander with you from the
-                    # old instance into the new one; they are still present,
-                    # so don't mark a departure or re-announce them.
-                    inst["here"] = True
-                    beep_this_commander = False
-                
                 if pvp_kill_recent:
                     inst["here"] = True
                     beep_this_commander = False
@@ -632,18 +807,28 @@ class CommanderHistoryManager:
                 
                 was_here = inst.get("here", False)
             
-                if was_here:
-                    # The game refreshes the Epoch for commanders that are still
-                    # present in the instance. Treat this as a refresh, not a
-                    # departure, so we don't re-announce the arrival on the next
-                    # edge while they remain in the same instance. A refresh is
-                    # not a new sighting, so the seen count is left unchanged.
+                if was_here and interdiction_recent:
+                    # An interdiction can carry someone who was already here with you
+                    # into the new instance. They are still present: no alert, no departure.
+                    beep_this_commander = False
+                    if existing is not None:
+                        info["seen_count"] = existing.get("seen_count", 1)
+                elif was_here:
+                    # A new record for someone already marked here means they left.
+                    # Jumping starts a new instance, which clears presence, so no
+                    # update arrives for people who are still in the instance.
+                    # Mark them gone and stay silent for this update. Departure
+                    # sounds still follow the beep-on-leave setting.
+                    inst["here"] = False
+                    location.departed.append(cmdr_id)
+                    self._departed.add(cmdr_id)
                     beep_this_commander = False
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
                 else:
                     inst["here"] = True
-                    beep_this_commander = True
+                    # Right after a game load, the game rewrites everyone already here.
+                    beep_this_commander = not in_batch and self._should_announce(cmdr_id, time.monotonic())
 
                 inst["state"] = location.state
                 inst["system"] = location.system
@@ -659,7 +844,7 @@ class CommanderHistoryManager:
     
                 inst = location.get_instance()[cmdr_id]
                 inst["here"] = True
-                beep_this_commander = True
+                beep_this_commander = not in_batch and self._should_announce(cmdr_id, time.monotonic())
     
     
             if not location.wing:
@@ -671,10 +856,10 @@ class CommanderHistoryManager:
                     allow_beep = True
                   
     
-            if beep_this_commander and not interdiction_recent:
+            # The overlay follows the same rule as the sound, so a wing member
+            # hidden by the wing setting is not shown on screen either.
+            if allow_beep and beep_this_commander:
                 connected_entries.append(info)
-
-            if allow_beep and beep_this_commander and interdiction_recent == False:
                 beeps_to_play.append(info)
    
             self._remember_sighting(info, existing)
@@ -732,8 +917,10 @@ class CommanderHistoryManager:
         )
 
     def note_journal_name(self, entry: dict) -> None:
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or not journal_player_names(entry):
+            # Most journal lines name no one. Skip them before the costly lookups.
             return
+        self._touch_names([name for _kind, name in journal_player_names(entry)])
         try:
             self._names.note_journal(
                 entry,
@@ -839,6 +1026,12 @@ class CommanderHistoryManager:
                 log.exception("Failed to show an updated commander spelling")
         return applied
 
+    def _wing_muted(self, cmdr_id) -> bool:
+        """True for a wing member while you are in a wing and wing alerts are off."""
+        if not location.wing or self.wing_notify:
+            return False
+        return "WingMember" in self.last_interactions.get(str(cmdr_id), set())
+
     def _process_departures(self):
         departed = location.departed
         if not departed:
@@ -863,7 +1056,11 @@ class CommanderHistoryManager:
         if jump_recent:
             return
 
-        infos = [self.seen_data[cmdr_id] for cmdr_id in departed if cmdr_id in self.seen_data]
+        infos = [
+            self.seen_data[cmdr_id]
+            for cmdr_id in departed
+            if cmdr_id in self.seen_data and not self._wing_muted(cmdr_id)
+        ]
         if infos and self._sound_listener:
             self._sound_listener(infos)
             log.info(
@@ -871,6 +1068,125 @@ class CommanderHistoryManager:
                 ", ".join(info.get("name", "unknown") for info in infos),
             )
 
+    def record_kill(self, victim) -> None:
+        """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
+        if not isinstance(victim, str) or not victim.strip():
+            return
+        key = name_key(victim)
+        with self._kills_lock:
+            self._live_kills[key] = self._live_kills.get(key, 0) + 1
+            self._kill_tally[key] = self._kill_tally.get(key, 0) + 1
+            self._save_kill_tally()
+
+    def _read_kill_tally(self) -> dict[str, int]:
+        try:
+            with open(self.kill_tally_path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return {str(k): int(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+    def _save_kill_tally(self) -> None:
+        try:
+            with open(self.kill_tally_path, "w", encoding="utf-8") as handle:
+                json.dump(self._kill_tally, handle, indent=2)
+        except OSError:
+            log.exception("Failed to save kill tally")
+
+    def _apply_kill_tally(self) -> None:
+        """Give each row the kill count for its name. Runs on the worker thread.
+
+        A name is credited to the most recently seen row with that name, so a
+        kill still counts after a row is named later.
+        """
+        with self._kills_lock:
+            tally = dict(self._kill_tally)
+        best: dict[str, str] = {}
+        for cid, info in self.seen_data.items():
+            if not isinstance(info, dict):
+                continue
+            name = info.get("name")
+            if not isinstance(name, str) or is_unknown_name(name):
+                continue
+            key = name_key(name)
+            current = best.get(key)
+            if current is None or str(info.get("last_seen", "")) > str(self.seen_data[current].get("last_seen", "")):
+                best[key] = cid
+        changed = []
+        for cid, info in self.seen_data.items():
+            if not isinstance(info, dict):
+                continue
+            value = 0
+            name = info.get("name")
+            if isinstance(name, str) and not is_unknown_name(name):
+                key = name_key(name)
+                if best.get(key) == cid:
+                    value = tally.get(key, 0)
+            if info.get("kills", 0) != value:
+                info["kills"] = value
+                changed.append(info)
+        if not changed:
+            return
+        self.save_seen_commanders()
+        if self._gui_listener:
+            try:
+                self._gui_listener(changed)
+            except Exception:
+                log.exception("Failed to show kill counts")
+    def _journal_kill_counts(self, before: datetime.datetime) -> dict[str, int]:
+        """Count PvP kills in the journals written before this session, keyed by name."""
+        counts: dict[str, int] = {}
+        journal_dir = edmc_journal_dir()
+        if not journal_dir or not os.path.isdir(journal_dir):
+            return counts
+        try:
+            names = [name for name in os.listdir(journal_dir) if _JOURNAL_FILE.match(name)]
+        except OSError:
+            return counts
+        for name in names:
+            try:
+                with open(os.path.join(journal_dir, name), "rb") as handle:
+                    for raw in handle:
+                        if b'"PVPKill"' not in raw:
+                            continue
+                        try:
+                            entry = json.loads(raw)
+                        except ValueError:
+                            continue
+                        if not isinstance(entry, dict) or entry.get("event") != "PVPKill":
+                            continue
+                        when = _journal_time(entry.get("timestamp"))
+                        victim = entry.get("Victim")
+                        if when is None or when >= before or not isinstance(victim, str):
+                            continue
+                        key = name_key(victim)
+                        if key:
+                            counts[key] = counts.get(key, 0) + 1
+            except OSError:
+                continue
+        return counts
+
+    def start_kill_backfill(self) -> None:
+        """Once per install: rebuild the kill tally from every journal before this session."""
+        marker = os.path.join(self.plugin_dir, _KILLS_BACKFILL_MARKER)
+        if os.path.exists(marker):
+            return
+        started = utc_now()
+
+        def run() -> None:
+            base = self._journal_kill_counts(started)
+            with self._kills_lock:
+                for key in set(base) | set(self._live_kills):
+                    self._kill_tally[key] = base.get(key, 0) + self._live_kills.get(key, 0)
+                self._save_kill_tally()
+            try:
+                with open(marker, "w", encoding="utf-8") as handle:
+                    handle.write(started.isoformat())
+            except OSError:
+                log.exception("Failed to save the kill backfill marker")
+            log.info("Kill tally rebuilt from journals: %d names", len(base))
+
+        threading.Thread(target=run, daemon=True, name="KillBackfill").start()
     def trigger(self):
         with self._lock:
             if self._reset_timer and self._reset_timer.is_alive():
@@ -912,6 +1228,11 @@ class CommanderHistoryManager:
                 self._process_departures()
                 self.aggregated_commanders()
                 self._resolve_unknown_names()
+                self._tick += 1
+                if self._tick % 5 == 0:
+                    self._apply_kill_tally()
+                self._expire_quiet_presence()
+                self._log_presence_changes()
             except Exception:
                 log.exception("Exception in CommanderHistoryManager worker loop, continuing")
 

@@ -29,6 +29,12 @@ _missing_logged = False
 _active_lock = threading.Lock()
 _active = {}
 
+# Every send bumps the generation and arms a timer. If nothing newer is sent
+# before the timer fires, the batch is cleared explicitly instead of relying
+# on the overlay to age it out.
+_generation = 0
+_clear_timer = None
+
 
 def _import_edmcoverlay():
     try:
@@ -147,7 +153,46 @@ def _send_message(item_id: str, text: str) -> None:
         log.exception("Failed to send overlay connection announcement")
 
 
+def _send_clear() -> None:
+    """Send a LegacyOverlay clear (ttl 0 with the same id) for the batch."""
+    if _send is None:
+        return
+    try:
+        _send({
+            "event": "LegacyOverlay",
+            "type": "message",
+            "id": BATCH_ID,
+            "plugin": PLUGIN_NAME,
+            "text": "",
+            "ttl": 0,
+        })
+    except Exception:
+        log.exception("Failed to clear overlay connection announcement")
+
+
+def _expire_batch(generation: int) -> None:
+    with _active_lock:
+        if generation != _generation:
+            return
+        _active.clear()
+    _send_clear()
+
+
+def clear_connected() -> None:
+    """Remove any connection announcement still on screen (jump, shutdown, stop)."""
+    global _generation, _clear_timer
+    with _active_lock:
+        _generation += 1
+        _active.clear()
+        if _clear_timer is not None:
+            _clear_timer.cancel()
+            _clear_timer = None
+    if _initialised:
+        _send_clear()
+
+
 def announce_connected(entries) -> None:
+    global _generation, _clear_timer
     if not entries:
         return
     if not config.get_config("overlay_announce", False):
@@ -174,7 +219,15 @@ def announce_connected(entries) -> None:
         # of the multi-line block.
         text = "\n".join(item["line"] for item in _active.values())
 
-    if not text:
-        return
+        if not text:
+            return
+
+        _generation += 1
+        generation = _generation
+        if _clear_timer is not None:
+            _clear_timer.cancel()
+        _clear_timer = threading.Timer(ALERT_TTL + 0.5, _expire_batch, args=(generation,))
+        _clear_timer.daemon = True
+        _clear_timer.start()
 
     _send_message(BATCH_ID, text)

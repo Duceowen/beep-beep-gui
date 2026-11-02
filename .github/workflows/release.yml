@@ -50,6 +50,11 @@ jobs:
           cat README.md >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
+      - name: Build release zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git archive --format=zip --prefix=beep-beep-gui/ -o "beep-beep-gui-${{ steps.version.outputs.version }}.zip" HEAD -- . ':(exclude).github'
+
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
@@ -57,3 +62,4 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: ${{ steps.version.outputs.version }}
           body: ${{ env.body }}
+          files: beep-beep-gui-${{ steps.version.outputs.version }}.zip

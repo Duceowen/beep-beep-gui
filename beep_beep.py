@@ -15,7 +15,6 @@ from sound_loader import sound_inst
 
 class BeepBeep:
     def __init__(self):
-        self.last_beep = datetime.datetime.min
         self.plugin_dir = os.path.dirname(__file__)
         self._play_lock = threading.Lock()
         self._players: list[subprocess.Popen] = []
@@ -738,7 +737,6 @@ class BeepBeep:
         if not self.sounds:
             return
     
-        now = datetime.datetime.utcnow()
         possible_sounds: list[str] = []
     
         for entry in info:
@@ -752,7 +750,6 @@ class BeepBeep:
             history_inst.seen_data[cmdr_id] = existing
     
         if possible_sounds:
-            self.last_beep = now
             history_inst.save_seen_commanders()
             self._schedule_sounds(possible_sounds)
         
