@@ -32,7 +32,7 @@ _HISTORY_TAIL = (
 _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
 _KILL_RESET_SUPPRESS_SECONDS = 60.0
-_LOAD_BATCH_SECONDS = 5.0
+_LOAD_BATCH_SECONDS = 15.0
 _REANNOUNCE_SECONDS = 60.0
 _BACKUP_KEEP = 10
 _SAVE_INTERVAL_SECONDS = 5.0
@@ -345,8 +345,6 @@ class CommanderHistoryManager:
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
-        # The first update after the plugin loads is real arrivals, not a stale snapshot.
-        self._first_update_pending = True
         self._live_kills: dict[str, int] = {}
         self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
         self._kill_tally: dict[str, int] = self._read_kill_tally()
@@ -438,6 +436,8 @@ class CommanderHistoryManager:
             now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             lag = max(0.0, (now_utc - event_at).total_seconds())
         self._batch_until = time.monotonic() + max(0.0, _LOAD_BATCH_SECONDS - lag)
+        # A load or menu return ends any supercruise drop-in, so its rewrite is not one.
+        location.instance_reset_pending = False
         self._announced_at.clear()
         self._departed.clear()
         self._left_at.clear()
@@ -771,9 +771,6 @@ class CommanderHistoryManager:
         wing_recent = location.wing_join is not None and (now_ts - location.wing_join <= 60)
         interdiction_recent = location.interdiction_ts is not None and (now_ts - location.interdiction_ts <= 60)
         pvp_kill_recent = location.pvp_kill_ts is not None and (now_ts - location.pvp_kill_ts <= 60)
-        # Dropping back in from supercruise, or the first update after the plugin
-        # loads, is an arrival event like a jump.
-        reset_recent = location.instance_reset_pending or self._first_update_pending
         in_batch = time.monotonic() < self._batch_until
 
     
@@ -978,7 +975,6 @@ class CommanderHistoryManager:
     
         # The supercruise drop-out has been handled, so the next update is ordinary.
         location.instance_reset_pending = False
-        self._first_update_pending = False
 
         stored = set(self.seen_data)
         self._resolve_unknown_names(
@@ -996,16 +992,6 @@ class CommanderHistoryManager:
         if not changed_entries:
             return
 
-        # Several arrivals at once with no jump or interdiction behind them are a
-        # stale presence snapshot (for example after a state change), not real arrivals.
-        if len(beeps_to_play) > 1 and not jump_recent and not interdiction_recent and not reset_recent:
-            log.info(
-                "Ignoring %d bulk arrivals with no jump: %s",
-                len(beeps_to_play),
-                ", ".join(str(info.get("name", "unknown")) for info in beeps_to_play),
-            )
-            beeps_to_play = []
-            connected_entries = []
     
         if beeps_to_play and self._sound_listener:
             self._sound_listener(beeps_to_play)
