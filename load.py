@@ -53,6 +53,11 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     
     if event in ("StartUp", "LoadGame", "Resurrected", "Died"):
         location.set(0, system)
+        if event == "Died":
+            # Being killed takes you out of the instance. Clear it now so the Now tag drops
+            # at once instead of waiting for the quiet timeout.
+            location.leave_instance()
+            history_inst.note_instance_reset()
 
     elif event == "SupercruiseEntry":        
         location.set(1, system)
