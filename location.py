@@ -81,14 +81,15 @@ class Location:
             "here": here
         }
          
-    def leave_instance(self):
+    def leave_instance(self, record_departures: bool = True):
         """Entering supercruise in the same system takes you out of the instance.
 
         Everyone in it is gone until you drop back into normal space, so they are
         cleared now and their return counts as a new arrival. A later jump still
         uses this snapshot as its jump backup if the instance is empty by then.
         """
-        self._record_departures()
+        if record_departures:
+            self._record_departures()
         if self.instance:
             self._jump_company = {
                 cmdr_id: dict(info) if isinstance(info, dict) else info
