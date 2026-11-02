@@ -2110,16 +2110,14 @@ class SeenCommandersGUI:
                 except (TypeError, ValueError):
                     return 0
             if sort_field == "last_seen":
-                if history_inst.is_present(cmdr_id):
-                    # Commanders in your instance sort above everyone else.
-                    return datetime.max.replace(tzinfo=timezone.utc)
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
                     if ts.tzinfo is None:
                         ts = ts.replace(tzinfo=timezone.utc)
-                    return ts
                 except Exception:
-                    return datetime(1, 1, 1, tzinfo=timezone.utc)
+                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
+                # Commanders in your instance sort above everyone else, newest first.
+                return (1 if history_inst.is_present(cmdr_id) else 0, ts)
             return cmdr_id
     
         all_ids = list(history_inst.seen_data.keys())
@@ -2246,16 +2244,14 @@ class SeenCommandersGUI:
                 except (TypeError, ValueError):
                     return 0
             if sort_field == "last_seen":
-                if history_inst.is_present(cmdr_id):
-                    # Commanders in your instance sort above everyone else.
-                    return datetime.max.replace(tzinfo=timezone.utc)
                 try:
                     ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
                     if ts.tzinfo is None:
                         ts = ts.replace(tzinfo=timezone.utc)
-                    return ts
                 except Exception:
-                    return datetime(1, 1, 1, tzinfo=timezone.utc)
+                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
+                # Commanders in your instance sort above everyone else, newest first.
+                return (1 if history_inst.is_present(cmdr_id) else 0, ts)
             return cmdr_id
     
         sorted_ids = sorted(history_inst.seen_data.keys(), key=sort_key, reverse=not sort_asc)
