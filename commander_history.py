@@ -31,7 +31,7 @@ _HISTORY_TAIL = (
 )
 _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
-_KILL_RESET_SUPPRESS_SECONDS = 15.0
+_KILL_RESET_SUPPRESS_SECONDS = 30.0
 _LOAD_BATCH_SECONDS = 15.0
 _REANNOUNCE_SECONDS = 60.0
 _BACKUP_KEEP = 10
@@ -1184,6 +1184,28 @@ class CommanderHistoryManager:
                 "BeepBeep: departure sound for %s",
                 ", ".join(info.get("name", "unknown") for info in infos),
             )
+
+    def note_kill(self, victim) -> None:
+        """A PvP kill by you removes the victim from the list at once.
+
+        The game sets the Killed flag only once, so a later kill of the same commander
+        is not seen in their record. The kill event itself is the reliable signal.
+        The victim is not announced again until the respawn window has passed."""
+        if not isinstance(victim, str) or not victim.strip():
+            return
+        key = name_key(victim)
+        now_ts = time.time()
+        for cid, info in list(self.seen_data.items()):
+            if not isinstance(info, dict) or not isinstance(info.get("name"), str):
+                continue
+            if name_key(info["name"]) != key:
+                continue
+            self._departed.add(cid)
+            self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            if self.is_present(cid):
+                location.forget(cid)
+                self._kill_removed.add(cid)
+        log.info("Kill recorded for %s", victim)
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""

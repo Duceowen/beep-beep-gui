@@ -92,6 +92,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         victim = entry.get("Victim")        
         location.pvp_kill(victim)
         history_inst.record_kill(victim)
+        history_inst.note_kill(victim)
         
 
 def plugin_prefs(parent, cmdr, is_beta):
