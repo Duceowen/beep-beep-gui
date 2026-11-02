@@ -87,6 +87,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     
     elif event == "Interdiction":
         location.interdiction()
+        if entry.get("Success") is False and entry.get("IsPlayer") is True:
+            history_inst.note_escape(entry.get("Interdicted"))
             
     elif event == "PVPKill":
         victim = entry.get("Victim")        

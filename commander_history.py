@@ -1207,6 +1207,26 @@ class CommanderHistoryManager:
                 self._kill_removed.add(cid)
         log.info("Kill recorded for %s", victim)
 
+    def note_escape(self, name) -> None:
+        """A failed interdiction: the target is no longer with you, so drop them from the list.
+
+        Like a kill, they are announced again only when they come back after the respawn window."""
+        if not isinstance(name, str) or not name.strip():
+            return
+        key = name_key(name)
+        now_ts = time.time()
+        for cid, info in list(self.seen_data.items()):
+            if not isinstance(info, dict) or not isinstance(info.get("name"), str):
+                continue
+            if name_key(info["name"]) != key:
+                continue
+            self._departed.add(cid)
+            self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            if self.is_present(cid):
+                location.forget(cid)
+                self._kill_removed.add(cid)
+        log.info("Interdiction target %s got away", name)
+
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
         if not isinstance(victim, str) or not victim.strip():
