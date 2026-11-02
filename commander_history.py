@@ -45,6 +45,7 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
+_LEAVE_MEMORY_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
 
@@ -1226,6 +1227,15 @@ class CommanderHistoryManager:
                 location.forget(cid)
                 self._kill_removed.add(cid)
         log.info("Interdiction target %s got away", name)
+
+    def remember_leave_snapshot(self) -> None:
+        """Entering supercruise: everyone heard in the last 10 minutes counts as already here.
+
+        The quiet timeout drops people sooner, but the game still lists them when you leave,
+        and they must not be announced as new arrivals."""
+        now = time.monotonic()
+        heard = {cid for cid, last in self._last_signal.items() if now - last < _LEAVE_MEMORY_SECONDS}
+        location.leave_snapshot = set(location.leave_snapshot) | heard
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
