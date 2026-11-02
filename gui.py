@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import os
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
@@ -306,7 +307,8 @@ class SeenCommandersGUI:
         self.row_offset = 0
         self.sort_field = "last_seen"
         self.sort_asc = False       
-        self.refresh_interval = 5000        
+        self.refresh_interval = 5000
+        self.presence_poll_ms = 250        
         self.beep_inst = None
         self._refresh_id = None
         self._on_foot = False
@@ -2375,11 +2377,17 @@ class SeenCommandersGUI:
         def refresh():
             if not self.window or not self.window.winfo_exists():
                 return
-    
-            self.refresh_gui()
-    
+
+            # Presence changes (the Now group) show up on the short poll, so arrivals
+            # appear right away. The full pass over every row stays on the slow timer.
+            present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_shown_present(cid))
+            now = time.monotonic()
+            if present != getattr(self, "_sorted_present", None) or now - getattr(self, "_last_full_refresh", 0.0) >= self.refresh_interval / 1000:
+                self._last_full_refresh = now
+                self.refresh_gui()
+
             self._refresh_id = self.window.after(
-                self.refresh_interval,
+                self.presence_poll_ms,
                 refresh
             )
     
