@@ -31,7 +31,7 @@ _HISTORY_TAIL = (
 )
 _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
-_KILL_RESET_SUPPRESS_SECONDS = 60.0
+_KILL_RESET_SUPPRESS_SECONDS = 15.0
 _LOAD_BATCH_SECONDS = 15.0
 _REANNOUNCE_SECONDS = 60.0
 _BACKUP_KEEP = 10
@@ -44,7 +44,7 @@ def _atomic_write_json(path: str, data) -> None:
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
-_PRESENCE_QUIET_SECONDS = 600.0
+_PRESENCE_QUIET_SECONDS = 180.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
 
@@ -341,6 +341,7 @@ class CommanderHistoryManager:
         self._batch_until = 0.0
         self._announced_at: dict[str, float] = {}
         self._departed: set[str] = set()
+        self._kill_removed: set[str] = set()
         self._left_at: dict[str, float] = {}
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
@@ -370,7 +371,10 @@ class CommanderHistoryManager:
         for cid in sorted(previous - present):
             # Any drop outside a jump counts as leaving, whatever the cause. A quick
             # re-add afterwards is a stale snapshot, not an arrival.
-            if not jumping:
+            if cid in self._kill_removed:
+                # A commander we killed is not a leave, so their respawn is not a stale re-add.
+                self._kill_removed.discard(cid)
+            elif not jumping:
                 self._left_at[cid] = time.monotonic()
         for cid in sorted(present - previous) + sorted(previous - present):
             info = self.seen_data.get(cid)
@@ -859,6 +863,7 @@ class CommanderHistoryManager:
                 # suppression: a victim who followed you through a jump is
                 # still dead and can come back.
                 location.forget(cmdr_id)
+                self._kill_removed.add(cmdr_id)
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
                 self._departed.add(cmdr_id)
