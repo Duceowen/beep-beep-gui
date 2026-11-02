@@ -427,9 +427,17 @@ class CommanderHistoryManager:
                 name = info.get("name", cid) if isinstance(info, dict) else cid
                 log.info("No signal from %s for %d minutes; no longer marked here", name, _PRESENCE_QUIET_SECONDS // 60)
 
-    def clear_presence(self) -> None:
-        """Forget everyone in the instance, e.g. after the main menu or a game load."""
-        self._batch_until = time.monotonic() + _LOAD_BATCH_SECONDS
+    def clear_presence(self, timestamp=None) -> None:
+        """Forget everyone in the instance, e.g. after the main menu or a game load.
+
+        EDMC can hand the event to plugins a few seconds after the game wrote it, so the
+        batch window is counted from the journal timestamp, not from delivery."""
+        lag = 0.0
+        event_at = _journal_time(timestamp)
+        if event_at is not None:
+            now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+            lag = max(0.0, (now_utc - event_at).total_seconds())
+        self._batch_until = time.monotonic() + max(0.0, _LOAD_BATCH_SECONDS - lag)
         self._announced_at.clear()
         self._departed.clear()
         self._left_at.clear()

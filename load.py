@@ -44,7 +44,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         history_inst.note_jump(entry.get("timestamp"))
     if event in ("StartUp", "LoadGame") or (event == "Music" and entry.get("MusicTrack") == "MainMenu"):
         # Leaving to the main menu or loading in again ends the instance.
-        history_inst.clear_presence()
+        history_inst.clear_presence(entry.get("timestamp"))
     if event in ("StartJump", "CarrierJump", "Shutdown", "ShutDown"):
         # Connection announcements belong to the system you are leaving.
         clear_connected()
