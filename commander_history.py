@@ -206,6 +206,7 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
+_RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
 
@@ -1447,8 +1448,9 @@ class CommanderHistoryManager:
             return
         if not force and time.monotonic() - self._instance_saved_at < _SAVE_INTERVAL_SECONDS:
             return
-        present = sorted(cid for cid, inst in location.instance.items() if isinstance(inst, dict) and inst.get("here"))
-        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen), "present": present}
+        now_mono = time.monotonic(); now_wall = time.time()
+        recent = {cid: now_wall - (now_mono - self._last_signal[cid]) for cid in self._instance_seen if cid in self._last_signal and now_mono - self._last_signal[cid] < _RESTORE_WINDOW_SECONDS}
+        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen), "recent": recent}
         try:
             _atomic_write_json(self.instance_seen_path, data)
         except (OSError, TypeError):
@@ -1471,8 +1473,11 @@ class CommanderHistoryManager:
         members = data.get("members")
         if isinstance(members, list):
             self._instance_seen = {str(m) for m in members}
-            for cid in data.get("present", []) or []:
-                location.instance[cid] = {"state": None, "system": None, "here": True}
+            now_wall = time.time()
+            for cid, when in (data.get("recent") or {}).items():
+                if now_wall - float(when) < _RESTORE_WINDOW_SECONDS:
+                    location.instance[str(cid)] = {"state": None, "system": None, "here": True}
+                    self._last_signal[str(cid)] = time.monotonic()
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
             self._skip_start_event = True
 
