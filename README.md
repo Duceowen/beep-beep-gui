@@ -3,7 +3,7 @@
 # BeepBeep — EDMarketConnector Plugin
 
 ## 1.0.38
-- Upgrading: close EDMC, delete the old beep-beep-gui folder (or at least location.py and sound_loader.py), then unzip this version into the plugins folder
+- Upgrading: close EDMC and unzip this version over the old beep-beep-gui folder. Keep the folder: it holds your seen commanders and kill counts. The old location.py and sound_loader.py are left behind but nothing uses them, so they can stay
 - Arrivals and leaves follow your instance: entering supercruise clears the visit, and dropping back in announces everyone listed in the new instance
 - Restarting EDMC keeps the people already with you (same system and game session), without sounds for them
 - Killed or escaped commanders leave the Now list at once and announce again only after the respawn window
