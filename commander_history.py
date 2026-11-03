@@ -237,7 +237,7 @@ _SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
 # A killed or escaped commander can be re-listed by the game just after a
 # supercruise drop. Only silence that re-list close to the drop, so a genuine
 # return later in the visit is still announced.
-_KILL_DROP_GUARD_SECONDS = 30.0
+_KILL_DROP_GUARD_SECONDS = 5.0
 _KILL_RELIST_GUARD_SECONDS = 600.0
 _RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"

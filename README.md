@@ -2,6 +2,9 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.42
+- The post-drop window for a killed or escaped commander's re-list is now 5 seconds, down from 30, so a respawn a few seconds after you drop out is less likely to be silenced
+
 ## 1.0.41
 - A commander left behind by entering supercruise is no longer announced when the game re-lists them later in the same supercruise. The silence now lasts until you drop out, not just until the next update
 
