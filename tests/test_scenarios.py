@@ -525,6 +525,29 @@ class SameSessionStart(unittest.TestCase):
         self.assertEqual(h.sent, [])
         self.assertTrue(present("901"))
 
+class QuietReturnAfterSupercruise(unittest.TestCase):
+    """Real: Defiant act and roshinator were removed by the quiet timeout at 05:50. You entered
+    supercruise at 05:58 and dropped back in at 05:59, and they stayed silent."""
+
+    def test_drop_in_after_supercruise_announces_a_quiet_removed_commander(self):
+        h = fresh_history()
+        add_row(h, "1001", "Defiant act")
+        location.system, location.state = "Shinrarta Dezhra", 0
+        location.add_instance("1001", state=0, system="Shinrarta Dezhra")
+        location.instance["1001"]["here"] = True
+        h._visit["1001"] = time.monotonic() - 10_000
+        h._presence_saved = {"1001"}
+        h._expire_quiet_presence()
+        self.assertTrue(h._gone["1001"].get("quiet_left"))
+        location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        feed(h, ["1001"], datetime.datetime(2026, 11, 3, 5, 59, 14))
+        self.assertEqual(h.sent, [["1001"]])
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

@@ -804,7 +804,9 @@ class CommanderHistoryManager:
         self._heard_clear()
 
     def note_instance_reset(self) -> None:
-        """Entering supercruise left the instance, so nobody there is a stale re-add."""
+        """Entering supercruise left the instance, so nobody there is a stale re-add.
+        A quiet-timeout removal does not carry over: the drop-in back into the instance is a return."""
+        self._forget_quiet_left()
         self._announced_at.clear()
         self._clear_departures()
         self._heard_clear()
