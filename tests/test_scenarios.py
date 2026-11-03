@@ -375,6 +375,26 @@ class DeathKeepsOldPeopleSilent(unittest.TestCase):
         self.assertEqual(location.leave_snapshot, set())
         self.assertFalse(location.death_snapshot)
 
+class ClearSnapshotTogether(unittest.TestCase):
+    def test_load_clears_supercruise_arrivals_too(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 1
+        location.supercruise_arrivals.add("77")
+        location.leave_snapshot = {"77"}
+        h.clear_presence("2026-11-03T05:00:00Z")
+        self.assertEqual(location.supercruise_arrivals, set())
+        self.assertEqual(location.leave_snapshot, set())
+
+    def test_jump_clears_snapshot_and_arrivals_together(self):
+        h = fresh_history()
+        location.supercruise_arrivals.add("77")
+        location.leave_snapshot = {"77"}
+        location.system = "Sol"
+        location.set(1, "Vega")
+        location.jump()
+        self.assertEqual(location.supercruise_arrivals, set())
+        self.assertEqual(location.leave_snapshot, set())
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

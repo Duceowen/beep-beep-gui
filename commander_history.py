@@ -120,14 +120,18 @@ class Location:
         self.supercruise_arrivals = set()
         self._fire_instance_reset()
 
+    def clear_snapshot(self) -> None:
+        """Forget the visit snapshot and the supercruise arrivals together."""
+        self.leave_snapshot = set()
+        self.death_snapshot = False
+        self.supercruise_arrivals = set()
+
     def jump(self):
         if self.prev_system != self.system:
             self.jump_ts = time.time()
             # A jump supersedes a pending supercruise drop-out.
             self.instance_reset_pending = False
-            self.leave_snapshot = set()
-            self.death_snapshot = False
-            self.supercruise_arrivals = set()
+            self.clear_snapshot()
             self._record_departures()
             if self.instance:
                 self.jump_backup = {
@@ -733,8 +737,7 @@ class CommanderHistoryManager:
         self._clear_departures()
         self._last_signal.clear()
         location.instance.clear()
-        location.leave_snapshot = set()
-        location.death_snapshot = False
+        location.clear_snapshot()
         if _journal_time(timestamp) != self._session_start:
             self._instance_seen.clear()
         self._instance_dirty = True
