@@ -1,4 +1,4 @@
-from commander_history import history_inst, read_session_state, read_current_system, location
+from commander_history import history_inst, read_session_state, read_current_system, read_in_supercruise, location
 from beep_beep import beep_inst
 from overlay_announcer import announce_connected, clear_connected
 from gui import gui_inst
@@ -13,7 +13,7 @@ def plugin_start3(plugin_dir):
     wing, session_start = read_session_state()
     location.set_wing(bool(wing))
     history_inst.set_session_start(session_start)
-    history_inst.restore_instance_seen(read_current_system())
+    history_inst.restore_instance_seen(read_current_system(), read_in_supercruise())
     log.info("Startup from journal: wing=%s session_start=%s", wing, session_start)
     history_inst.backup_seen_commanders()
     history_inst.load_seen_commanders()
@@ -54,7 +54,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     system = entry.get("StarSystem", system)
     
     if event in ("StartUp", "LoadGame", "Resurrected", "Died"):
-        location.set(0, system)
+        resume = event in ("StartUp", "LoadGame") and history_inst.take_resume_supercruise()
+        location.set(1 if resume else 0, system)
         if event == "Died":
             # Being killed takes you out of the instance. Clear it now so the Now tag drops
             # at once instead of waiting for the quiet timeout.

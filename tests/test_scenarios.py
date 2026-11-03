@@ -225,6 +225,68 @@ class DropOutOrder(unittest.TestCase):
         h.drop_supercruise_arrivals()
         self.assertFalse(present("3"))
 
+class RestartInSupercruise(unittest.TestCase):
+    def saved_visit(self, members):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "instance_seen.json")
+        now = time.time()
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"session_start": "2026-11-03T00:00:00", "system": "Sol",
+                       "members": members, "recent": {m: now for m in members}}, handle)
+        return path
+
+    def restore(self, path, in_supercruise):
+        location.__init__()
+        h = ch.CommanderHistoryManager()
+        h.plugin_dir = os.path.dirname(path)
+        h.instance_seen_path = path
+        h.set_session_start(datetime.datetime(2026, 11, 3, 0, 0, 0))
+        h.restore_instance_seen("Sol", in_supercruise=in_supercruise)
+        return h
+
+    def test_restart_in_supercruise_marks_nobody_present(self):
+        self.restore(self.saved_visit(["101", "102"]), in_supercruise=True)
+        self.assertFalse(present("101"))
+        self.assertFalse(present("102"))
+        self.assertEqual(location.state, 1)
+        self.assertEqual(set(location.leave_snapshot), {"101", "102"})
+
+    def test_restart_in_supercruise_relist_is_silent_and_drop_in_announces(self):
+        h = self.restore(self.saved_visit(["101", "102"]), in_supercruise=True)
+        h.sent = []
+        h._sound_listener = lambda infos: h.sent.append([i["commander_id"] for i in infos])
+        h._batch_until = 0
+        for cid in ("101", "102"):
+            h.seen_data[cid] = {"commander_id": cid, "name": cid, "sound": "neutral",
+                                "last_seen": "2026-11-03T00:00:00", "seen_count": 1, "kills": 0}
+        feed(h, ["101", "102"], datetime.datetime(2026, 11, 3, 1, 0))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(h.take_resume_supercruise())
+        location.set(0, "Sol", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        feed(h, ["101", "102"], datetime.datetime(2026, 11, 3, 1, 2))
+        self.assertEqual(sorted(sum(h.sent, [])), ["101", "102"])
+
+    def test_restart_in_normal_space_marks_recent_present(self):
+        self.restore(self.saved_visit(["101"]), in_supercruise=False)
+        self.assertTrue(present("101"))
+        self.assertNotEqual(location.state, 1)
+
+    def test_journal_says_supercruise_entry(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "Journal.2026-11-03T000000.01.log")
+        lines = [
+            {"event": "LoadGame", "StarSystem": "Sol", "timestamp": "2026-11-03T00:00:00Z"},
+            {"event": "SupercruiseEntry", "StarSystem": "Sol", "timestamp": "2026-11-03T00:10:00Z"},
+        ]
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(x) for x in lines) + "\n")
+        self.assertTrue(ch.read_in_supercruise(d))
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"event": "SupercruiseExit", "StarSystem": "Sol",
+                                     "timestamp": "2026-11-03T00:11:00Z"}) + "\n")
+        self.assertFalse(ch.read_in_supercruise(d))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

@@ -345,8 +345,8 @@ def read_session_state(journal_dir: str | None = None) -> tuple[bool | None, dat
 _SYSTEM_EVENTS = frozenset(("Location", "FSDJump", "SupercruiseEntry", "SupercruiseExit", "CarrierJump", "LoadGame", "StartUp", "Docked"))
 
 
-def read_current_system(journal_dir: str | None = None) -> str | None:
-    """The star system the newest journal says you are in, or None if it is not known yet."""
+def _last_location_entry(journal_dir: str | None = None) -> dict | None:
+    """The newest journal entry that says where you are, or None if there is none."""
     journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
     if not journal_dir or not os.path.isdir(journal_dir):
         return None
@@ -373,8 +373,20 @@ def read_current_system(journal_dir: str | None = None) -> str | None:
         except (ValueError, AttributeError):
             continue
         if entry.get("event") in _SYSTEM_EVENTS and isinstance(entry.get("StarSystem"), str):
-            return entry["StarSystem"]
+            return entry
     return None
+
+
+def read_current_system(journal_dir: str | None = None) -> str | None:
+    """The star system the newest journal says you are in, or None if it is not known yet."""
+    entry = _last_location_entry(journal_dir)
+    return entry["StarSystem"] if entry else None
+
+
+def read_in_supercruise(journal_dir: str | None = None) -> bool:
+    """True if the newest location event is a supercruise entry (you are outside the instance)."""
+    entry = _last_location_entry(journal_dir)
+    return bool(entry and entry.get("event") == "SupercruiseEntry")
 
 
 
@@ -559,6 +571,7 @@ class CommanderHistoryManager:
         self._instance_dirty = False
         self._instance_saved_at = 0.0
         self._skip_start_event = False
+        self._resume_supercruise = False
         self.instance_seen_path = os.path.join(self.plugin_dir, "instance_seen.json")
         # Per-commander removal bookkeeping: left_at (monotonic), suppress_until (wall),
         # departed (re-announce allowed), kill_removed (one-shot: removal was a kill or escape).
@@ -1514,8 +1527,11 @@ class CommanderHistoryManager:
         self._instance_dirty = False
         self._instance_saved_at = time.monotonic()
 
-    def restore_instance_seen(self, current_system: str | None = None) -> None:
-        """After a restart in the same game session, pick up who was already in the instance."""
+    def restore_instance_seen(self, current_system: str | None = None, in_supercruise: bool = False) -> None:
+        """After a restart in the same game session, pick up who was already in the instance.
+
+        In supercruise you are outside the instance, so the list is only the silence list
+        for the re-list, and nobody is marked present until you drop back in."""
         if self._session_start is None:
             return
         try:
@@ -1531,13 +1547,28 @@ class CommanderHistoryManager:
         members = data.get("members")
         if isinstance(members, list):
             self._instance_seen = {str(m) for m in members}
-            now_wall = time.time()
-            for cid, when in (data.get("recent") or {}).items():
-                if now_wall - float(when) < _RESTORE_WINDOW_SECONDS:
-                    location.instance[str(cid)] = {"state": None, "system": None, "here": True}
-                    self._last_signal[str(cid)] = time.monotonic()
-            log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
+            if in_supercruise:
+                location.system = current_system
+                location.state = 1
+                location.leave_snapshot = set(self._instance_seen)
+                location.leave_snapshot_active = True
+                location.instance_reset_pending = True
+                self._resume_supercruise = True
+                log.info("Restored %d commanders from the instance, in supercruise", len(self._instance_seen))
+            else:
+                now_wall = time.time()
+                for cid, when in (data.get("recent") or {}).items():
+                    if now_wall - float(when) < _RESTORE_WINDOW_SECONDS:
+                        location.instance[str(cid)] = {"state": None, "system": None, "here": True}
+                        self._last_signal[str(cid)] = time.monotonic()
+                log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
             self._skip_start_event = True
+
+    def take_resume_supercruise(self) -> bool:
+        """True once, for the startup event, when EDMC restarted while you were in supercruise."""
+        flag = getattr(self, "_resume_supercruise", False)
+        self._resume_supercruise = False
+        return flag
 
     def record_presence_now(self) -> None:
         """Record presence changes at once, before a state change, so supercruise arrivals are not missed."""
