@@ -30,7 +30,6 @@ class Location:
         self.instance_reset_pending = False
         # Commanders in the instance when supercruise was entered (see leave_instance).
         self.leave_snapshot: set[str] = set()
-        self.leave_snapshot_active = False
         # Commanders first heard while in supercruise. They are dropped when you drop back out.
         self.supercruise_arrivals: set[str] = set()
         self.pvp_kill_ts = None
@@ -115,7 +114,6 @@ class Location:
         self.instance.clear()
         self._jump_company_pending = False
         self.instance_reset_pending = True
-        self.leave_snapshot_active = True
         self.supercruise_arrivals = set()
         self._fire_instance_reset()
 
@@ -125,7 +123,6 @@ class Location:
             # A jump supersedes a pending supercruise drop-out.
             self.instance_reset_pending = False
             self.leave_snapshot = set()
-            self.leave_snapshot_active = False
             self.supercruise_arrivals = set()
             self._record_departures()
             if self.instance:
@@ -637,7 +634,7 @@ class CommanderHistoryManager:
             if rec.pop("kill_removed", False):
                 # A commander we killed or who escaped is not a leave, so their return is announced.
                 pass
-            elif cid in location.leave_snapshot and location.leave_snapshot_active:
+            elif cid in location.leave_snapshot:
                 # Removed because you entered supercruise: not a departure, so the drop-in can announce them.
                 pass
             elif not jumping:
@@ -733,7 +730,6 @@ class CommanderHistoryManager:
         self._last_signal.clear()
         location.instance.clear()
         location.leave_snapshot = set()
-        location.leave_snapshot_active = False
         if _journal_time(timestamp) != self._session_start:
             self._instance_seen.clear()
         self._instance_dirty = True
@@ -1534,7 +1530,6 @@ class CommanderHistoryManager:
     def forget_instance(self) -> None:
         """A jump, load, menu return or death starts a new instance."""
         location.leave_snapshot = set()
-        location.leave_snapshot_active = False
         self._instance_seen.clear()
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
@@ -1583,7 +1578,6 @@ class CommanderHistoryManager:
                 location.system = current_system
                 location.state = 1
                 location.leave_snapshot = set(self._instance_seen)
-                location.leave_snapshot_active = True
                 location.instance_reset_pending = True
                 self._resume_supercruise = True
                 log.info("Restored %d commanders from the instance, in supercruise", len(self._instance_seen))
