@@ -14,6 +14,7 @@ def plugin_start3(plugin_dir):
     wing, session_start = read_session_state()
     location.set_wing(bool(wing))
     history_inst.set_session_start(session_start)
+    history_inst.restore_instance_seen()
     log.info("Startup from journal: wing=%s session_start=%s", wing, session_start)
     history_inst.backup_seen_commanders()
     history_inst.load_seen_commanders()

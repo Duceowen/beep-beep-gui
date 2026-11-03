@@ -343,6 +343,9 @@ class CommanderHistoryManager:
         self._departed: set[str] = set()
         self._kill_removed: set[str] = set()
         self._instance_seen: set[str] = set()
+        self._instance_dirty = False
+        self._instance_saved_at = 0.0
+        self.instance_seen_path = os.path.join(self.plugin_dir, "instance_seen.json")
         self._left_at: dict[str, float] = {}
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
@@ -404,6 +407,7 @@ class CommanderHistoryManager:
         """Note that the game or the journal just showed this commander."""
         self._last_signal[str(cmdr_id)] = time.monotonic()
         self._instance_seen.add(str(cmdr_id))
+        self._instance_dirty = True
 
     def _touch_names(self, names) -> None:
         keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
@@ -449,7 +453,9 @@ class CommanderHistoryManager:
         self._left_at.clear()
         self._last_signal.clear()
         location.instance.clear()
-        self._instance_seen.clear()
+        if _journal_time(timestamp) != self._session_start:
+            self._instance_seen.clear()
+        self._instance_dirty = True
 
     def note_jump(self, timestamp) -> None:
         """A jump starts a new instance, so presence from the old one no longer applies."""
@@ -458,6 +464,7 @@ class CommanderHistoryManager:
             return
         self._instance_seen.clear()
         self._last_jump = jump_at
+        self._instance_dirty = True
         self._announced_at.clear()
         self._departed.clear()
         self._left_at.clear()
@@ -1241,6 +1248,38 @@ class CommanderHistoryManager:
     def forget_instance(self) -> None:
         """A jump, load, menu return or death starts a new instance."""
         self._instance_seen.clear()
+        self._instance_dirty = True
+
+    def flush_instance_seen(self, force: bool = False) -> None:
+        """Save who has been seen in this instance, so a restart in the same session keeps them."""
+        if not self._instance_dirty or self._session_start is None:
+            return
+        if not force and time.monotonic() - self._instance_saved_at < _SAVE_INTERVAL_SECONDS:
+            return
+        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen)}
+        try:
+            _atomic_write_json(self.instance_seen_path, data)
+        except (OSError, TypeError):
+            log.exception("Failed to save the instance list")
+            return
+        self._instance_dirty = False
+        self._instance_saved_at = time.monotonic()
+
+    def restore_instance_seen(self) -> None:
+        """After a restart in the same game session, pick up who was already in the instance."""
+        if self._session_start is None:
+            return
+        try:
+            with open(self.instance_seen_path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict) or data.get("session_start") != self._session_start.isoformat():
+            return
+        members = data.get("members")
+        if isinstance(members, list):
+            self._instance_seen = {str(m) for m in members}
+            log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
@@ -1392,6 +1431,7 @@ class CommanderHistoryManager:
             self.worker_thread.join(timeout=3)
             log.info("Beepbeep worker stopped.")
         self.flush_seen_commanders(force=True)
+        self.flush_instance_seen(force=True)
 
     def worker_loop(self):
         while not self.worker_stop_event.is_set():
@@ -1405,6 +1445,7 @@ class CommanderHistoryManager:
                 if self._tick % 5 == 0:
                     self._apply_kill_tally()
                 self._expire_quiet_presence()
+                self.flush_instance_seen()
                 self.flush_seen_commanders()
                 self._log_presence_changes()
             except Exception:
