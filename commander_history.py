@@ -345,6 +345,7 @@ class CommanderHistoryManager:
         self._instance_seen: set[str] = set()
         self._instance_dirty = False
         self._instance_saved_at = 0.0
+        self._skip_start_event = False
         self.instance_seen_path = os.path.join(self.plugin_dir, "instance_seen.json")
         self._left_at: dict[str, float] = {}
         self._last_signal: dict[str, float] = {}
@@ -440,6 +441,10 @@ class CommanderHistoryManager:
 
         EDMC can hand the event to plugins a few seconds after the game wrote it, so the
         batch window is counted from the journal timestamp, not from delivery."""
+        if self._skip_start_event:
+            # EDMC sends a synthesized StartUp when it starts while the game runs. The restored list is still valid.
+            self._skip_start_event = False
+            return
         if _journal_time(timestamp) is not None and _journal_time(timestamp) == self._session_start:
             # The same game session (EDMC restarted): nothing changed in the game, so keep the list.
             return
@@ -1285,6 +1290,7 @@ class CommanderHistoryManager:
             for cid in self._instance_seen:
                 location.instance[cid] = {"state": None, "system": None, "here": True}
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
+            self._skip_start_event = True
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
