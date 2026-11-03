@@ -546,7 +546,6 @@ class CommanderHistoryManager:
         self._reset_timer: threading.Timer | None = None
         self._lock = threading.Lock()    
         self.last_interactions: dict[str, set[str]] = {}
-        self._kill_reset_until: dict[str, float] = {}
         self._names = UnknownNameResolver()
         location.on_instance_reset = self.forget_pending_names
         self._session_start: datetime.datetime | None = None
@@ -556,14 +555,14 @@ class CommanderHistoryManager:
         self._tick = 0
         self._batch_until = 0.0
         self._announced_at: dict[str, float] = {}
-        self._departed: set[str] = set()
-        self._kill_removed: set[str] = set()
         self._instance_seen: set[str] = set()
         self._instance_dirty = False
         self._instance_saved_at = 0.0
         self._skip_start_event = False
         self.instance_seen_path = os.path.join(self.plugin_dir, "instance_seen.json")
-        self._left_at: dict[str, float] = {}
+        # Per-commander removal bookkeeping: left_at (monotonic), suppress_until (wall),
+        # departed (re-announce allowed), kill_removed (one-shot: removal was a kill or escape).
+        self._gone: dict[str, dict] = {}
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
@@ -592,14 +591,15 @@ class CommanderHistoryManager:
         for cid in sorted(previous - present):
             # Any drop outside a jump counts as leaving, whatever the cause. A quick
             # re-add afterwards is a stale snapshot, not an arrival.
-            if cid in self._kill_removed:
-                # A commander we killed is not a leave, so their respawn is not a stale re-add.
-                self._kill_removed.discard(cid)
+            rec = self._gone.setdefault(cid, {})
+            if rec.pop("kill_removed", False):
+                # A commander we killed or who escaped is not a leave, so their return is announced.
+                pass
             elif cid in location.leave_snapshot and location.leave_snapshot_active:
                 # Removed because you entered supercruise: not a departure, so the drop-in can announce them.
                 pass
             elif not jumping:
-                self._left_at[cid] = time.monotonic()
+                rec["left_at"] = time.monotonic()
         if location.state == 1:
             location.supercruise_arrivals.update(present - previous)
         for cid in sorted(present - previous) + sorted(previous - present):
@@ -614,17 +614,25 @@ class CommanderHistoryManager:
 
         A leave or a kill counts as leaving, so a quick return after a kill is still announced.
         """
-        left = self._left_at.get(cmdr_id)
+        rec = self._gone.get(cmdr_id, {})
+        left = rec.get("left_at")
         if left is not None and now - left < _REANNOUNCE_SECONDS:
             # Left by interdiction, high wake or similar and back within the window.
             # A return this soon is a stale re-add, not a new arrival.
             return False
         last = self._announced_at.get(cmdr_id)
-        if last is None or cmdr_id in self._departed or now - last >= _REANNOUNCE_SECONDS:
+        if last is None or rec.get("departed") or now - last >= _REANNOUNCE_SECONDS:
             self._announced_at[cmdr_id] = now
-            self._departed.discard(cmdr_id)
+            if cmdr_id in self._gone:
+                self._gone[cmdr_id]["departed"] = False
             return True
         return False
+
+    def _clear_departures(self) -> None:
+        """Forget leave timers and departure marks. Suppression windows are kept."""
+        for rec in self._gone.values():
+            rec.pop("left_at", None)
+            rec.pop("departed", None)
 
     def _touch(self, cmdr_id) -> None:
         """Note that the game or the journal just showed this commander."""
@@ -653,7 +661,7 @@ class CommanderHistoryManager:
                 continue
             if now - last >= _PRESENCE_QUIET_SECONDS:
                 inst["here"] = False
-                self._departed.add(cid)
+                self._gone.setdefault(cid, {})["departed"] = True
                 info = self.seen_data.get(cid)
                 name = info.get("name", cid) if isinstance(info, dict) else cid
                 log.info("No signal from %s for %d minutes; no longer marked here", name, _PRESENCE_QUIET_SECONDS // 60)
@@ -679,8 +687,7 @@ class CommanderHistoryManager:
         # A load or menu return ends any supercruise drop-in, so its rewrite is not one.
         location.instance_reset_pending = False
         self._announced_at.clear()
-        self._departed.clear()
-        self._left_at.clear()
+        self._clear_departures()
         self._last_signal.clear()
         location.instance.clear()
         location.leave_snapshot = set()
@@ -699,15 +706,13 @@ class CommanderHistoryManager:
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
         self._announced_at.clear()
-        self._departed.clear()
-        self._left_at.clear()
+        self._clear_departures()
         self._last_signal.clear()
 
     def note_instance_reset(self) -> None:
         """Entering supercruise left the instance, so nobody there is a stale re-add."""
         self._announced_at.clear()
-        self._departed.clear()
-        self._left_at.clear()
+        self._clear_departures()
         self._last_signal.clear()
 
     def is_shown_present(self, cmdr_id) -> bool:
@@ -1078,7 +1083,7 @@ class CommanderHistoryManager:
     
             beep_this_commander = True            
 
-            suppress_until = self._kill_reset_until.get(cmdr_id)
+            suppress_until = self._gone.get(cmdr_id, {}).get("suppress_until")
             if suppress_until is not None:
                 if now_ts < suppress_until:
                     # Frontier updates the killed commander's Epoch again
@@ -1090,7 +1095,7 @@ class CommanderHistoryManager:
                     self.seen_data[cmdr_id] = info
                     changed_entries.append(info)
                     continue
-                self._kill_reset_until.pop(cmdr_id, None)
+                self._gone[cmdr_id].pop("suppress_until", None)
 
             kill_reset = (
                 killed_now
@@ -1107,12 +1112,13 @@ class CommanderHistoryManager:
                 # suppression: a victim who followed you through a jump is
                 # still dead and can come back.
                 location.forget(cmdr_id)
-                self._kill_removed.add(cmdr_id)
+                rec = self._gone.setdefault(cmdr_id, {})
+                rec["kill_removed"] = True
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
-                self._departed.add(cmdr_id)
+                rec["departed"] = True
                 beep_this_commander = False
-                self._kill_reset_until[cmdr_id] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+                rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
                 self.last_interactions[cmdr_id] = current_flags
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1228,12 +1234,9 @@ class CommanderHistoryManager:
             [cid for cid in new_wing_unknown_ids if cid in stored],
         )
 
-        if self._kill_reset_until:
-            self._kill_reset_until = {
-                cid: until
-                for cid, until in self._kill_reset_until.items()
-                if until > now_ts
-            }
+        for rec in self._gone.values():
+            if "suppress_until" in rec and rec["suppress_until"] <= now_ts:
+                del rec["suppress_until"]
 
         if not changed_entries:
             return
@@ -1448,12 +1451,13 @@ class CommanderHistoryManager:
                 continue
             if not row_has_name(info, key):
                 continue
-            self._departed.add(cid)
-            self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            rec = self._gone.setdefault(cid, {})
+            rec["departed"] = True
+            rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
-                self._kill_removed.add(cid)
+                rec["kill_removed"] = True
         log.info("Kill recorded for %s", victim)
 
     def note_escape(self, name) -> None:
@@ -1469,12 +1473,13 @@ class CommanderHistoryManager:
                 continue
             if not row_has_name(info, key):
                 continue
-            self._departed.add(cid)
-            self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            rec = self._gone.setdefault(cid, {})
+            rec["departed"] = True
+            rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
-                self._kill_removed.add(cid)
+                rec["kill_removed"] = True
         log.info("Interdiction target %s got away", name)
 
     def remember_leave_snapshot(self) -> None:

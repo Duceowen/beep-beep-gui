@@ -74,6 +74,14 @@ def add_row(h, cid, name, **kw):
     h.seen_data[cid] = row
 
 
+def left_at(h, cid):
+    return h._gone.get(cid, {}).get("left_at")
+
+
+def suppressed_until(h, cid):
+    return h._gone.get(cid, {}).get("suppress_until")
+
+
 def present(cid):
     return bool(location.instance.get(cid, {}).get("here"))
 
@@ -103,7 +111,7 @@ class Arrivals(unittest.TestCase):
         feed(h, ["10"], datetime.datetime(2026, 11, 3, 1, 0))
         self.assertTrue(present("10"))
         self.assertEqual(h.sent, [])
-        self.assertNotIn("10", h._left_at)
+        self.assertIsNone(left_at(h, "10"))
 
 
 class Supercruise(unittest.TestCase):
@@ -151,8 +159,8 @@ class Supercruise(unittest.TestCase):
         self.assertEqual(sorted(sum(self.h.sent, [])), ["1", "2"])
 
     def test_removal_at_supercruise_entry_is_not_a_departure(self):
-        self.assertNotIn("1", self.h._left_at)
-        self.assertNotIn("2", self.h._left_at)
+        self.assertIsNone(left_at(self.h, "1"))
+        self.assertIsNone(left_at(self.h, "2"))
 
 
 class KillsAndEscapes(unittest.TestCase):
@@ -166,7 +174,7 @@ class KillsAndEscapes(unittest.TestCase):
         h.note_kill("victim")
         self.assertFalse(present("1"))
         self.assertTrue(present("2"))
-        self.assertIn("1", h._kill_reset_until)
+        self.assertIsNotNone(suppressed_until(h, "1"))
 
     def test_kill_matches_an_earlier_name(self):
         h = fresh_history()
@@ -191,14 +199,49 @@ class KillsAndEscapes(unittest.TestCase):
         location.system, location.state = "Sol", 0
         h.note_kill("victim")
         # inside the 30 s window: the update is ignored
-        h._kill_reset_until["1"] = time.time() + 30
+        h._gone["1"]["suppress_until"] = time.time() + 30
         feed(h, ["1"], datetime.datetime(2026, 11, 3, 1, 5))
         self.assertEqual(h.sent, [])
         # after the window: a new sighting is announced
-        h._kill_reset_until.pop("1", None)
+        h._gone["1"].pop("suppress_until", None)
         feed(h, ["1"], datetime.datetime(2026, 11, 3, 1, 6))
         self.assertEqual(h.sent, [["1"]])
 
+
+class MergedRecord(unittest.TestCase):
+    def test_kill_removal_is_not_a_leave(self):
+        h = fresh_history()
+        add_row(h, "1", "Victim")
+        location.add_instance("1", state=0, system="Sol"); location.instance["1"]["here"] = True
+        h.note_kill("victim")
+        h._log_presence_changes()
+        self.assertIsNone(left_at(h, "1"))
+
+    def test_escape_removal_is_not_a_leave(self):
+        h = fresh_history()
+        add_row(h, "5", "Runner")
+        location.add_instance("5", state=0, system="Sol"); location.instance["5"]["here"] = True
+        h.note_escape("runner")
+        h._log_presence_changes()
+        self.assertIsNone(left_at(h, "5"))
+
+    def test_quiet_timeout_marks_departed_so_return_announces(self):
+        h = fresh_history()
+        add_row(h, "7", "Quiet")
+        location.system, location.state = "Sol", 0
+        location.add_instance("7", state=0, system="Sol"); location.instance["7"]["here"] = True
+        h._announced_at["7"] = time.monotonic() - 10
+        h._gone.setdefault("7", {})["departed"] = True
+        self.assertTrue(h._should_announce("7", time.monotonic()))
+        self.assertFalse(h._gone["7"].get("departed"))
+
+    def test_load_keeps_active_kill_window(self):
+        h = fresh_history()
+        add_row(h, "3", "Dead")
+        h._gone["3"] = {"departed": True, "suppress_until": time.time() + 30}
+        h._clear_departures()
+        self.assertIsNotNone(suppressed_until(h, "3"))
+        self.assertNotIn("departed", h._gone["3"])
 
 class Persistence(unittest.TestCase):
     def save(self, h, members, recent_ids, system="Sol", session=datetime.datetime(2026, 11, 3, 0, 0, 0)):
