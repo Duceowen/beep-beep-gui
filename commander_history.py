@@ -567,6 +567,7 @@ class CommanderHistoryManager:
             name = info.get("name", cid) if isinstance(info, dict) else cid
             log.info("Presence %s: %s", "added" if cid in present else "removed", name)
         self._presence_saved = present
+        self._instance_dirty = True
 
     def _should_announce(self, cmdr_id: str, now: float) -> bool:
         """Announce an arrival unless they were announced recently and have not left since.
@@ -1446,7 +1447,8 @@ class CommanderHistoryManager:
             return
         if not force and time.monotonic() - self._instance_saved_at < _SAVE_INTERVAL_SECONDS:
             return
-        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen)}
+        present = sorted(cid for cid, inst in location.instance.items() if isinstance(inst, dict) and inst.get("here"))
+        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen), "present": present}
         try:
             _atomic_write_json(self.instance_seen_path, data)
         except (OSError, TypeError):
@@ -1469,7 +1471,7 @@ class CommanderHistoryManager:
         members = data.get("members")
         if isinstance(members, list):
             self._instance_seen = {str(m) for m in members}
-            for cid in self._instance_seen:
+            for cid in data.get("present", []) or []:
                 location.instance[cid] = {"state": None, "system": None, "here": True}
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
             self._skip_start_event = True
