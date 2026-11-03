@@ -58,6 +58,8 @@ def fresh_history(session=datetime.datetime(2026, 11, 3, 0, 0, 0)):
     h.plugin_dir = tempfile.mkdtemp()
     h.instance_seen_path = os.path.join(h.plugin_dir, "instance_seen.json")
     h.json_file_path = os.path.join(h.plugin_dir, "seen.json")
+    h.kill_tally_path = os.path.join(h.plugin_dir, "kill_tally.json")
+    h._kill_tally = {}
     h.seen_data = {}
     h.set_session_start(session)
     h._batch_until = 0
