@@ -53,7 +53,7 @@ jobs:
       - name: Build release zip
         if: steps.check.outputs.exists == 'false'
         run: |
-          git archive --format=zip --prefix=beep-beep-gui/ -o "beep-beep-gui-${{ steps.version.outputs.version }}.zip" HEAD -- . ':(exclude).github' ':(exclude)tests'
+          git archive --format=zip --prefix=beep-beep-gui/ -o "beep-beep-gui-${{ steps.version.outputs.version }}.zip" HEAD -- . ':(exclude).github' ':(exclude)tests' ':(exclude).project' ':(exclude).pydevproject'
 
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'

@@ -5,3 +5,7 @@ seen_commanders.json
 beepbeep_config.json
 beep-beep-*.wav
 backups/
+instance_seen.json
+kill_tally.json
+kill_tally_v2.txt
+kills_backfilled.txt
