@@ -34,8 +34,9 @@ class Location:
         self.death_snapshot = False
         # Commanders first heard while in supercruise. They are dropped when you drop back out.
         self.supercruise_arrivals: set[str] = set()
-        # Commanders dropped at a supercruise drop-out: their updates are ignored until a jump or load.
-        self.supercruise_dropped: set[str] = set()
+        # Commanders dropped at a supercruise drop-out, with the drop time. Updates from them are
+        # ignored for a short grace period, so the immediate re-list does not bring them back.
+        self.supercruise_dropped: dict[str, float] = {}
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -127,7 +128,7 @@ class Location:
         self.leave_snapshot = set()
         self.death_snapshot = False
         self.supercruise_arrivals = set()
-        self.supercruise_dropped = set()
+        self.supercruise_dropped = {}
 
     def jump(self):
         if self.prev_system != self.system:
@@ -214,6 +215,7 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
+_SUPERCRUISE_DROP_GRACE_SECONDS = 20.0
 _RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
@@ -1121,7 +1123,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if ((location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot) or cmdr_id in location.supercruise_dropped:
+            if ((location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot) or (cmdr_id in location.supercruise_dropped and now_ts - location.supercruise_dropped[cmdr_id] < _SUPERCRUISE_DROP_GRACE_SECONDS):
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1617,7 +1619,8 @@ class CommanderHistoryManager:
         dropped = set(location.supercruise_arrivals)
         for cid in dropped:
             location.forget(cid)
-        location.supercruise_dropped |= dropped
+        now = time.time()
+        location.supercruise_dropped.update({cid: now for cid in dropped})
         location.supercruise_arrivals = set()
 
     def record_kill(self, victim) -> None:

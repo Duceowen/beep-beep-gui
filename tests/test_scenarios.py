@@ -419,14 +419,23 @@ class DroppedArrivalsStayOut(unittest.TestCase):
         self.assertFalse(present("701"))
         self.assertEqual(h.sent, [])
 
+    def test_update_after_grace_period_shows_and_announces(self):
+        h = fresh_history()
+        add_row(h, "703", "Returns")
+        location.system, location.state = "Shinrarta Dezhra", 0
+        location.supercruise_dropped = {"703": time.time() - 60}
+        feed(h, ["703"], datetime.datetime(2026, 11, 3, 4, 29, 0))
+        self.assertTrue(present("703"))
+        self.assertEqual(h.sent, [["703"]])
+
     def test_jump_lets_a_commander_be_announced_again(self):
         h = fresh_history()
         add_row(h, "702", "Back")
-        location.supercruise_dropped = {"702"}
+        location.supercruise_dropped = {"702": time.time()}
         location.system = "Shinrarta Dezhra"
         location.set(1, "Vega")
         location.jump()
-        self.assertEqual(location.supercruise_dropped, set())
+        self.assertEqual(location.supercruise_dropped, {})
 
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
