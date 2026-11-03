@@ -2,6 +2,16 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.38
+- Arrivals and leaves follow your instance: entering supercruise clears the visit, and dropping back in announces everyone listed in the new instance
+- Restarting EDMC keeps the people already with you (same system and game session), without sounds for them
+- Killed or escaped commanders leave the Now list at once and announce again only after the respawn window
+- A commander who drops out of supercruise is not re-added by the next update for a short grace period
+- A commander removed by the quiet timeout does not sound on return until you jump, load, or die
+- Dying keeps the old instance's people off the Now list
+- Faster detection: the commander history is checked every 150 ms, so arrivals show sooner
+- Commander IDs are in the log lines for presence and sounds, and held-back arrivals say why
+- Names are taken only from local chat; renamed commanders still match kills by their earlier names
 ## 1.0.37
 - Arrivals are announced when you drop back into normal space from supercruise in the same system. Entering supercruise clears the instance, so the return is not treated as a stale re-add
 - The first arrivals after Beep Beep loads, and the first after a game load, are announced. The post-load silence is now 5 seconds from the game's own timestamp, so EDMC's delivery delay no longer swallows them
