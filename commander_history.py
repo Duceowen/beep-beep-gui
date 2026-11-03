@@ -30,6 +30,8 @@ class Location:
         self.instance_reset_pending = False
         # Commanders in the instance when supercruise was entered (see leave_instance).
         self.leave_snapshot: set[str] = set()
+        # True after a death: the snapshot silences re-listed people until a jump or load.
+        self.death_snapshot = False
         # Commanders first heard while in supercruise. They are dropped when you drop back out.
         self.supercruise_arrivals: set[str] = set()
         self.pvp_kill_ts = None
@@ -113,6 +115,7 @@ class Location:
         self.leave_snapshot = {str(cid) for cid in self.instance}
         self.instance.clear()
         self._jump_company_pending = False
+        self.death_snapshot = False
         self.instance_reset_pending = True
         self.supercruise_arrivals = set()
         self._fire_instance_reset()
@@ -123,6 +126,7 @@ class Location:
             # A jump supersedes a pending supercruise drop-out.
             self.instance_reset_pending = False
             self.leave_snapshot = set()
+            self.death_snapshot = False
             self.supercruise_arrivals = set()
             self._record_departures()
             if self.instance:
@@ -730,6 +734,7 @@ class CommanderHistoryManager:
         self._last_signal.clear()
         location.instance.clear()
         location.leave_snapshot = set()
+        location.death_snapshot = False
         if _journal_time(timestamp) != self._session_start:
             self._instance_seen.clear()
         self._instance_dirty = True
@@ -1110,7 +1115,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if location.instance_reset_pending and location.state == 1 and cmdr_id in location.leave_snapshot:
+            if (location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot:
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1528,8 +1533,9 @@ class CommanderHistoryManager:
         location.leave_snapshot = set(location.leave_snapshot) | set(self._instance_seen)
 
     def forget_instance(self) -> None:
-        """A jump, load, menu return or death starts a new instance."""
-        location.leave_snapshot = set()
+        """Death: the instance you were in is gone. Its people stay in the snapshot, so a
+        re-list of them is not announced as new. A jump or load clears the snapshot."""
+        location.death_snapshot = True
         self._instance_seen.clear()
         self._instance_dirty = True
         self.flush_instance_seen(force=True)

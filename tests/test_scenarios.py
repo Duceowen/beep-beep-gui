@@ -344,6 +344,35 @@ class UnknownSystemDoesNotOverwrite(unittest.TestCase):
         with open(h.instance_seen_path, encoding="utf-8") as handle:
             self.assertEqual(json.load(handle).get("system"), "Sol")
 
+class DeathKeepsOldPeopleSilent(unittest.TestCase):
+    def test_relist_after_death_is_silent_and_new_people_announce(self):
+        h = fresh_history()
+        add_row(h, "1", "JoshLike")
+        add_row(h, "2", "Newcomer")
+        location.system, location.state = "Sol", 0
+        location.add_instance("1", state=0, system="Sol")
+        location.instance["1"]["here"] = True
+        h._instance_seen.add("1")
+        location.leave_instance(record_departures=False)
+        h.forget_instance()
+        self.assertIn("1", location.leave_snapshot)
+        location.state = 0
+        feed(h, ["1"], datetime.datetime(2026, 11, 3, 4, 17, 38))
+        self.assertEqual(h.sent, [])
+        self.assertFalse(present("1"))
+        feed(h, ["1", "2"], datetime.datetime(2026, 11, 3, 4, 18, 0))
+        self.assertEqual(h.sent, [["2"]])
+
+    def test_jump_after_death_clears_the_snapshot(self):
+        h = fresh_history()
+        location.leave_snapshot = {"1"}
+        location.death_snapshot = True
+        location.system = "Sol"
+        location.set(1, "Vega")
+        location.jump()
+        self.assertEqual(location.leave_snapshot, set())
+        self.assertFalse(location.death_snapshot)
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
