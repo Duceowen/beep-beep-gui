@@ -9,7 +9,168 @@ import time
 from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
-from location import location
+
+class Location:
+    def __init__(self):
+        self.state = None
+        self.prev_state = None
+        self.system = None
+        self.prev_system = None
+        self.instance = {}
+        self.wing = False
+        self.jump_ts = None
+        self.wing_join = None
+        self.interdiction_ts = None
+        self.interdiction_complete = False
+        self.jump_backup = {}
+        self._jump_company = {}
+        self._jump_company_pending = False
+        # Set when you leave the instance for supercruise in the same system. Until
+        # you drop back into normal space, the instance is empty and updates wait.
+        self.instance_reset_pending = False
+        # Commanders in the instance when supercruise was entered (see leave_instance).
+        self.leave_snapshot: set[str] = set()
+        self.leave_snapshot_active = False
+        # Commanders first heard while in supercruise. They are dropped when you drop back out.
+        self.supercruise_arrivals: set[str] = set()
+        self.pvp_kill_ts = None
+        self.pvp_kill_victim = None
+        self.departed = []
+        self.on_instance_reset = None
+
+    def _record_departures(self):
+        for cmdr_id, info in self.instance.items():
+            if info.get("here", False):
+                self.departed.append(cmdr_id)
+
+    def set_wing(self, in_wing: bool):
+        self.wing = in_wing
+
+    def set(self, state=None, system=None, event=None):
+        if event == "SupercruiseExit" and self.interdiction_ts is not None:
+            now_ts = time.time()
+
+            if now_ts - self.interdiction_ts > 120:
+                self.interdiction_ts = None
+
+            
+        # StartJump calls set() before jump(). Dropping the instance here
+        # used to leave jump() snapshotting an empty dict, so commanders who
+        # were already here were announced again when you left.
+        self._jump_company_pending = False
+        # A known system changing is a jump. Going from no system to the first one (plugin start) is not, so restored presence stays.
+        if state != self.state and system != self.system and self.system is not None:
+            self._record_departures()
+            if self.instance or not self._jump_company:
+                # An empty instance here means it was already left for supercruise,
+                # so keep the snapshot taken then.
+                self._jump_company = {
+                    cmdr_id: dict(info) if isinstance(info, dict) else info
+                    for cmdr_id, info in self.instance.items()
+                }
+            self._jump_company_pending = True
+            self.instance = {}
+            self._fire_instance_reset()
+
+        self.prev_system = self.system
+        self.prev_state = self.state
+        self.state = state
+        self.system = system
+        
+    def get(self):
+        return self.state, self.system
+
+    def get_instance(self):
+        return self.instance
+    
+    def add_instance(self, id_, state=None, system=None):
+        if state is None:
+            state = -1
+        if system is None:
+            system = "Unknown"
+    
+        here = (system == self.system and state == self.state)
+    
+        self.instance[id_] = {
+            "state": state,
+            "system": system,
+            "here": here
+        }
+         
+    def leave_instance(self, record_departures: bool = True):
+        """Entering supercruise in the same system takes you out of the instance.
+
+        Everyone in it is gone until you drop back into normal space, so they are
+        cleared now and their return counts as a new arrival. A later jump still
+        uses this snapshot as its jump backup if the instance is empty by then.
+        """
+        if record_departures:
+            self._record_departures()
+        if self.instance:
+            self._jump_company = {
+                cmdr_id: dict(info) if isinstance(info, dict) else info
+                for cmdr_id, info in self.instance.items()
+            }
+        self.leave_snapshot = {str(cid) for cid in self.instance}
+        self.instance.clear()
+        self._jump_company_pending = False
+        self.instance_reset_pending = True
+        self.leave_snapshot_active = True
+        self.supercruise_arrivals = set()
+        self._fire_instance_reset()
+
+    def jump(self):
+        if self.prev_system != self.system:
+            self.jump_ts = time.time()
+            # A jump supersedes a pending supercruise drop-out.
+            self.instance_reset_pending = False
+            self.leave_snapshot = set()
+            self.leave_snapshot_active = False
+            self.supercruise_arrivals = set()
+            self._record_departures()
+            if self.instance:
+                self.jump_backup = {
+                    cmdr_id: dict(info) if isinstance(info, dict) else info
+                    for cmdr_id, info in self.instance.items()
+                }
+            elif self._jump_company_pending or self._jump_company:
+                self.jump_backup = self._jump_company
+            else:
+                self.jump_backup = {}
+            self._jump_company_pending = False
+            self._jump_company = {}
+            self.instance.clear()
+            self._fire_instance_reset()
+
+        else:
+            self.jump_ts = None
+            self.jump_backup = {}
+            self._jump_company_pending = False
+            self._jump_company = {}
+            
+    def wing_changed(self): 
+        self.wing_join = time.time()
+        
+    def interdiction(self):
+        self.interdiction_ts = time.time()
+        
+    def pvp_kill(self, victim):
+        self.pvp_kill_ts = time.time()
+        self.pvp_kill_victim = victim
+
+    def forget(self, cmdr_id):
+        self.instance.pop(cmdr_id, None)
+        self.jump_backup.pop(cmdr_id, None)
+        self._jump_company.pop(cmdr_id, None)
+
+    def _fire_instance_reset(self):
+        callback = self.on_instance_reset
+        if callback is not None:
+            callback()
+        
+        
+location = Location()
+
 from commander_names import (
     UnknownNameResolver,
     journal_player_names,

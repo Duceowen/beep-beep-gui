@@ -8,8 +8,7 @@ from tkinter import ttk
 import tkinter.font as tkFont
 from beep_beep_config import config
 from commander_history import history_inst, add_alias
-from beep_beep import beep_inst
-from sound_loader import sound_inst
+from beep_beep import beep_inst, sound_inst
 import clickthrough
 
 try:

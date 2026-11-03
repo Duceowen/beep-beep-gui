@@ -1,7 +1,6 @@
-from commander_history import history_inst, read_session_state
+from commander_history import history_inst, read_session_state, location
 from beep_beep import beep_inst
 from overlay_announcer import announce_connected, clear_connected
-from location import location
 from gui import gui_inst
 from logutil import log
 from version import __version__  # noqa: F401
