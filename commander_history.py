@@ -342,6 +342,42 @@ def read_session_state(journal_dir: str | None = None) -> tuple[bool | None, dat
     return in_wing, session_start
 
 
+_SYSTEM_EVENTS = frozenset(("Location", "FSDJump", "SupercruiseEntry", "SupercruiseExit", "CarrierJump", "LoadGame", "StartUp", "Docked"))
+
+
+def read_current_system(journal_dir: str | None = None) -> str | None:
+    """The star system the newest journal says you are in, or None if it is not known yet."""
+    journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
+    if not journal_dir or not os.path.isdir(journal_dir):
+        return None
+    try:
+        names = [name for name in os.listdir(journal_dir) if _JOURNAL_FILE.match(name)]
+    except OSError:
+        return None
+    if not names:
+        return None
+    path = os.path.join(journal_dir, max(names))
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - _JOURNAL_TAIL_BYTES))
+            tail = handle.read()
+    except OSError:
+        return None
+    for raw in reversed(tail.splitlines()):
+        if b'"StarSystem"' not in raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except (ValueError, AttributeError):
+            continue
+        if entry.get("event") in _SYSTEM_EVENTS and isinstance(entry.get("StarSystem"), str):
+            return entry["StarSystem"]
+    return None
+
+
+
 def platform_default_history_dir(system: str | None = None, home: str | None = None) -> str:
     system = system or platform.system()
     if system == "Windows":
@@ -658,6 +694,7 @@ class CommanderHistoryManager:
         self._instance_seen.clear()
         self._last_jump = jump_at
         self._instance_dirty = True
+        self.flush_instance_seen(force=True)
         self._announced_at.clear()
         self._departed.clear()
         self._left_at.clear()
@@ -1441,6 +1478,7 @@ class CommanderHistoryManager:
         location.leave_snapshot_active = False
         self._instance_seen.clear()
         self._instance_dirty = True
+        self.flush_instance_seen(force=True)
 
     def flush_instance_seen(self, force: bool = False) -> None:
         """Save who has been seen in this instance, so a restart in the same session keeps them."""
@@ -1450,7 +1488,7 @@ class CommanderHistoryManager:
             return
         now_mono = time.monotonic(); now_wall = time.time()
         recent = {cid: now_wall - (now_mono - self._last_signal[cid]) for cid in self._instance_seen if cid in self._last_signal and now_mono - self._last_signal[cid] < _RESTORE_WINDOW_SECONDS}
-        data = {"session_start": self._session_start.isoformat(), "members": sorted(self._instance_seen), "recent": recent}
+        data = {"session_start": self._session_start.isoformat(), "system": location.system, "members": sorted(self._instance_seen), "recent": recent}
         try:
             _atomic_write_json(self.instance_seen_path, data)
         except (OSError, TypeError):
@@ -1459,7 +1497,7 @@ class CommanderHistoryManager:
         self._instance_dirty = False
         self._instance_saved_at = time.monotonic()
 
-    def restore_instance_seen(self) -> None:
+    def restore_instance_seen(self, current_system: str | None = None) -> None:
         """After a restart in the same game session, pick up who was already in the instance."""
         if self._session_start is None:
             return
@@ -1469,6 +1507,9 @@ class CommanderHistoryManager:
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(data, dict) or data.get("session_start") != self._session_start.isoformat():
+            return
+        if current_system is None or data.get("system") != current_system:
+            log.info("Not restoring the instance list: saved in %s, now in %s", data.get("system"), current_system)
             return
         members = data.get("members")
         if isinstance(members, list):

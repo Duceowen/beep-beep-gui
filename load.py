@@ -1,4 +1,4 @@
-from commander_history import history_inst, read_session_state, location
+from commander_history import history_inst, read_session_state, read_current_system, location
 from beep_beep import beep_inst
 from overlay_announcer import announce_connected, clear_connected
 from gui import gui_inst
@@ -13,7 +13,7 @@ def plugin_start3(plugin_dir):
     wing, session_start = read_session_state()
     location.set_wing(bool(wing))
     history_inst.set_session_start(session_start)
-    history_inst.restore_instance_seen()
+    history_inst.restore_instance_seen(read_current_system())
     log.info("Startup from journal: wing=%s session_start=%s", wing, session_start)
     history_inst.backup_seen_commanders()
     history_inst.load_seen_commanders()
