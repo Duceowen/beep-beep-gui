@@ -208,6 +208,23 @@ class KillsAndEscapes(unittest.TestCase):
         self.assertEqual(h.sent, [["1"]])
 
 
+class DropOutOrder(unittest.TestCase):
+    def test_arrival_just_before_drop_out_is_still_dropped(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        add_row(h, "3", "LateArrival")
+        location.state = 1
+        feed(h, ["3"], datetime.datetime(2026, 11, 3, 1, 28))
+        # no worker tick here: the drop-out is handled first, as in load.py
+        h.record_presence_now()
+        location.set(0, "Sol", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertFalse(present("3"))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

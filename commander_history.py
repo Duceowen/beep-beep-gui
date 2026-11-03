@@ -1539,6 +1539,10 @@ class CommanderHistoryManager:
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
             self._skip_start_event = True
 
+    def record_presence_now(self) -> None:
+        """Record presence changes at once, before a state change, so supercruise arrivals are not missed."""
+        self._log_presence_changes()
+
     def drop_supercruise_arrivals(self) -> None:
         """Dropping back out of supercruise: anyone first heard only there is not in this instance."""
         for cid in list(location.supercruise_arrivals):

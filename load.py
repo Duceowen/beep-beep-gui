@@ -70,6 +70,9 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         history_inst.trigger()
 
     elif event in ("SupercruiseExit", "Location", "CarrierJump"): 
+        if event == "SupercruiseExit":
+            # Record anyone who arrived since the last worker tick while still in supercruise.
+            history_inst.record_presence_now()
         location.set(0, system, event)
         if event == "SupercruiseExit":
             history_inst.drop_supercruise_arrivals()
