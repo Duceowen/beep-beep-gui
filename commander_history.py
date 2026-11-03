@@ -606,7 +606,8 @@ class CommanderHistoryManager:
         self._tick = 0
         self._batch_until = 0.0
         self._announced_at: dict[str, float] = {}
-        self._instance_seen: set[str] = set()
+        # cid -> last heard (monotonic), or None: in this visit but not heard recently.
+        self._visit: dict[str, float | None] = {}
         self._instance_dirty = False
         self._instance_saved_at = 0.0
         self._skip_start_event = False
@@ -615,7 +616,6 @@ class CommanderHistoryManager:
         # Per-commander removal bookkeeping: left_at (monotonic), suppress_until (wall),
         # departed (re-announce allowed), kill_removed (one-shot: removal was a kill or escape).
         self._gone: dict[str, dict] = {}
-        self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
         self._live_kills: dict[str, int] = {}
@@ -657,7 +657,7 @@ class CommanderHistoryManager:
         for cid in sorted(present - previous) + sorted(previous - present):
             info = self.seen_data.get(cid)
             name = info.get("name", cid) if isinstance(info, dict) else cid
-            log.info("Presence %s: %s", "added" if cid in present else "removed", name)
+            log.info("Presence %s: %s (id %s)", "added" if cid in present else "removed", name, cid)
         self._presence_saved = present
         self._instance_dirty = True
 
@@ -686,10 +686,14 @@ class CommanderHistoryManager:
             rec.pop("left_at", None)
             rec.pop("departed", None)
 
+    def _heard_clear(self) -> None:
+        """Nobody counts as heard recently. The visit list itself is kept."""
+        for cid in self._visit:
+            self._visit[cid] = None
+
     def _touch(self, cmdr_id) -> None:
         """Note that the game or the journal just showed this commander."""
-        self._last_signal[str(cmdr_id)] = time.monotonic()
-        self._instance_seen.add(str(cmdr_id))
+        self._visit[str(cmdr_id)] = time.monotonic()
         self._instance_dirty = True
 
     def _touch_names(self, names) -> None:
@@ -707,9 +711,9 @@ class CommanderHistoryManager:
         for cid, inst in list(location.instance.items()):
             if not (isinstance(inst, dict) and inst.get("here")):
                 continue
-            last = self._last_signal.get(cid)
+            last = self._visit.get(cid)
             if last is None:
-                self._last_signal[cid] = now
+                self._visit[cid] = now
                 continue
             if now - last >= _PRESENCE_QUIET_SECONDS:
                 inst["here"] = False
@@ -740,11 +744,11 @@ class CommanderHistoryManager:
         location.instance_reset_pending = False
         self._announced_at.clear()
         self._clear_departures()
-        self._last_signal.clear()
+        self._heard_clear()
         location.instance.clear()
         location.clear_snapshot()
         if _journal_time(timestamp) != self._session_start:
-            self._instance_seen.clear()
+            self._visit.clear()
         self._instance_dirty = True
 
     def note_jump(self, timestamp) -> None:
@@ -752,25 +756,25 @@ class CommanderHistoryManager:
         jump_at = _journal_time(timestamp)
         if jump_at is None:
             return
-        self._instance_seen.clear()
+        self._visit.clear()
         self._last_jump = jump_at
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
         self._announced_at.clear()
         self._clear_departures()
-        self._last_signal.clear()
+        self._heard_clear()
 
     def note_instance_reset(self) -> None:
         """Entering supercruise left the instance, so nobody there is a stale re-add."""
         self._announced_at.clear()
         self._clear_departures()
-        self._last_signal.clear()
+        self._heard_clear()
 
     def is_shown_present(self, cmdr_id) -> bool:
         """Present for display: in the instance and heard within the quiet window."""
         if not self.is_present(cmdr_id):
             return False
-        last = self._last_signal.get(str(cmdr_id))
+        last = self._visit.get(str(cmdr_id))
         if last is None:
             return True
         return time.monotonic() - last < _PRESENCE_QUIET_SECONDS
@@ -1294,7 +1298,7 @@ class CommanderHistoryManager:
 
     
         if beeps_to_play or connected_entries:
-            log.info("TIMING emit t=%.3f file_mtime=%s names=%s", __import__("time").time(), self._history_mtime_for_log(), [str(e.get("name")) for e in (beeps_to_play or connected_entries)])
+            log.info("TIMING emit t=%.3f file_mtime=%s names=%s", __import__("time").time(), self._history_mtime_for_log(), [str(e.get("name")) + "#" + str(e.get("commander_id")) for e in (beeps_to_play or connected_entries)])
         if beeps_to_play and self._sound_listener:
             self._sound_listener(beeps_to_play)
     
@@ -1538,13 +1542,13 @@ class CommanderHistoryManager:
 
         Runaways and anyone heard earlier in the visit are included, so the game's
         re-list when you leave is not announced as new arrivals."""
-        location.leave_snapshot = set(location.leave_snapshot) | set(self._instance_seen)
+        location.leave_snapshot = set(location.leave_snapshot) | set(self._visit)
 
     def forget_instance(self) -> None:
         """Death: the instance you were in is gone. Its people stay in the snapshot, so a
         re-list of them is not announced as new. A jump or load clears the snapshot."""
         location.death_snapshot = True
-        self._instance_seen.clear()
+        self._visit.clear()
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
 
@@ -1558,8 +1562,8 @@ class CommanderHistoryManager:
         if not force and time.monotonic() - self._instance_saved_at < _SAVE_INTERVAL_SECONDS:
             return
         now_mono = time.monotonic(); now_wall = time.time()
-        recent = {cid: now_wall - (now_mono - self._last_signal[cid]) for cid in self._instance_seen if cid in self._last_signal and now_mono - self._last_signal[cid] < _RESTORE_WINDOW_SECONDS}
-        data = {"session_start": self._session_start.isoformat(), "system": location.system, "members": sorted(self._instance_seen), "recent": recent}
+        recent = {cid: now_wall - (now_mono - t) for cid, t in self._visit.items() if t is not None and now_mono - t < _RESTORE_WINDOW_SECONDS}
+        data = {"session_start": self._session_start.isoformat(), "system": location.system, "members": sorted(self._visit), "recent": recent}
         try:
             _atomic_write_json(self.instance_seen_path, data)
         except (OSError, TypeError):
@@ -1587,21 +1591,21 @@ class CommanderHistoryManager:
             return
         members = data.get("members")
         if isinstance(members, list):
-            self._instance_seen = {str(m) for m in members}
+            self._visit = {str(m): None for m in members}
             if in_supercruise:
                 location.system = current_system
                 location.state = 1
-                location.leave_snapshot = set(self._instance_seen)
+                location.leave_snapshot = set(self._visit)
                 location.instance_reset_pending = True
                 self._resume_supercruise = True
-                log.info("Restored %d commanders from the instance, in supercruise", len(self._instance_seen))
+                log.info("Restored %d commanders from the instance, in supercruise", len(self._visit))
             else:
                 now_wall = time.time()
                 for cid, when in (data.get("recent") or {}).items():
                     if now_wall - float(when) < _RESTORE_WINDOW_SECONDS:
                         location.instance[str(cid)] = {"state": None, "system": None, "here": True}
-                        self._last_signal[str(cid)] = time.monotonic()
-                log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
+                        self._visit[str(cid)] = time.monotonic()
+                log.info("Restored %d commanders seen in this instance", len(self._visit))
             self._skip_start_event = True
 
     def take_resume_supercruise(self) -> bool:

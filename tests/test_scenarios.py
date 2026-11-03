@@ -123,7 +123,7 @@ class Supercruise(unittest.TestCase):
             add_row(self.h, cid, name)
             location.add_instance(cid, state=0, system="Sol")
             location.instance[cid]["here"] = True
-            self.h._instance_seen.add(cid)
+            self.h._visit[cid] = None
         location.system, location.state = "Sol", 0
         location.set(1, "Sol", "SupercruiseEntry")
         location.leave_instance()
@@ -326,7 +326,7 @@ class UnknownSystemDoesNotOverwrite(unittest.TestCase):
             json.dump({"session_start": "2026-11-03T00:00:00", "system": "Sol",
                        "members": ["7"], "recent": {"7": time.time()}}, handle)
         location.system = None
-        h._instance_seen = {"9"}
+        h._visit = {"9": None}
         h._instance_dirty = True
         h._instance_saved_at = 0
         h.flush_instance_seen(force=True)
@@ -336,7 +336,7 @@ class UnknownSystemDoesNotOverwrite(unittest.TestCase):
     def test_flush_writes_once_system_is_known(self):
         h = fresh_history()
         location.system = None
-        h._instance_seen = {"9"}
+        h._visit = {"9": None}
         h._instance_dirty = True
         h._instance_saved_at = 0
         h.flush_instance_seen(force=True)
@@ -354,7 +354,7 @@ class DeathKeepsOldPeopleSilent(unittest.TestCase):
         location.system, location.state = "Sol", 0
         location.add_instance("1", state=0, system="Sol")
         location.instance["1"]["here"] = True
-        h._instance_seen.add("1")
+        h._visit["1"] = None
         location.leave_instance(record_departures=False)
         h.forget_instance()
         self.assertIn("1", location.leave_snapshot)
@@ -474,9 +474,9 @@ class MergedRecord(unittest.TestCase):
 
 class Persistence(unittest.TestCase):
     def save(self, h, members, recent_ids, system="Sol", session=datetime.datetime(2026, 11, 3, 0, 0, 0)):
-        h._instance_seen = set(members)
+        h._visit = {m: None for m in members}
         for cid in recent_ids:
-            h._last_signal[cid] = time.monotonic()
+            h._visit[cid] = time.monotonic()
         location.system = system
         h._instance_dirty = True
         h._instance_saved_at = 0
@@ -497,7 +497,7 @@ class Persistence(unittest.TestCase):
         h2 = self.load(h.instance_seen_path, datetime.datetime(2026, 11, 3, 0, 0, 0), "Sol")
         self.assertTrue(present("a"))
         self.assertFalse(present("b"))
-        self.assertIn("b", h2._instance_seen)
+        self.assertIn("b", h2._visit)
 
     def test_different_system_restores_nothing(self):
         h = fresh_history()
@@ -524,7 +524,7 @@ class Persistence(unittest.TestCase):
 
     def test_jump_writes_the_list_at_once(self):
         h = fresh_history()
-        h._instance_seen = {"x"}
+        h._visit = {"x": None}
         location.system = "Sol"
         h.note_jump("2026-11-03T01:00:00Z")
         self.assertTrue(os.path.exists(h.instance_seen_path))
