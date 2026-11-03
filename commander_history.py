@@ -595,6 +595,9 @@ class CommanderHistoryManager:
             if cid in self._kill_removed:
                 # A commander we killed is not a leave, so their respawn is not a stale re-add.
                 self._kill_removed.discard(cid)
+            elif cid in location.leave_snapshot and location.leave_snapshot_active:
+                # Removed because you entered supercruise: not a departure, so the drop-in can announce them.
+                pass
             elif not jumping:
                 self._left_at[cid] = time.monotonic()
         if location.state == 1:
