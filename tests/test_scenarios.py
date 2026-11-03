@@ -567,6 +567,50 @@ class QuietReturnAfterHyperspace(unittest.TestCase):
         feed(h, ["1101"], datetime.datetime(2026, 11, 3, 6, 10, 30))
         self.assertEqual(h.sent, [["1101"]])
 
+class WingMemberKillReturn(unittest.TestCase):
+    """Real: Chalia (a wing member, Epoch 06:33) was killed at 06:33:02 while you were in a wing
+    with 'Beep for wing members' off. They respawned at 06:33:58 and stayed silent."""
+
+    def setUp(self):
+        self.h = fresh_history()
+        self.h.last_interactions = {}
+        add_row(self.h, "9396046", "Chalia Sylthana")
+        location.system, location.state = "Algorab", 0
+        location.set_wing(True)
+        location.add_instance("9396046", state=0, system="Algorab")
+        location.instance["9396046"]["here"] = True
+        self.h._visit["9396046"] = time.monotonic()
+        self.h._presence_saved = {"9396046"}
+        import commander_history as _ch
+        self._old_get = _ch.config.get_config
+        _ch.config.get_config = lambda key, default=None: False if key == "wing_notify" else default
+
+    def tearDown(self):
+        import commander_history as _ch
+        _ch.config.get_config = self._old_get
+        location.set_wing(False)
+
+    def wing_update(self, when, flags):
+        entries = [{"CommanderID": 9396046, "Interactions": flags, "Epoch": epoch(when)}]
+        self.h.aggregate_most_recent_commanders = lambda first_run=False: {"Interactions": entries}
+        self.h.aggregated_commanders()
+
+    def test_killed_wing_member_announces_on_return_with_wing_notify_off(self):
+        self.h.note_kill("Chalia Sylthana")
+        self.h._log_presence_changes()
+        self.assertEqual(self.h.sent, [])
+        self.h._gone["9396046"]["suppress_until"] = time.time() - 1
+        self.wing_update(datetime.datetime(2026, 11, 3, 6, 33, 58), ["Met", "WingMember", "Killed"])
+        self.assertTrue(present("9396046"))
+        self.assertEqual(self.h.sent, [["9396046"]])
+
+    def test_wing_member_not_killed_stays_silent_with_wing_notify_off(self):
+        self.h._visit["9396046"] = time.monotonic() - 10_000
+        self.h._expire_quiet_presence()
+        self.h._gone["9396046"].pop("quiet_left", None)
+        self.wing_update(datetime.datetime(2026, 11, 3, 6, 40, 0), ["Met", "WingMember"])
+        self.assertEqual(self.h.sent, [])
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
