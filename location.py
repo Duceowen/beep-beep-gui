@@ -20,6 +20,7 @@ class Location:
         self.instance_reset_pending = False
         # Commanders in the instance when supercruise was entered (see leave_instance).
         self.leave_snapshot: set[str] = set()
+        self.leave_snapshot_active = False
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -101,6 +102,7 @@ class Location:
         self.instance.clear()
         self._jump_company_pending = False
         self.instance_reset_pending = True
+        self.leave_snapshot_active = True
         self._fire_instance_reset()
 
     def jump(self):
@@ -108,6 +110,8 @@ class Location:
             self.jump_ts = time.time()
             # A jump supersedes a pending supercruise drop-out.
             self.instance_reset_pending = False
+            self.leave_snapshot = set()
+            self.leave_snapshot_active = False
             self._record_departures()
             if self.instance:
                 self.jump_backup = {

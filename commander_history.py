@@ -440,6 +440,9 @@ class CommanderHistoryManager:
 
         EDMC can hand the event to plugins a few seconds after the game wrote it, so the
         batch window is counted from the journal timestamp, not from delivery."""
+        if _journal_time(timestamp) is not None and _journal_time(timestamp) == self._session_start:
+            # The same game session (EDMC restarted): nothing changed in the game, so keep the list.
+            return
         lag = 0.0
         event_at = _journal_time(timestamp)
         if event_at is not None:
@@ -453,6 +456,8 @@ class CommanderHistoryManager:
         self._left_at.clear()
         self._last_signal.clear()
         location.instance.clear()
+        location.leave_snapshot = set()
+        location.leave_snapshot_active = False
         if _journal_time(timestamp) != self._session_start:
             self._instance_seen.clear()
         self._instance_dirty = True
@@ -834,7 +839,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if location.instance_reset_pending and location.state == 1 and cmdr_id in location.leave_snapshot:
+            if location.leave_snapshot_active and cmdr_id in location.leave_snapshot:
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1207,6 +1212,7 @@ class CommanderHistoryManager:
                 continue
             self._departed.add(cid)
             self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
                 self._kill_removed.add(cid)
@@ -1227,6 +1233,7 @@ class CommanderHistoryManager:
                 continue
             self._departed.add(cid)
             self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+            location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
                 self._kill_removed.add(cid)
@@ -1241,6 +1248,8 @@ class CommanderHistoryManager:
 
     def forget_instance(self) -> None:
         """A jump, load, menu return or death starts a new instance."""
+        location.leave_snapshot = set()
+        location.leave_snapshot_active = False
         self._instance_seen.clear()
         self._instance_dirty = True
 
@@ -1273,6 +1282,8 @@ class CommanderHistoryManager:
         members = data.get("members")
         if isinstance(members, list):
             self._instance_seen = {str(m) for m in members}
+            for cid in self._instance_seen:
+                location.instance[cid] = {"state": None, "system": None, "here": True}
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
 
     def record_kill(self, victim) -> None:
