@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
 from beep_beep_config import config
-from commander_history import history_inst
+from commander_history import history_inst, add_alias
 from beep_beep import beep_inst
 from sound_loader import sound_inst
 import clickthrough
@@ -1466,6 +1466,7 @@ class SeenCommandersGUI:
             self.name_vars[cmdr_id].set(new_name)
             self.sound_vars[cmdr_id].set(new_sound)
 
+            add_alias(history_inst.seen_data[cmdr_id], history_inst.seen_data[cmdr_id].get("name"), new_name)
             history_inst.seen_data[cmdr_id]["name"] = new_name
             history_inst.seen_data[cmdr_id]["sound"] = new_sound
             

@@ -307,6 +307,24 @@ class CommanderEntry(TypedDict):
 
 CommanderDict = Dict[str, CommanderEntry]  
 
+def add_alias(info, old_name, new_name) -> None:
+    """Remember a name a commander had before it was changed, so the commander is still found by it."""
+    if not isinstance(info, dict) or not isinstance(old_name, str) or is_unknown_name(old_name):
+        return
+    if name_key(old_name) == name_key(str(new_name)):
+        return
+    aliases = info.setdefault("aliases", [])
+    if old_name not in aliases:
+        aliases.append(old_name)
+
+def row_has_name(info, key) -> bool:
+    """True if the row was ever known by this name (current name or an earlier one)."""
+    if not isinstance(info, dict):
+        return False
+    names = [info.get("name")] + list(info.get("aliases", []) or [])
+    return any(isinstance(n, str) and name_key(n) == key for n in names)
+
+
 class CommanderHistoryManager:
     def __init__(self):
         self.plugin_dir = os.path.dirname(__file__)
@@ -417,7 +435,7 @@ class CommanderHistoryManager:
         if not keys:
             return
         for cid, info in self.seen_data.items():
-            if isinstance(info, dict) and isinstance(info.get("name"), str) and name_key(info["name"]) in keys:
+            if isinstance(info, dict) and any(row_has_name(info, k) for k in keys):
                 self._touch(cid)
 
     def _expire_quiet_presence(self) -> None:
@@ -1146,6 +1164,7 @@ class CommanderHistoryManager:
                 continue
             if name_key(new_name) != name_key(old_name):
                 continue
+            add_alias(info, old_name, new_name)
             info["name"] = new_name
             applied.append((str(cmdr_id), old_name, new_name))
             updated.append(info)
@@ -1215,7 +1234,7 @@ class CommanderHistoryManager:
         for cid, info in list(self.seen_data.items()):
             if not isinstance(info, dict) or not isinstance(info.get("name"), str):
                 continue
-            if name_key(info["name"]) != key:
+            if not row_has_name(info, key):
                 continue
             self._departed.add(cid)
             self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
@@ -1236,7 +1255,7 @@ class CommanderHistoryManager:
         for cid, info in list(self.seen_data.items()):
             if not isinstance(info, dict) or not isinstance(info.get("name"), str):
                 continue
-            if name_key(info["name"]) != key:
+            if not row_has_name(info, key):
                 continue
             self._departed.add(cid)
             self._kill_reset_until[cid] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
