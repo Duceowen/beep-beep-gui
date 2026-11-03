@@ -1215,7 +1215,6 @@ class CommanderHistoryManager:
                 rec["departed"] = True
                 beep_this_commander = False
                 rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
-                rec["kill_return"] = True
                 self.last_interactions[cmdr_id] = current_flags
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1301,11 +1300,10 @@ class CommanderHistoryManager:
                 beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch)
     
     
-            kill_return = self._gone.get(cmdr_id, {}).get("kill_return", False)
             if not location.wing:
                 allow_beep = True
             else:
-                if is_wing and not kill_return:
+                if is_wing:
                     allow_beep = self.wing_notify
                 else:
                     allow_beep = True
@@ -1313,8 +1311,6 @@ class CommanderHistoryManager:
     
             # The overlay follows the same rule as the sound, so a wing member
             # hidden by the wing setting is not shown on screen either.
-            if beep_this_commander:
-                self._gone.get(cmdr_id, {}).pop("kill_return", None)
             if allow_beep and beep_this_commander:
                 connected_entries.append(info)
                 beeps_to_play.append(info)
@@ -1554,7 +1550,6 @@ class CommanderHistoryManager:
             rec = self._gone.setdefault(cid, {})
             rec["departed"] = True
             rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
-            rec["kill_return"] = True
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
@@ -1577,7 +1572,6 @@ class CommanderHistoryManager:
             rec = self._gone.setdefault(cid, {})
             rec["departed"] = True
             rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
-            rec["kill_return"] = True
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
                 location.forget(cid)
