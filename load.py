@@ -96,7 +96,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         location.wing_changed()
     
     elif event == "Interdiction":
-        location.interdiction()
+        location.interdiction(entry.get("Interdicted"))
         if entry.get("Success") is False and entry.get("IsPlayer") is True:
             history_inst.note_escape(entry.get("Interdicted"))
             

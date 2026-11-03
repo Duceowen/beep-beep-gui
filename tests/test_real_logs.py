@@ -75,6 +75,41 @@ class EscapeTimeline(unittest.TestCase):
         self.assertNotIn("601", location.departed)
 
 
+class StationDropAfterKill(unittest.TestCase):
+    """Real: Plague lll was killed at 17:11:39 after an interdiction, you entered
+    supercruise at 17:12:50 and dropped at Jameson Memorial at 17:14:26. The game
+    re-listed Plague at 17:14:29 and the old code announced them again, three
+    minutes after the kill. A re-list right after a drop is not a return."""
+
+    def setUp(self):
+        self.h = fresh_history()
+        add_row(self.h, "501", "plague lll")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        self.h.note_kill("plague lll")
+        # By the time you dock, the 30 s kill window is over.
+        self.h._gone["501"]["suppress_until"] = time.time() - 1
+        self.h._gone["501"]["removed_at"] = time.time() - 170
+
+    def enter_supercruise_and_drop(self):
+        location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
+        location.leave_instance()
+        self.h.remember_leave_snapshot()
+        self.h.note_instance_reset()
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        self.h.drop_supercruise_arrivals()
+
+    def test_stale_relist_at_station_drop_is_silent(self):
+        self.enter_supercruise_and_drop()
+        feed(self.h, ["501"], datetime.datetime(2026, 11, 3, 17, 14, 29))
+        self.assertEqual(self.h.sent, [])
+
+    def test_return_after_the_drop_guard_is_announced(self):
+        self.enter_supercruise_and_drop()
+        location.last_drop_ts -= 31
+        feed(self.h, ["501"], datetime.datetime(2026, 11, 3, 17, 15, 0))
+        self.assertEqual(self.h.sent, [["501"]])
+
+
 class RenameTimeline(unittest.TestCase):
     """Real: Shadow Amoras (id 619221) was renamed to fadedpanties on 2 Nov at 19:07.
     The journal then shows PVPKill Victim 'fadedpanties' at 19:07:13. The kill must still count."""

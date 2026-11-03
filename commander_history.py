@@ -21,6 +21,7 @@ class Location:
         self.jump_ts = None
         self.wing_join = None
         self.interdiction_ts = None
+        self.interdiction_target = None
         self.interdiction_complete = False
         self.jump_backup = {}
         self._jump_company = {}
@@ -37,6 +38,9 @@ class Location:
         # Commanders dropped at a supercruise drop-out, with the drop time. Updates from them are
         # ignored for a short grace period, so the immediate re-list does not bring them back.
         self.supercruise_dropped: dict[str, float] = {}
+        # When you last dropped out of supercruise. A freshly killed or escaped
+        # commander can be re-listed by the game at that moment; it is not a return.
+        self.last_drop_ts = None
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -56,6 +60,7 @@ class Location:
 
             if now_ts - self.interdiction_ts > 120:
                 self.interdiction_ts = None
+                self.interdiction_target = None
 
             
         # StartJump calls set() before jump(). Dropping the instance here
@@ -115,12 +120,22 @@ class Location:
                 cmdr_id: dict(info) if isinstance(info, dict) else info
                 for cmdr_id, info in self.instance.items()
             }
+        # The worker can hear a new commander between StartJump and the
+        # SupercruiseEntry event. That row was added while in supercruise, so
+        # it is a drop-out arrival, not someone left in the old instance.
+        late_arrivals = set()
+        if self.state == 1:
+            late_arrivals = {
+                str(cid)
+                for cid, info in self.instance.items()
+                if isinstance(info, dict) and info.get("here") and info.get("state") == 1
+            }
         self.leave_snapshot = {str(cid) for cid in self.instance}
         self.instance.clear()
         self._jump_company_pending = False
         self.death_snapshot = False
         self.instance_reset_pending = True
-        self.supercruise_arrivals = set()
+        self.supercruise_arrivals = late_arrivals
         self._fire_instance_reset()
 
     def clear_snapshot(self) -> None:
@@ -129,6 +144,7 @@ class Location:
         self.death_snapshot = False
         self.supercruise_arrivals = set()
         self.supercruise_dropped = {}
+        self.last_drop_ts = None
 
     def jump(self):
         if self.prev_system != self.system:
@@ -160,8 +176,9 @@ class Location:
     def wing_changed(self): 
         self.wing_join = time.time()
         
-    def interdiction(self):
+    def interdiction(self, target=None):
         self.interdiction_ts = time.time()
+        self.interdiction_target = target if isinstance(target, str) else None
         
     def pvp_kill(self, victim):
         self.pvp_kill_ts = time.time()
@@ -217,6 +234,11 @@ def _atomic_write_json(path: str, data) -> None:
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
 _SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
+# A killed or escaped commander can be re-listed by the game just after a
+# supercruise drop. Only silence that re-list close to the drop, so a genuine
+# return later in the visit is still announced.
+_KILL_DROP_GUARD_SECONDS = 30.0
+_KILL_RELIST_GUARD_SECONDS = 600.0
 _RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
@@ -671,7 +693,17 @@ class CommanderHistoryManager:
         if (location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot:
             return True
         dropped_at = location.supercruise_dropped.get(cmdr_id)
-        return dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS
+        if dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS:
+            return True
+        rec = self._gone.get(cmdr_id)
+        if rec is not None:
+            removed_at = rec.get("removed_at")
+            if removed_at is not None:
+                if now_ts - removed_at > _KILL_RELIST_GUARD_SECONDS:
+                    rec.pop("removed_at", None)
+                elif location.last_drop_ts is not None and now_ts - location.last_drop_ts < _KILL_DROP_GUARD_SECONDS:
+                    return True
+        return False
     def _decide_new_arrival(self, cmdr_id: str, in_batch: bool) -> bool:
         """The one decision for a commander who is new to the instance: beep or stay quiet.
 
@@ -700,6 +732,7 @@ class CommanderHistoryManager:
             self._announced_at[cmdr_id] = now
             if cmdr_id in self._gone:
                 self._gone[cmdr_id]["departed"] = False
+                self._gone[cmdr_id].pop("removed_at", None)
             return True
         log.info("Not announcing %s (id %s): announced %.0f s ago and not departed", self._name_for(cmdr_id), cmdr_id, now - last)
         return False
@@ -1321,9 +1354,6 @@ class CommanderHistoryManager:
                             
             self.last_interactions[cmdr_id] = current_flags
     
-        # The supercruise drop-out has been handled, so the next update is ordinary.
-        location.instance_reset_pending = False
-
         stored = set(self.seen_data)
         self._resolve_unknown_names(
             [cid for cid in killed_unknown_ids if cid in stored],
@@ -1549,6 +1579,7 @@ class CommanderHistoryManager:
                 continue
             rec = self._gone.setdefault(cid, {})
             rec["departed"] = True
+            rec["removed_at"] = now_ts
             rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
@@ -1571,6 +1602,7 @@ class CommanderHistoryManager:
                 continue
             rec = self._gone.setdefault(cid, {})
             rec["departed"] = True
+            rec["removed_at"] = now_ts
             rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
             location.leave_snapshot.discard(cid)
             if self.is_present(cid):
@@ -1663,13 +1695,47 @@ class CommanderHistoryManager:
         self._log_presence_changes()
 
     def drop_supercruise_arrivals(self) -> None:
-        """Dropping back out of supercruise: anyone first heard only there is not in this instance."""
+        """Dropping back out of supercruise: anyone first heard only there is not in this instance.
+
+        A successful interdiction is the exception: its target drops into normal
+        space with you and stays in the instance."""
         dropped = set(location.supercruise_arrivals)
+        target = None
+        if location.interdiction_ts is not None and time.time() - location.interdiction_ts <= 120.0:
+            target = location.interdiction_target
+        if target:
+            target_key = name_key(target)
+            matched = False
+            for cid in list(dropped):
+                info = self.seen_data.get(cid)
+                if isinstance(info, dict) and row_has_name(info, target_key):
+                    dropped.discard(cid)
+                    matched = True
+            if not matched:
+                # The history row can still be unnamed when the drop arrives.
+                # Keep unknown rows for the worker to resolve instead of
+                # dropping the commander you just interdicted.
+                for cid in list(dropped):
+                    info = self.seen_data.get(cid)
+                    name = info.get("name") if isinstance(info, dict) else None
+                    if not isinstance(info, dict) or is_unknown_name(name):
+                        dropped.discard(cid)
+        if dropped or target:
+            kept = set(location.supercruise_arrivals) - dropped
+            log.info(
+                "Supercruise drop: dropping %s; keeping %s",
+                sorted(self._name_for(cid) for cid in dropped),
+                sorted(self._name_for(cid) for cid in kept),
+            )
         for cid in dropped:
             location.forget(cid)
         now = time.time()
+        location.last_drop_ts = now
         location.supercruise_dropped.update({cid: now for cid in dropped})
         location.supercruise_arrivals = set()
+        # The drop-out has been handled, so later updates are ordinary. Until
+        # then, everyone left behind by the supercruise entry stays silent.
+        location.instance_reset_pending = False
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""

@@ -165,6 +165,23 @@ class Supercruise(unittest.TestCase):
         self.assertIsNone(left_at(self.h, "2"))
 
 
+class InterdictionDrop(unittest.TestCase):
+    def test_indicted_target_stays_in_the_instance(self):
+        h = fresh_history()
+        add_row(h, "501", "Target")
+        add_row(h, "502", "Bystander")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["501", "502"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        self.assertTrue(present("501"))
+        self.assertTrue(present("502"))
+        location.interdiction("Target")
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertTrue(present("501"))
+        self.assertFalse(present("502"))
+
+
 class KillsAndEscapes(unittest.TestCase):
     def test_kill_removes_victim_and_leaves_others(self):
         h = fresh_history()
@@ -226,6 +243,61 @@ class DropOutOrder(unittest.TestCase):
         location.set(0, "Sol", "SupercruiseExit")
         h.drop_supercruise_arrivals()
         self.assertFalse(present("3"))
+
+    def test_arrival_between_start_jump_and_entry_is_still_dropped(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "3", "Roookie Mistake")
+        location.set(1, "Sol", "StartJump")
+        feed(h, ["3"], datetime.datetime(2026, 11, 3, 1, 28))
+        self.assertTrue(present("3"))
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        location.set(0, "Sol", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertFalse(present("3"))
+        h.sent.clear()
+        feed(h, ["3"], datetime.datetime(2026, 11, 3, 1, 29))
+        self.assertEqual(h.sent, [])
+
+
+class LongSupercruiseRelist(unittest.TestCase):
+    def test_left_behind_commander_relisted_later_in_supercruise_is_silent(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "7", "Stayer")
+        location.add_instance("7", state=0, system="Sol")
+        location.instance["7"]["here"] = True
+        h._visit["7"] = None
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        # the first worker tick after entry, then a re-list about a minute later
+        feed(h, ["7"], datetime.datetime(2026, 11, 3, 1, 28))
+        h.sent.clear()
+        feed(h, ["7"], datetime.datetime(2026, 11, 3, 1, 29))
+        self.assertEqual(h.sent, [])
+
+
+class InterdictionUnknownTarget(unittest.TestCase):
+    def test_unresolved_target_is_kept_when_rows_are_unknown(self):
+        h = fresh_history()
+        add_row(h, "501", "unknown")
+        add_row(h, "502", "unknown")
+        add_row(h, "503", "Bystander")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["501", "502", "503"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        location.interdiction("Korvin Amberskiy")
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertTrue(present("501"))
+        self.assertTrue(present("502"))
+        self.assertFalse(present("503"))
+
 
 class RestartInSupercruise(unittest.TestCase):
     def saved_visit(self, members):

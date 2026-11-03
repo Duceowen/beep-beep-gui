@@ -2,6 +2,19 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## 1.0.41
+- A commander left behind by entering supercruise is no longer announced when the game re-lists them later in the same supercruise. The silence now lasts until you drop out, not just until the next update
+
+## 1.0.40
+- A commander heard just before the SupercruiseEntry event is no longer announced again when you drop out of supercruise. The late row is now treated as a supercruise arrival instead of being lost when the instance resets
+- When a successful interdiction target's history row has not been named yet, the target is kept in the instance instead of being dropped and replaced by another recent contact
+
+## 1.0.39
+- Windows alerts no longer go missing when BeepBeepPlay.dll fails to start the sound. The DLL now reports setup errors, and Beep Beep retries once and then plays the WAV through winsound
+- A commander you killed or who escaped is not announced again just after you drop out of supercruise, when the game re-lists them from recent contacts. A genuine return later in the visit still announces
+- The target of a successful interdiction stays in the instance when you drop out of supercruise with them
+- Linux playback retries the first player once before trying the next player, matching the Windows DLL retry
+
 ## 1.0.38
 - Upgrading: close EDMC and unzip this version over the old beep-beep-gui folder. Keep the folder: it holds your seen commanders and kill counts. The old location.py and sound_loader.py are left behind but nothing uses them, so they can stay
 - Arrivals and leaves follow your instance: entering supercruise clears the visit, and dropping back in announces everyone listed in the new instance
@@ -168,7 +181,7 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI. A row saved as unknown keeps its commander ID. The row records the first time that commander was seen, the last time, and up to eight recent visits, so a journal line can be matched to that visit without the file growing without limit. When a journal event names a player and only one unknown row matches that visit, the journal spelling is saved on the row. A ship scan, wing add, direct message, or player interdiction can supply the name. A PvP kill can supply it too, unless Autofill on Kill is turned off in Options. The name is saved after a short wait, so two unknown commanders in the same visit keep both rows unknown. Options can also update a saved name from a ship scan or similar journal event when that event shows the capitalization the commander used. The list lets you check each change, or Trust journal spelling can select every suggestion without checking them one by one. Nothing is saved until the final confirmation. A successful save closes the spelling windows and shows how many names were written. Go Back and Close leave every saved name as it is. That tool is experimental, so copy seen_commanders.json somewhere safe before using it.
 
-On Windows, sound playback uses the included DLL so each alert can have its own volume. If the DLL cannot load, Beep Beep makes a quieter copy of a WAV and plays it with winsound instead of dropping the alert. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. If one Linux player cannot play the copy, the next player is tried. macOS uses the system sound player.
+On Windows, sound playback uses the included DLL so each alert can have its own volume. If the DLL cannot load, Beep Beep makes a quieter copy of a WAV and plays it with winsound instead of dropping the alert. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. The first Linux player is retried once, then the next player is tried if it still cannot play the copy. macOS uses the system sound player.
 
 ## Installation
 1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**

@@ -581,8 +581,14 @@ class BeepBeep:
         amplitude: float,
         with_volume: bool,
         cleanup: str | None,
+        retry_first: bool = False,
     ) -> bool:
-        """Try each installed player. A player that exits immediately is skipped."""
+        """Try each installed player. A player that exits immediately is skipped.
+
+        The first installed player is retried once before the next player is
+        tried. This matches the Windows path, which retries the DLL once before
+        falling back to winsound.
+        """
         tried = False
         for player in self._linux_players(full_path):
             if not shutil.which(player):
@@ -590,30 +596,45 @@ class BeepBeep:
             if self.mute:
                 self._forget_temp(cleanup)
                 return True
-            cmd = self._command_for(player, full_path, amplitude, with_volume)
+            attempts = 2 if retry_first and not tried else 1
             tried = True
-            started = time.monotonic()
-            try:
-                opened = self._popen_player(cmd)
-            except OSError as exc:
-                log.error("Could not start %s: %s", player, exc)
-                continue
-            if opened is None:
-                self._forget_temp(cleanup)
-                return True
-            proc, chunks, drain = opened
-            if self._player_kept_running(proc, started):
-                if cleanup:
-                    threading.Thread(
-                        target=self._delete_after,
-                        args=(proc, cleanup),
-                        daemon=True,
-                    ).start()
-                log.info("Playing %s with %s", os.path.basename(full_path), player)
-                return True
-            drain.join(timeout=0.2)
-            err = b"".join(chunks).decode("utf-8", "replace").strip()
-            log.error("Player failed (%s): %s", " ".join(cmd), err or "exited before playback")
+            for attempt in range(attempts):
+                if attempt:
+                    time.sleep(0.05)
+                cmd = self._command_for(player, full_path, amplitude, with_volume)
+                started = time.monotonic()
+                try:
+                    opened = self._popen_player(cmd)
+                except OSError as exc:
+                    log.error("Could not start %s: %s", player, exc)
+                    break
+                if opened is None:
+                    self._forget_temp(cleanup)
+                    return True
+                proc, chunks, drain = opened
+                if self._player_kept_running(proc, started):
+                    if cleanup:
+                        threading.Thread(
+                            target=self._delete_after,
+                            args=(proc, cleanup),
+                            daemon=True,
+                        ).start()
+                    log.info("Started %s with %s", os.path.basename(full_path), player)
+                    return True
+                drain.join(timeout=0.2)
+                err = b"".join(chunks).decode("utf-8", "replace").strip()
+                if attempt + 1 < attempts:
+                    log.warning(
+                        "Player failed (%s): %s; retrying",
+                        " ".join(cmd),
+                        err or "exited before playback",
+                    )
+                else:
+                    log.error(
+                        "Player failed (%s): %s",
+                        " ".join(cmd),
+                        err or "exited before playback",
+                    )
         if not tried:
             log.error("No suitable sound player found for %s", full_path)
         return False
@@ -623,8 +644,9 @@ class BeepBeep:
 
         The copy is played at the player's normal volume. A unity volume flag
         on that copy makes some Mint players exit or mute, and 1.0.24 stopped
-        after the first player. Later players still get a turn. If the copy
-        cannot be played, the original file is played.
+        after the first player. The first player is retried once, then later
+        players still get a turn. If the copy cannot be played, the original
+        file is played.
         """
         cleanup = None
         play_path = full_path
@@ -640,7 +662,11 @@ class BeepBeep:
             scaled = cleanup is not None
             # Volume flags are only for a file that was not already scaled.
             if self._try_linux_players(
-                play_path, amplitude, not scaled and amplitude < 1.0, cleanup
+                play_path,
+                amplitude,
+                not scaled and amplitude < 1.0,
+                cleanup,
+                retry_first=True,
             ):
                 cleanup = None
                 return
@@ -690,13 +716,30 @@ class BeepBeep:
     def _play_windows(self, full_path: str, amplitude: float) -> None:
         dll = self._load_windows_dll()
         if dll is not None:
-            try:
-                if self.mute:
-                    return
-                dll.BeepBeepPlay(full_path.encode("utf-8"), self._dll_volume(amplitude))
-                return
-            except Exception:
-                log.exception("BeepBeepPlay.dll failed, using the Windows sound fallback")
+            name = os.path.basename(full_path)
+            for attempt in range(2):
+                try:
+                    if self.mute:
+                        return
+                    result = dll.BeepBeepPlay(
+                        full_path.encode("utf-8"), self._dll_volume(amplitude)
+                    )
+                    if result == 0:
+                        log.info("Started %s with BeepBeepPlay.dll", name)
+                        return
+                    log.warning(
+                        "BeepBeepPlay.dll could not play %s (0x%08X), attempt %d",
+                        name,
+                        result & 0xFFFFFFFF,
+                        attempt + 1,
+                    )
+                except Exception:
+                    log.exception(
+                        "BeepBeepPlay.dll failed on %s, attempt %d", name, attempt + 1
+                    )
+                if attempt == 0:
+                    time.sleep(0.05)
+            log.warning("Falling back to winsound for %s", name)
         self._play_windows_fallback(full_path, amplitude)
 
     def _play_windows_fallback(self, full_path: str, amplitude: float) -> None:
