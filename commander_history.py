@@ -844,7 +844,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if location.leave_snapshot_active and cmdr_id in location.leave_snapshot:
+            if location.instance_reset_pending and location.state == 1 and cmdr_id in location.leave_snapshot:
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
