@@ -937,15 +937,9 @@ class CommanderHistoryManager:
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
                 elif was_here:
-                    # A new record for someone already marked here means they left.
-                    # Jumping starts a new instance, which clears presence, so no
-                    # update arrives for people who are still in the instance.
-                    # Mark them gone and stay silent for this update. Departure
-                    # sounds still follow the beep-on-leave setting.
-                    inst["here"] = False
-                    location.departed.append(cmdr_id)
-                    self._departed.add(cmdr_id)
-                    self._left_at[cmdr_id] = time.monotonic()
+                    # The game refreshes the record of everyone still in the instance.
+                    # A refresh is not a departure: they stay here, silently, until the
+                    # quiet timeout, a jump, supercruise, a kill or an escape removes them.
                     beep_this_commander = False
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
