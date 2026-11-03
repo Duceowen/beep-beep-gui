@@ -203,6 +203,7 @@ _ELITE_APP_ID = "359320"
 _STEAM_LIBRARY_PATH = re.compile(r'"path"\s+"([^"]+)"')
 _KILL_RESET_SUPPRESS_SECONDS = 30.0
 _LOAD_BATCH_SECONDS = 15.0
+_RESTART_BATCH_SECONDS = 60.0
 _REANNOUNCE_SECONDS = 60.0
 _BACKUP_KEEP = 10
 _SAVE_INTERVAL_SECONDS = 5.0
@@ -766,7 +767,9 @@ class CommanderHistoryManager:
             self._skip_start_event = False
             return
         if _journal_time(timestamp) is not None and _journal_time(timestamp) == self._session_start:
-            # The same game session (EDMC restarted): nothing changed in the game, so keep the list.
+            # The same game session (EDMC restarted): keep the list. The game re-lists everyone
+            # already here, so stay quiet for a short window from now, not from the old journal time.
+            self._batch_until = time.monotonic() + _RESTART_BATCH_SECONDS
             return
         lag = 0.0
         event_at = _journal_time(timestamp)
@@ -1619,9 +1622,11 @@ class CommanderHistoryManager:
         try:
             with open(self.instance_seen_path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as err:
+            log.info("Not restoring the instance list: could not read it (%s)", err)
             return
         if not isinstance(data, dict) or data.get("session_start") != self._session_start.isoformat():
+            log.info("Not restoring the instance list: saved in session %s, now %s", data.get("session_start") if isinstance(data, dict) else None, self._session_start.isoformat())
             return
         if current_system is None or data.get("system") != current_system:
             log.info("Not restoring the instance list: saved in %s, now in %s", data.get("system"), current_system)

@@ -511,6 +511,20 @@ class RelistRule(unittest.TestCase):
         self.assertTrue(self.h._is_relist_silenced("11", self.now + 5))
         self.assertFalse(self.h._is_relist_silenced("11", self.now + 60))
 
+class SameSessionStart(unittest.TestCase):
+    """Real: EDMC reloaded during a session (synthesized StartUp). The game re-listed everyone
+    already here and they were announced, because the post-load window was never opened."""
+
+    def test_same_session_start_opens_a_quiet_window_from_now(self):
+        h = fresh_history(session=datetime.datetime(2026, 11, 3, 5, 39, 38))
+        location.system, location.state = "Shinrarta Dezhra", 0
+        h.clear_presence("2026-11-03T05:39:38Z")
+        self.assertGreater(h._batch_until, time.monotonic() + 30)
+        add_row(h, "901", "AlreadyHere")
+        feed(h, ["901"], datetime.datetime(2026, 11, 3, 5, 42, 34))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(present("901"))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
