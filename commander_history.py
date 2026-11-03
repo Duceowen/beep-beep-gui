@@ -34,6 +34,8 @@ class Location:
         self.death_snapshot = False
         # Commanders first heard while in supercruise. They are dropped when you drop back out.
         self.supercruise_arrivals: set[str] = set()
+        # Commanders dropped at a supercruise drop-out: their updates are ignored until a jump or load.
+        self.supercruise_dropped: set[str] = set()
         self.pvp_kill_ts = None
         self.pvp_kill_victim = None
         self.departed = []
@@ -125,6 +127,7 @@ class Location:
         self.leave_snapshot = set()
         self.death_snapshot = False
         self.supercruise_arrivals = set()
+        self.supercruise_dropped = set()
 
     def jump(self):
         if self.prev_system != self.system:
@@ -1118,7 +1121,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if (location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot:
+            if ((location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot) or cmdr_id in location.supercruise_dropped:
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1611,8 +1614,10 @@ class CommanderHistoryManager:
 
     def drop_supercruise_arrivals(self) -> None:
         """Dropping back out of supercruise: anyone first heard only there is not in this instance."""
-        for cid in list(location.supercruise_arrivals):
+        dropped = set(location.supercruise_arrivals)
+        for cid in dropped:
             location.forget(cid)
+        location.supercruise_dropped |= dropped
         location.supercruise_arrivals = set()
 
     def record_kill(self, victim) -> None:

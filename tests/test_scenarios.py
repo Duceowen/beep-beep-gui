@@ -395,6 +395,39 @@ class ClearSnapshotTogether(unittest.TestCase):
         self.assertEqual(location.supercruise_arrivals, set())
         self.assertEqual(location.leave_snapshot, set())
 
+class DroppedArrivalsStayOut(unittest.TestCase):
+    """Real: Valanga and BrokenWeltall were heard in supercruise, dropped at the drop-out,
+    then re-added by the next normal-space update and kept showing Now."""
+
+    def test_dropped_supercruise_arrival_is_not_re_added_by_the_next_update(self):
+        h = fresh_history()
+        add_row(h, "701", "Valanga")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        location.state = 1
+        location.add_instance("701", state=1, system="Shinrarta Dezhra")
+        location.instance["701"]["here"] = True
+        location.supercruise_arrivals.add("701")
+        h._presence_saved = {"701"}
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertFalse(present("701"))
+        feed(h, ["701"], datetime.datetime(2026, 11, 3, 4, 28, 6))
+        self.assertFalse(present("701"))
+        self.assertEqual(h.sent, [])
+
+    def test_jump_lets_a_commander_be_announced_again(self):
+        h = fresh_history()
+        add_row(h, "702", "Back")
+        location.supercruise_dropped = {"702"}
+        location.system = "Shinrarta Dezhra"
+        location.set(1, "Vega")
+        location.jump()
+        self.assertEqual(location.supercruise_dropped, set())
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
