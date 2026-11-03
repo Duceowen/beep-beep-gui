@@ -45,7 +45,6 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
-_LEAVE_MEMORY_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
 
@@ -343,6 +342,7 @@ class CommanderHistoryManager:
         self._announced_at: dict[str, float] = {}
         self._departed: set[str] = set()
         self._kill_removed: set[str] = set()
+        self._instance_seen: set[str] = set()
         self._left_at: dict[str, float] = {}
         self._last_signal: dict[str, float] = {}
         self._seen_dirty = False
@@ -403,6 +403,7 @@ class CommanderHistoryManager:
     def _touch(self, cmdr_id) -> None:
         """Note that the game or the journal just showed this commander."""
         self._last_signal[str(cmdr_id)] = time.monotonic()
+        self._instance_seen.add(str(cmdr_id))
 
     def _touch_names(self, names) -> None:
         keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
@@ -448,12 +449,14 @@ class CommanderHistoryManager:
         self._left_at.clear()
         self._last_signal.clear()
         location.instance.clear()
+        self._instance_seen.clear()
 
     def note_jump(self, timestamp) -> None:
         """A jump starts a new instance, so presence from the old one no longer applies."""
         jump_at = _journal_time(timestamp)
         if jump_at is None:
             return
+        self._instance_seen.clear()
         self._last_jump = jump_at
         self._announced_at.clear()
         self._departed.clear()
@@ -1229,13 +1232,15 @@ class CommanderHistoryManager:
         log.info("Interdiction target %s got away", name)
 
     def remember_leave_snapshot(self) -> None:
-        """Entering supercruise: everyone heard in the last 10 minutes counts as already here.
+        """Entering supercruise: everyone seen in this instance counts as already here.
 
-        The quiet timeout drops people sooner, but the game still lists them when you leave,
-        and they must not be announced as new arrivals."""
-        now = time.monotonic()
-        heard = {cid for cid, last in self._last_signal.items() if now - last < _LEAVE_MEMORY_SECONDS}
-        location.leave_snapshot = set(location.leave_snapshot) | heard
+        Runaways and anyone heard earlier in the visit are included, so the game's
+        re-list when you leave is not announced as new arrivals."""
+        location.leave_snapshot = set(location.leave_snapshot) | set(self._instance_seen)
+
+    def forget_instance(self) -> None:
+        """A jump, load, menu return or death starts a new instance."""
+        self._instance_seen.clear()
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
