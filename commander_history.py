@@ -1543,6 +1543,9 @@ class CommanderHistoryManager:
         """Save who has been seen in this instance, so a restart in the same session keeps them."""
         if not self._instance_dirty or self._session_start is None:
             return
+        if location.system is None:
+            # Not known yet after a restart. Writing now would save "no system" over the good file.
+            return
         if not force and time.monotonic() - self._instance_saved_at < _SAVE_INTERVAL_SECONDS:
             return
         now_mono = time.monotonic(); now_wall = time.time()

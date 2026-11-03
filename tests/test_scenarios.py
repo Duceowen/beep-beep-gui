@@ -316,6 +316,34 @@ class StartJumpAtRestart(unittest.TestCase):
         ])
         self.assertFalse(ch.read_in_supercruise(d))
 
+class UnknownSystemDoesNotOverwrite(unittest.TestCase):
+    def test_no_flush_while_system_is_unknown(self):
+        h = fresh_history()
+        path = h.instance_seen_path
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"session_start": "2026-11-03T00:00:00", "system": "Sol",
+                       "members": ["7"], "recent": {"7": time.time()}}, handle)
+        location.system = None
+        h._instance_seen = {"9"}
+        h._instance_dirty = True
+        h._instance_saved_at = 0
+        h.flush_instance_seen(force=True)
+        with open(path, encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle).get("system"), "Sol")
+
+    def test_flush_writes_once_system_is_known(self):
+        h = fresh_history()
+        location.system = None
+        h._instance_seen = {"9"}
+        h._instance_dirty = True
+        h._instance_saved_at = 0
+        h.flush_instance_seen(force=True)
+        self.assertFalse(os.path.exists(h.instance_seen_path))
+        location.system = "Sol"
+        h.flush_instance_seen(force=True)
+        with open(h.instance_seen_path, encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle).get("system"), "Sol")
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
@@ -404,6 +432,7 @@ class Persistence(unittest.TestCase):
     def test_jump_writes_the_list_at_once(self):
         h = fresh_history()
         h._instance_seen = {"x"}
+        location.system = "Sol"
         h.note_jump("2026-11-03T01:00:00Z")
         self.assertTrue(os.path.exists(h.instance_seen_path))
 
