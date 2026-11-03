@@ -287,6 +287,35 @@ class RestartInSupercruise(unittest.TestCase):
                                      "timestamp": "2026-11-03T00:11:00Z"}) + "\n")
         self.assertFalse(ch.read_in_supercruise(d))
 
+class StartJumpAtRestart(unittest.TestCase):
+    def journal(self, lines):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "Journal.2026-11-03T000000.01.log")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(json.dumps(x) for x in lines) + "\n")
+        return d
+
+    def test_supercruise_jump_started_counts_as_supercruise(self):
+        d = self.journal([
+            {"event": "LoadGame", "StarSystem": "Sol", "timestamp": "2026-11-03T00:00:00Z"},
+            {"event": "SupercruiseExit", "StarSystem": "Sol", "timestamp": "2026-11-03T00:05:00Z"},
+            {"event": "StartJump", "JumpType": "Supercruise", "timestamp": "2026-11-03T00:06:00Z"},
+        ])
+        self.assertTrue(ch.read_in_supercruise(d))
+
+    def test_exit_after_the_jump_counts_as_normal_space(self):
+        d = self.journal([
+            {"event": "StartJump", "JumpType": "Supercruise", "timestamp": "2026-11-03T00:06:00Z"},
+            {"event": "SupercruiseExit", "StarSystem": "Sol", "timestamp": "2026-11-03T00:07:00Z"},
+        ])
+        self.assertFalse(ch.read_in_supercruise(d))
+
+    def test_hyperspace_jump_is_not_supercruise(self):
+        d = self.journal([
+            {"event": "StartJump", "JumpType": "Hyperspace", "StarSystem": "Kivah", "timestamp": "2026-11-03T00:06:00Z"},
+        ])
+        self.assertFalse(ch.read_in_supercruise(d))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

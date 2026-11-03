@@ -384,9 +384,38 @@ def read_current_system(journal_dir: str | None = None) -> str | None:
 
 
 def read_in_supercruise(journal_dir: str | None = None) -> bool:
-    """True if the newest location event is a supercruise entry (you are outside the instance)."""
-    entry = _last_location_entry(journal_dir)
-    return bool(entry and entry.get("event") == "SupercruiseEntry")
+    """True if the newest journal events put you in supercruise: a supercruise jump has started
+    or the entry is written, and no exit, location or FSD jump has come after it."""
+    journal_dir = journal_dir if journal_dir is not None else edmc_journal_dir()
+    if not journal_dir or not os.path.isdir(journal_dir):
+        return False
+    try:
+        names = [name for name in os.listdir(journal_dir) if _JOURNAL_FILE.match(name)]
+        if not names:
+            return False
+        path = os.path.join(journal_dir, max(names))
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - _JOURNAL_TAIL_BYTES))
+            tail = handle.read()
+    except OSError:
+        return False
+    for raw in reversed(tail.splitlines()):
+        if b'"event"' not in raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except (ValueError, AttributeError):
+            continue
+        event = entry.get("event")
+        if event == "SupercruiseEntry":
+            return True
+        if event == "StartJump" and entry.get("JumpType") == "Supercruise":
+            return True
+        if event in ("SupercruiseExit", "Location", "FSDJump", "CarrierJump", "StartUp", "LoadGame"):
+            return False
+    return False
 
 
 
