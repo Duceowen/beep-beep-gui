@@ -548,6 +548,25 @@ class QuietReturnAfterSupercruise(unittest.TestCase):
         feed(h, ["1001"], datetime.datetime(2026, 11, 3, 5, 59, 14))
         self.assertEqual(h.sent, [["1001"]])
 
+class QuietReturnAfterHyperspace(unittest.TestCase):
+    """A hyperspace jump (FSDJump) starts a new instance, so a quiet-timeout removal must not
+    silence the return in the system you jumped to."""
+
+    def test_fsd_jump_lets_a_quiet_removed_commander_announce(self):
+        h = fresh_history()
+        add_row(h, "1101", "Quiet")
+        location.system, location.state = "Shinrarta Dezhra", 0
+        location.add_instance("1101", state=0, system="Shinrarta Dezhra")
+        location.instance["1101"]["here"] = True
+        h._visit["1101"] = time.monotonic() - 10_000
+        h._presence_saved = {"1101"}
+        h._expire_quiet_presence()
+        self.assertTrue(h._gone["1101"].get("quiet_left"))
+        h.note_jump("2026-11-03T06:10:00Z")
+        location.system = "Kivah"
+        feed(h, ["1101"], datetime.datetime(2026, 11, 3, 6, 10, 30))
+        self.assertEqual(h.sent, [["1101"]])
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
