@@ -454,6 +454,36 @@ class ArrivalDecision(unittest.TestCase):
         h._gone.setdefault("1", {})["departed"] = True
         self.assertTrue(h._decide_new_arrival("1", in_batch=False))
 
+class QuietTimeoutReturn(unittest.TestCase):
+    """Real: Valanga's low wake was seen at 05:09. The quiet timeout removed them, then a
+    normal-space update re-added and announced them at 05:10. They had left."""
+
+    def setUp(self):
+        self.h = fresh_history()
+        add_row(self.h, "801", "Valanga")
+        location.system, location.state = "Shinrarta Dezhra", 0
+        location.add_instance("801", state=0, system="Shinrarta Dezhra")
+        location.instance["801"]["here"] = True
+        self.h._visit["801"] = time.monotonic() - 10_000
+        self.h._presence_saved = {"801"}
+
+    def test_return_after_quiet_timeout_stays_silent(self):
+        self.h._expire_quiet_presence()
+        self.assertFalse(present("801"))
+        feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 10, 23))
+        self.assertEqual(self.h.sent, [])  # silent; the game still lists them, so Now may show
+
+    def test_jump_lets_a_quiet_commander_announce_again(self):
+        self.h._expire_quiet_presence()
+        self.h.note_jump("2026-11-03T05:20:00Z")
+        feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 21, 0))
+        self.assertEqual(self.h.sent, [["801"]])
+
+    def test_death_lets_a_quiet_commander_announce_again(self):
+        self.h._expire_quiet_presence()
+        self.h.forget_instance()
+        self.assertNotIn("quiet_left", self.h._gone["801"])
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()

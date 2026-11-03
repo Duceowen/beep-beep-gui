@@ -675,6 +675,9 @@ class CommanderHistoryManager:
         A leave or a kill counts as leaving, so a quick return after a kill is still announced.
         """
         rec = self._gone.get(cmdr_id, {})
+        if rec.get("quiet_left"):
+            log.info("Not announcing %s (id %s): removed by the quiet timeout this visit", self._name_for(cmdr_id), cmdr_id)
+            return False
         left = rec.get("left_at")
         if left is not None and now - left < _REANNOUNCE_SECONDS:
             # Left by interdiction, high wake or similar and back within the window.
@@ -693,6 +696,11 @@ class CommanderHistoryManager:
     def _name_for(self, cmdr_id) -> str:
         info = self.seen_data.get(str(cmdr_id))
         return str(info.get("name", cmdr_id)) if isinstance(info, dict) else str(cmdr_id)
+
+    def _forget_quiet_left(self) -> None:
+        """A jump, load or death starts a new visit: quiet removals no longer silence a return."""
+        for rec in self._gone.values():
+            rec.pop("quiet_left", None)
 
     def _clear_departures(self) -> None:
         """Forget leave timers and departure marks. Suppression windows are kept."""
@@ -731,7 +739,9 @@ class CommanderHistoryManager:
                 continue
             if now - last >= _PRESENCE_QUIET_SECONDS:
                 inst["here"] = False
-                self._gone.setdefault(cid, {})["departed"] = True
+                # Silence is not proof of a leave, but a return after it is not announced either.
+                # The silence stays in force until the next jump, load or death.
+                self._gone.setdefault(cid, {})["quiet_left"] = True
                 info = self.seen_data.get(cid)
                 name = info.get("name", cid) if isinstance(info, dict) else cid
                 log.info("No signal from %s for %d minutes; no longer marked here", name, _PRESENCE_QUIET_SECONDS // 60)
@@ -761,6 +771,7 @@ class CommanderHistoryManager:
         self._heard_clear()
         location.instance.clear()
         location.clear_snapshot()
+        self._forget_quiet_left()
         if _journal_time(timestamp) != self._session_start:
             self._visit.clear()
         self._instance_dirty = True
@@ -771,6 +782,7 @@ class CommanderHistoryManager:
         if jump_at is None:
             return
         self._visit.clear()
+        self._forget_quiet_left()
         self._last_jump = jump_at
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
@@ -1563,6 +1575,7 @@ class CommanderHistoryManager:
         re-list of them is not announced as new. A jump or load clears the snapshot."""
         location.death_snapshot = True
         self._visit.clear()
+        self._forget_quiet_left()
         self._instance_dirty = True
         self.flush_instance_seen(force=True)
 
