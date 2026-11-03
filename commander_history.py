@@ -661,6 +661,14 @@ class CommanderHistoryManager:
         self._presence_saved = present
         self._instance_dirty = True
 
+    def _decide_new_arrival(self, cmdr_id: str, in_batch: bool) -> bool:
+        """The one decision for a commander who is new to the instance: beep or stay quiet.
+
+        Quiet during the post-load batch, and for anyone whose announcement rules say no.
+        """
+        if in_batch:
+            return False
+        return self._should_announce(cmdr_id, time.monotonic())
     def _should_announce(self, cmdr_id: str, now: float) -> bool:
         """Announce an arrival unless they were announced recently and have not left since.
 
@@ -1246,7 +1254,7 @@ class CommanderHistoryManager:
                 else:
                     inst["here"] = True
                     # Right after a game load, the game rewrites everyone already here.
-                    beep_this_commander = not in_batch and self._should_announce(cmdr_id, time.monotonic())
+                    beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch)
 
                 inst["state"] = location.state
                 inst["system"] = location.system
@@ -1262,7 +1270,7 @@ class CommanderHistoryManager:
     
                 inst = location.get_instance()[cmdr_id]
                 inst["here"] = True
-                beep_this_commander = not in_batch and self._should_announce(cmdr_id, time.monotonic())
+                beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch)
     
     
             if not location.wing:

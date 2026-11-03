@@ -437,6 +437,23 @@ class DroppedArrivalsStayOut(unittest.TestCase):
         location.jump()
         self.assertEqual(location.supercruise_dropped, {})
 
+class ArrivalDecision(unittest.TestCase):
+    def test_new_commander_outside_the_batch_beeps(self):
+        h = fresh_history()
+        self.assertTrue(h._decide_new_arrival("1", in_batch=False))
+
+    def test_load_batch_is_quiet(self):
+        h = fresh_history()
+        self.assertFalse(h._decide_new_arrival("1", in_batch=True))
+        self.assertNotIn("1", h._announced_at)
+
+    def test_recent_announce_is_quiet_until_departed(self):
+        h = fresh_history()
+        self.assertTrue(h._decide_new_arrival("1", in_batch=False))
+        self.assertFalse(h._decide_new_arrival("1", in_batch=False))
+        h._gone.setdefault("1", {})["departed"] = True
+        self.assertTrue(h._decide_new_arrival("1", in_batch=False))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
