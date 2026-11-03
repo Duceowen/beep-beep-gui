@@ -800,6 +800,7 @@ class BeepBeep:
         if amplitude <= 0.0:
             return
 
+        log.info("TIMING sound t=%.3f file=%s", __import__("time").time(), os.path.basename(full_path))
         self._play_sound_cross_platform(full_path, amplitude)
 
         

@@ -1695,13 +1695,13 @@ class CommanderHistoryManager:
     def worker_loop(self):
         while not self.worker_stop_event.is_set():
             try:
-                if self.worker_stop_event.wait(1):
+                if self.worker_stop_event.wait(0.15):
                     break
                 self._process_departures()
                 self.aggregated_commanders()
                 self._resolve_unknown_names()
                 self._tick += 1
-                if self._tick % 5 == 0:
+                if self._tick % 7 == 0:
                     self._apply_kill_tally()
                 self._expire_quiet_presence()
                 self.flush_instance_seen()
