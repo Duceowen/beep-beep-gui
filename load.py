@@ -70,6 +70,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
 
     elif event in ("SupercruiseExit", "Location", "CarrierJump"): 
         location.set(0, system, event)
+        if event == "SupercruiseExit":
+            history_inst.drop_supercruise_arrivals()
 
         history_inst.trigger()
 

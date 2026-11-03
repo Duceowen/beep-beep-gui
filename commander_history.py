@@ -381,6 +381,8 @@ class CommanderHistoryManager:
                 self._kill_removed.discard(cid)
             elif not jumping:
                 self._left_at[cid] = time.monotonic()
+        if location.state == 1:
+            location.supercruise_arrivals.update(present - previous)
         for cid in sorted(present - previous) + sorted(previous - present):
             info = self.seen_data.get(cid)
             name = info.get("name", cid) if isinstance(info, dict) else cid
@@ -1291,6 +1293,12 @@ class CommanderHistoryManager:
                 location.instance[cid] = {"state": None, "system": None, "here": True}
             log.info("Restored %d commanders seen in this instance", len(self._instance_seen))
             self._skip_start_event = True
+
+    def drop_supercruise_arrivals(self) -> None:
+        """Dropping back out of supercruise: anyone first heard only there is not in this instance."""
+        for cid in list(location.supercruise_arrivals):
+            location.forget(cid)
+        location.supercruise_arrivals = set()
 
     def record_kill(self, victim) -> None:
         """Count one PvP kill by victim name. Rows pick up the count when they have that name."""
