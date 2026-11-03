@@ -661,6 +661,16 @@ class CommanderHistoryManager:
         self._presence_saved = present
         self._instance_dirty = True
 
+    def _is_relist_silenced(self, cmdr_id: str, now_ts: float) -> bool:
+        """True when an update is a re-list of people you have already left behind, not an arrival.
+
+        Silent while supercruise or a death keeps the old visit in force, and for a short grace
+        after a supercruise drop-out, which covers the immediate re-list.
+        """
+        if (location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot:
+            return True
+        dropped_at = location.supercruise_dropped.get(cmdr_id)
+        return dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS
     def _decide_new_arrival(self, cmdr_id: str, in_batch: bool) -> bool:
         """The one decision for a commander who is new to the instance: beep or stay quiet.
 
@@ -1153,7 +1163,7 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if ((location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot) or (cmdr_id in location.supercruise_dropped and now_ts - location.supercruise_dropped[cmdr_id] < _SUPERCRUISE_DROP_GRACE_SECONDS):
+            if self._is_relist_silenced(cmdr_id, now_ts):
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info

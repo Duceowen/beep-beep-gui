@@ -484,6 +484,33 @@ class QuietTimeoutReturn(unittest.TestCase):
         self.h.forget_instance()
         self.assertNotIn("quiet_left", self.h._gone["801"])
 
+class RelistRule(unittest.TestCase):
+    def setUp(self):
+        self.h = fresh_history()
+        location.leave_snapshot = {"11"}
+        self.now = time.time()
+
+    def test_supercruise_relist_of_someone_left_is_silenced(self):
+        location.state = 1
+        location.instance_reset_pending = True
+        self.assertTrue(self.h._is_relist_silenced("11", self.now))
+
+    def test_death_relist_of_someone_left_is_silenced(self):
+        location.state = 0
+        location.death_snapshot = True
+        self.assertTrue(self.h._is_relist_silenced("11", self.now))
+
+    def test_someone_not_in_the_snapshot_is_never_silenced(self):
+        location.state = 1
+        location.instance_reset_pending = True
+        self.assertFalse(self.h._is_relist_silenced("99", self.now))
+
+    def test_drop_grace_silences_then_releases(self):
+        location.state = 0
+        location.supercruise_dropped = {"11": self.now}
+        self.assertTrue(self.h._is_relist_silenced("11", self.now + 5))
+        self.assertFalse(self.h._is_relist_silenced("11", self.now + 60))
+
 class MergedRecord(unittest.TestCase):
     def test_kill_removal_is_not_a_leave(self):
         h = fresh_history()
