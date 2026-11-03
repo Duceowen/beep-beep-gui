@@ -46,7 +46,8 @@ class Location:
         # used to leave jump() snapshotting an empty dict, so commanders who
         # were already here were announced again when you left.
         self._jump_company_pending = False
-        if state != self.state and system != self.system:
+        # A known system changing is a jump. Going from no system to the first one (plugin start) is not, so restored presence stays.
+        if state != self.state and system != self.system and self.system is not None:
             self._record_departures()
             if self.instance or not self._jump_company:
                 # An empty instance here means it was already left for supercruise,
