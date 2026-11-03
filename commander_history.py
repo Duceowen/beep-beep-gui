@@ -671,6 +671,7 @@ class CommanderHistoryManager:
         if left is not None and now - left < _REANNOUNCE_SECONDS:
             # Left by interdiction, high wake or similar and back within the window.
             # A return this soon is a stale re-add, not a new arrival.
+            log.info("Not announcing %s (id %s): left %.0f s ago, inside the re-add window", self._name_for(cmdr_id), cmdr_id, now - left)
             return False
         last = self._announced_at.get(cmdr_id)
         if last is None or rec.get("departed") or now - last >= _REANNOUNCE_SECONDS:
@@ -678,7 +679,12 @@ class CommanderHistoryManager:
             if cmdr_id in self._gone:
                 self._gone[cmdr_id]["departed"] = False
             return True
+        log.info("Not announcing %s (id %s): announced %.0f s ago and not departed", self._name_for(cmdr_id), cmdr_id, now - last)
         return False
+
+    def _name_for(self, cmdr_id) -> str:
+        info = self.seen_data.get(str(cmdr_id))
+        return str(info.get("name", cmdr_id)) if isinstance(info, dict) else str(cmdr_id)
 
     def _clear_departures(self) -> None:
         """Forget leave timers and departure marks. Suppression windows are kept."""
