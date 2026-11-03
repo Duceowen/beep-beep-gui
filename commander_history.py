@@ -1239,6 +1239,8 @@ class CommanderHistoryManager:
             return
 
     
+        if beeps_to_play or connected_entries:
+            log.info("TIMING emit t=%.3f file_mtime=%s names=%s", __import__("time").time(), self._history_mtime_for_log(), [str(e.get("name")) for e in (beeps_to_play or connected_entries)])
         if beeps_to_play and self._sound_listener:
             self._sound_listener(beeps_to_play)
     
@@ -1260,6 +1262,13 @@ class CommanderHistoryManager:
 
 
         self.save_seen_commanders()
+
+    def _history_mtime_for_log(self):
+        """Unix time of the newest CommanderHistory write seen by the worker, for timing logs."""
+        try:
+            return "%.3f" % self.last_modified_timestamp.timestamp()
+        except (OverflowError, OSError, ValueError, AttributeError):
+            return "none"
 
     def _remember_sighting(self, info: dict, existing) -> None:
         seen_at = info.get("last_seen")

@@ -34,6 +34,8 @@ def plugin_app(parent):
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:
     event = entry.get("event")
+    if event in ("SupercruiseEntry", "SupercruiseExit", "FSDJump", "Location", "PVPKill"):
+        log.info("TIMING journal %s ts=%s recv=%.3f", event, entry.get("timestamp"), __import__("time").time())
     on_foot = bool(state.get("OnFoot"))
     if event in ("Shutdown", "ShutDown"):
         on_foot = False
