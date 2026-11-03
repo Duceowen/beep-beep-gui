@@ -215,7 +215,7 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
-_SUPERCRUISE_DROP_GRACE_SECONDS = 20.0
+_SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
 _RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 
