@@ -59,7 +59,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         if event == "Died":
             # Being killed takes you out of the instance. Clear it now so the Now tag drops
             # at once instead of waiting for the quiet timeout.
-            location.leave_instance(record_departures=False)
+            location.leave_instance(record_departures=False, after_death=True)
             history_inst.forget_instance()
             history_inst.note_instance_reset()
 
@@ -96,7 +96,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         location.wing_changed()
     
     elif event == "Interdiction":
-        location.interdiction(entry.get("Interdicted"))
+        # Only a successful interdiction keeps its target through the drop-in.
+        location.interdiction(entry.get("Interdicted") if entry.get("Success") is not False else None)
         if entry.get("Success") is False and entry.get("IsPlayer") is True:
             history_inst.note_escape(entry.get("Interdicted"))
             
