@@ -2,6 +2,41 @@
 <img width="978" height="709" alt="Screenshot 2026-10-19 220143" src="https://github.com/user-attachments/assets/e8ad9d21-1aed-4909-b4e7-039c1cce4cc4" />
 # BeepBeep — EDMarketConnector Plugin
 
+## Download
+
+**[Download the latest release](https://github.com/Duceowen/beep-beep-gui/releases/latest)** (zip)
+
+### Install
+1. Download the zip from the latest release and unzip it
+2. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
+3. Launch EDMarketConnector
+
+Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` folder. Keep the folder, since it holds your seen commanders and kill counts.
+
+## Features
+- Plays a configurable sound for each commander detected in your instance
+- Option to disable wingman sounds
+- Sounds are only played when a commander arrives in your instance (some edge cases may not be covered)
+- Optional setting to play sounds when commanders leave
+- Seen Commanders window opacity, from the Options menu
+- Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
+- Configurable alert settings
+
+## Notes
+- Only tested with the latest version of EDMarketConnector
+- Includes default sounds; you can add your own `.wav` or `.mp3` files in the `sounds` folder
+- Windows volume control uses the included DLL. Linux volume is applied to the sound before playback. macOS uses the system player
+- Does not require python to be installed.
+
+<details>
+<summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.0.44
+- A commander you killed or who escaped while they were in your instance is no longer announced as a new arrival when the game re-lists them after you die. They count as left behind, like everyone else in the instance at death
+
+## 1.0.43
+- The post-load quiet window is 12 seconds from the game's load timestamp, down from 15, so a real arrival about 14 seconds after a load is announced. Arrivals inside the first 12 seconds after a load stay quiet
+
 ## 1.0.42
 - The post-drop window for a killed or escaped commander's re-list is now 5 seconds, down from 30, so a respawn a few seconds after you drop out is less likely to be silenced
 
@@ -157,14 +192,7 @@
 - Opacity support for the Seen Commanders window
 - Quality of life enhancements to the Options menu
 
-## Features
-- Plays a configurable sound for each commander detected in your instance
-- Option to disable wingman sounds
-- Sounds are only played when a commander arrives in your instance (some edge cases may not be covered)
-- Optional setting to play sounds when commanders leave
-- Seen Commanders window opacity, from the Options menu
-- Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
-- Configurable alert settings
+</details>
 
 ## Stay on top on Linux
 
@@ -185,16 +213,6 @@ Additionally, by using EDMC journal events, we can hook into other events such a
 By saving a separate copy of every Commander you have encountered, we can assign a custom CMDR name and even a separate sound for each one, using the GUI. A row saved as unknown keeps its commander ID. The row records the first time that commander was seen, the last time, and up to eight recent visits, so a journal line can be matched to that visit without the file growing without limit. When a journal event names a player and only one unknown row matches that visit, the journal spelling is saved on the row. A ship scan, wing add, direct message, or player interdiction can supply the name. A PvP kill can supply it too, unless Autofill on Kill is turned off in Options. The name is saved after a short wait, so two unknown commanders in the same visit keep both rows unknown. Options can also update a saved name from a ship scan or similar journal event when that event shows the capitalization the commander used. The list lets you check each change, or Trust journal spelling can select every suggestion without checking them one by one. Nothing is saved until the final confirmation. A successful save closes the spelling windows and shows how many names were written. Go Back and Close leave every saved name as it is. That tool is experimental, so copy seen_commanders.json somewhere safe before using it.
 
 On Windows, sound playback uses the included DLL so each alert can have its own volume. If the DLL cannot load, Beep Beep makes a quieter copy of a WAV and plays it with winsound instead of dropping the alert. Linux makes a quieter copy of the sound and plays that, so the slider works even when the system player ignores volume flags. The first Linux player is retried once, then the next player is tried if it still cannot play the copy. macOS uses the system sound player.
-
-## Installation
-1. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
-2. Launch EDMarketConnector
-
-## Notes
-- Only tested with the latest version of EDMarketConnector
-- Includes default sounds; you can add your own `.wav` or `.mp3` files in the `sounds` folder
-- Windows volume control uses the included DLL. Linux volume is applied to the sound before playback. macOS uses the system player
-- Does not require python to be installed.
 
 ## License
 Distributed under the **GNU General Public License v3** (or later).  
