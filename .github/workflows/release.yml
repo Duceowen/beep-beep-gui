@@ -47,7 +47,7 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: |
           echo "body<<EOF" >> $GITHUB_ENV
-          cat README.md >> $GITHUB_ENV
+          grep -v "^<img" README.md >> $GITHUB_ENV || true
           echo "EOF" >> $GITHUB_ENV
 
       - name: Build release zip
