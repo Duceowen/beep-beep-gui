@@ -4,10 +4,10 @@
 
 ## Download
 
-**[Download the latest release](https://github.com/Duceowen/beep-beep-gui/releases/latest)** (zip)
+**[Download BeepBeep 1.0.46](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.0.46/beep-beep-gui-1.0.46.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
-1. Download the zip from the latest release and unzip it
+1. Download the zip and unzip it
 2. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
 3. Launch EDMarketConnector
 
@@ -30,6 +30,9 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.0.46
+- A commander you killed in your instance who respawns and is re-listed while you are in supercruise is announced as a new arrival, instead of being silenced as someone left behind
 
 ## 1.0.44
 - A commander you killed or who escaped while they were in your instance is no longer announced as a new arrival when the game re-lists them after you die. They count as left behind, like everyone else in the instance at death
