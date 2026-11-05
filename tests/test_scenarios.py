@@ -282,6 +282,31 @@ class LongSupercruiseRelist(unittest.TestCase):
         self.assertEqual(h.sent, [])
 
 
+class KilledCommanderRespawnsInSupercruise(unittest.TestCase):
+    """Repro: you killed Victim in your instance, entered supercruise, and Victim respawned
+    elsewhere and was re-listed. The re-list is a new arrival and must beep, not be silenced
+    as someone left behind."""
+
+    def test_respawn_relisted_in_supercruise_beeps(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "9", "Victim")
+        location.add_instance("9", state=0, system="Sol")
+        location.instance["9"]["here"] = True
+        h._visit["9"] = None
+        h.note_kill("Victim")
+        self.assertFalse(present("9"))
+        h._gone["9"].pop("suppress_until", None)
+        h._gone["9"].pop("removed_at", None)
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        h.sent.clear()
+        feed(h, ["9"], datetime.datetime(2026, 11, 3, 1, 40))
+        self.assertEqual(h.sent, [["9"]])
+
+
 class InterdictionUnknownTarget(unittest.TestCase):
     def test_unresolved_target_is_kept_when_rows_are_unknown(self):
         h = fresh_history()

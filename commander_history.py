@@ -1687,7 +1687,9 @@ class CommanderHistoryManager:
         Runaways and anyone heard earlier in the visit are included, so the game's
         re-list when you leave is not announced as new arrivals."""
         # Supercruise arrivals were first heard after you left the instance, so they are not left behind.
-        location.leave_snapshot = (set(location.leave_snapshot) | set(self._visit)) - set(location.supercruise_arrivals)
+        # Commanders you killed or who escaped are not left behind either: their re-list after
+        # respawn is a new arrival, not a return to the instance you just left.
+        location.leave_snapshot = (set(location.leave_snapshot) | set(self._visit)) - set(location.supercruise_arrivals) - location.kill_departed
 
     def forget_instance(self) -> None:
         """Death: the instance you were in is gone. Its people stay in the snapshot, so a
