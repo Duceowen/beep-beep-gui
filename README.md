@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.0.46](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.0.46/beep-beep-gui-1.0.46.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.0](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.0/beep-beep-gui-1.1.0.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -30,6 +30,15 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.0
+- Seen Commanders backups: "Back up now" saves a copy on demand, and "Open backups folder" opens the backups folder
+- "Restore backup..." lists your backups and restores the one you pick. Your current list is backed up first, so a restore can be undone
+- "Import names..." adds commander names from another player's seen_commanders.json. Only commanders with a real name are added, sounds are set to neutral, and kills and seen counts are not copied. Names you already have are kept, and unknown names are filled in. Your list is backed up before the import
+- Options window reorganised into Sound, Alerts, Window and Seen commanders sections, with the long explanations moved into a collapsible Help section
+- The Options checkboxes, scrollbar and window colours now follow the EDMarketConnector theme instead of plugin colours
+- Seen commanders saves are now serialised, so a backup, restore or import cannot be overwritten by the background save
+- A seen count of 0 is no longer changed to 1 when the list loads, so imported names show 0 seen
 
 ## 1.0.46
 - A commander you killed in your instance who respawns and is re-listed while you are in supercruise is announced as a new arrival, instead of being silenced as someone left behind

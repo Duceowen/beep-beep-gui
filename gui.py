@@ -155,16 +155,25 @@ def _win_datetime_format():
     return _WIN_DATETIME_FMT
 
 
+def _tk_default(widget, option):
+    """Tk's own default for one option. Only used until EDMC supplies its palette."""
+    probe = tk.Label(widget)
+    try:
+        return probe.cget(option)
+    finally:
+        probe.destroy()
+
+
 class ThemedScrollbar(tk.Canvas):
-    def __init__(self, master, command=None, background="grey4", foreground="#13ec39",
-                 activebackground="#13ec39", width=14, **kw):
+    # No colours are chosen here. apply_theme() sets them from EDMC's palette.
+    def __init__(self, master, command=None, width=14, **kw):
         kw.setdefault("highlightthickness", 0)
         kw.setdefault("bd", 0)
-        super().__init__(master, width=width, background=background, **kw)
+        super().__init__(master, width=width, **kw)
         self.command = command
-        self._trough = background
-        self._thumb = foreground
-        self._thumb_active = activebackground
+        self._trough = None
+        self._thumb = None
+        self._thumb_active = None
         self._first = 0.0
         self._last = 1.0
         self._drag = False
@@ -216,7 +225,7 @@ class ThemedScrollbar(tk.Canvas):
             bottom = min(h, top + 8)
         self._top = top
         self._bottom = bottom
-        color = self._thumb_active if self._drag else self._thumb
+        color = (self._thumb_active if self._drag else self._thumb) or _tk_default(self, "foreground")
         self.create_rectangle(2, top + 1, w - 2, bottom - 1, fill=color, outline="", tags="thumb")
 
     def _on_press(self, event):
@@ -1938,6 +1947,22 @@ class SeenCommandersGUI:
         if isinstance(widget, ttk.Combobox):
             self._theme_combobox(widget, palette)
             return
+        if isinstance(widget, tk.Listbox):
+            opts = {}
+            if palette.get("background"):
+                opts["background"] = palette["background"]
+                opts["highlightbackground"] = palette["background"]
+            if palette.get("foreground"):
+                opts["foreground"] = palette["foreground"]
+            if palette.get("activebackground"):
+                opts["selectbackground"] = palette["activebackground"]
+            if palette.get("activeforeground"):
+                opts["selectforeground"] = palette["activeforeground"]
+            try:
+                widget.configure(**opts)
+            except Exception:
+                pass
+            return
         try:
             keys = widget.keys()
         except Exception:
@@ -1959,6 +1984,9 @@ class SeenCommandersGUI:
                 config_dict["activebackground"] = palette["activebackground"]
             if (is_scale or is_scrollbar) and "troughcolor" in keys:
                 config_dict["troughcolor"] = background
+            # Focus ring on the options scroll canvas takes the EDMC background, so it does not show.
+            if isinstance(widget, tk.Canvas) and "highlightcolor" in keys:
+                config_dict["highlightcolor"] = background
 
         if foreground:
             if (is_text or is_scale) and "foreground" in keys:
@@ -2475,6 +2503,19 @@ class SeenCommandersGUI:
         else:
             subprocess.Popen(["xdg-open", folder])
 
+    def open_backups_folder(self):
+        import subprocess
+        import platform
+        folder = history_inst.backup_dir
+        os.makedirs(folder, exist_ok=True)
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(folder)
+        elif system == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+
     def open_seen_commanders_folder(self):
         import subprocess
         import platform
@@ -2942,13 +2983,16 @@ class SeenCommandersGUI:
         label = tk.Label(holder, text=text)
         label.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
+        # Tk's own label colours until _theme_widget() applies EDMC's palette.
+        ink = _tk_default(label, "foreground")
+        paper = _tk_default(label, "background")
         box = canvas.create_rectangle(3, 3, size - 3, size - 3, width=2,
-                                      outline="#13ec39")
+                                      outline=ink, fill=paper)
         tick = canvas.create_line(
             size * 0.26, size * 0.52,
             size * 0.44, size * 0.72,
             size * 0.76, size * 0.28,
-            width=3, capstyle="round", joinstyle="round", fill="#13ec39",
+            width=3, capstyle="round", joinstyle="round", fill=ink,
         )
         canvas._beep_check_items = (box, tick)
 
@@ -3008,9 +3052,127 @@ class SeenCommandersGUI:
         frame.bind("<Configure>", update_wrap, add="+")
         return row + 1
 
+    def _backup_label(self, name):
+        path = os.path.join(history_inst.backup_dir, name)
+        try:
+            when = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            when = "unknown time"
+        kind = "Manual" if name.startswith("seen_commanders-manual-") else "Startup"
+        return f"{when}    {kind}"
+
+    def reload_seen_list(self):
+        """Rebuild the Seen Commanders rows from memory. Used after a restore or import."""
+        if not self.window or not self.window.winfo_exists():
+            return
+        for attr in ("scrollbar", "tree", "header_frame"):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                try:
+                    widget.destroy()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        self.tree_items = {}
+        self.widgets = {}
+        self.build_ui(self.window)
+
+    def backup_seen_now(self, parent):
+        path = history_inst.backup_seen_commanders_now("")
+        if path:
+            self._show_spelling_notice(parent, "Saved a backup:\n%s" % os.path.basename(path), "Backup saved")
+        else:
+            self._show_spelling_notice(parent, "The backup could not be written. See the EDMC log.", "Backup failed")
+
+    def open_restore_dialog(self, parent):
+        names = history_inst.list_backups()
+        if not names:
+            self._show_spelling_notice(parent, "There are no backups yet. Use Back up now first.", "Restore backup")
+            return
+
+        dialog = tk.Toplevel(parent)
+        dialog.title("Restore seen commanders")
+        dialog.transient(parent)
+
+        tk.Label(
+            dialog,
+            text="Pick a backup. Your current list is backed up first, so this can be undone.",
+            anchor="w", justify="left",
+        ).pack(fill="x", padx=12, pady=(12, 6))
+
+        holder = tk.Frame(dialog)
+        holder.pack(fill="both", expand=True, padx=12)
+        listbox = tk.Listbox(holder, height=12, width=58, exportselection=False)
+        bar = ThemedScrollbar(holder, command=listbox.yview)
+        listbox.configure(yscrollcommand=bar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        for name in names:
+            listbox.insert("end", self._backup_label(name))
+        listbox.selection_set(0)
+
+        status = tk.Label(dialog, text="", anchor="w", justify="left")
+        status.pack(fill="x", padx=12, pady=(6, 0))
+
+        def do_restore():
+            selected = listbox.curselection()
+            if not selected:
+                status.configure(text="Select a backup first.")
+                return
+            name = names[selected[0]]
+            try:
+                count = history_inst.restore_backup(name)
+            except (OSError, ValueError) as err:
+                status.configure(text="Restore failed: %s" % err)
+                return
+            dialog.destroy()
+            self.reload_seen_list()
+            self._show_spelling_notice(parent, "Restored %d commanders from %s." % (count, name), "Restore done")
+
+        buttons = tk.Frame(dialog)
+        buttons.pack(fill="x", padx=12, pady=12)
+        tk.Button(buttons, text="Restore", command=do_restore).pack(side="right")
+        tk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+        self.apply_edmc_theme(dialog)
+        self._raise_in_front(dialog, parent)
+
+    def import_seen_names(self, parent):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=parent,
+            title="Import commander names from another seen_commanders.json",
+            filetypes=[("Seen commanders list", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            counts = history_inst.import_commander_names(path)
+        except (OSError, ValueError) as err:
+            self._show_spelling_notice(parent, "Import failed: %s" % err, "Import failed")
+            return
+        self.reload_seen_list()
+        message = (
+            "Added %d commanders.\n"
+            "Filled in %d unknown names.\n"
+            "Kept %d names you already had.\n"
+            "Skipped %d entries with no name.\n\n"
+            "Your list was backed up to %s."
+        ) % (
+            counts["added"], counts["filled"], counts["kept"], counts["skipped"],
+            os.path.basename(counts["backup"]),
+        )
+        self._show_spelling_notice(parent, message, "Import finished")
+
+    def _button_row(self, frame, row, buttons, gap=(2, 4)):
+        holder = tk.Frame(frame)
+        holder.grid(row=row, column=0, columnspan=2, padx=5, pady=gap, sticky="w")
+        for text, command in buttons:
+            tk.Button(holder, text=text, command=command).pack(side="left", padx=(0, 8))
+        return row + 1
+
     def options_menu(self, parent):
-        # Use parent directly
-        frame_container = parent  # the frame passed from plugin_prefs
+        frame_container = parent
         frame_container.grid_rowconfigure(0, weight=1)
         frame_container.grid_columnconfigure(0, weight=1)
 
@@ -3023,157 +3185,132 @@ class SeenCommandersGUI:
 
         frame = tk.Frame(canvas)
         frame.columnconfigure(1, weight=1)
-        canvas_window = canvas.create_window((0,0), window=frame, anchor="nw")
-    
+        canvas_window = canvas.create_window((0, 0), window=frame, anchor="nw")
+
         def on_canvas_configure(event):
             canvas.itemconfigure(canvas_window, width=event.width)
         canvas.bind("<Configure>", on_canvas_configure)
-    
+
         def on_frame_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
         frame.bind("<Configure>", on_frame_configure)
 
-
-
+        owner = frame.winfo_toplevel
         row = 0
 
         row = self.add_section(frame, row, "Sound")
         row = self.add_slider(
-            frame,
-            row,
-            "Alert Volume (%)",
+            frame, row, "Alert volume (%)",
             tk.IntVar(value=config.get_config("volume", 100)),
-            from_=0,
-            to=100,
-            attr="volume"
+            from_=0, to=100, attr="volume",
         )
         row = self.add_slider(
-            frame,
-            row,
-            "Multiple sounds",
+            frame, row, "Multiple sounds",
             tk.IntVar(value=config.get_config("sounds", 1)),
-            from_=1,
-            to=10,
-            attr="sounds"
+            from_=1, to=10, attr="sounds",
         )
         row = self.add_hint(frame, row, "Plays each commander 200 ms apart.")
+        row = self._button_row(frame, row, [
+            ("Open sounds folder", self.open_sounds_folder),
+            ("Play", lambda: beep_inst.play_sound(sound_inst.neutral)),
+            ("Reload sounds", sound_inst.reload),
+        ])
+        row = self.add_hint(frame, row, "WAV or MP3. A file with the same name in the sounds folder replaces a default.")
 
-        actions = tk.Frame(frame)
-        actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 2), sticky="w")
-        tk.Button(
-            actions,
-            text="Open Sounds Folder",
-            command=self.open_sounds_folder
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            actions,
-            text="Play",
-            command=lambda: beep_inst.play_sound(sound_inst.neutral)
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            actions,
-            text="Reload Sounds",
-            command=sound_inst.reload
-        ).pack(side="left")
-        row += 1
-        row = self.add_hint(
-            frame,
-            row,
-            "WAV and MP3. A file in the sounds folder with the same name replaces the default.",
-        )
-
+        row = self.add_section(frame, row, "Alerts")
         row = self.add_checkbox(
-            frame,
-            row,
-            "Beep when a commander leaves",
+            frame, row, "Beep when a commander leaves",
             tk.BooleanVar(value=config.get_config("beep_on_leave", False)),
-            attr="beep_on_leave"
+            attr="beep_on_leave",
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Beep for wing members",
+            frame, row, "Beep for wing members",
             tk.BooleanVar(value=config.get_config("wing_notify", False)),
-            attr="wing_notify"
+            attr="wing_notify",
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Announce arrivals in Modern Overlay",
+            frame, row, "Announce arrivals in Modern Overlay",
             tk.BooleanVar(value=config.get_config("overlay_announce", False)),
-            attr="overlay_announce"
+            attr="overlay_announce",
         )
-        row = self.add_hint(frame, row, "Needs the EDMC Modern Overlay plugin.")
+        row = self.add_hint(frame, row, "EDMC Modern Overlay Required.")
+        row = self.add_checkbox(
+            frame, row, "Autofill on kill",
+            tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
+            attr="autofill_on_kill",
+        )
+        row = self.add_hint(frame, row, "A PvP kill names the one unknown commander from that visit.")
 
-        gap = tk.Frame(frame, height=14)
-        gap.grid_propagate(False)
-        gap.grid(row=row, column=0, columnspan=2, sticky="ew")
-        row += 1
+        row = self.add_section(frame, row, "Window")
         try:
             seen_opacity = int(config.get_config("seen_window_opacity", 100))
         except (TypeError, ValueError):
             seen_opacity = 100
         seen_opacity = max(10, min(100, seen_opacity))
         row = self.add_slider(
-            frame,
-            row,
-            "Window opacity (%)",
+            frame, row, "Opacity (%)",
             tk.IntVar(value=seen_opacity),
-            from_=10,
-            to=100,
-            attr="seen_window_opacity",
-            command=self.apply_seen_opacity
+            from_=10, to=100, attr="seen_window_opacity",
+            command=self.apply_seen_opacity,
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Keep the window above the game",
+            frame, row, "Keep above the game",
             tk.BooleanVar(value=bool(config.get_config("stay_on_top", False))),
             attr="stay_on_top",
-            callback=self._on_topmost_toggle
-        )
-        row = self.add_hint(
-            frame,
-            row,
-            "Windowed and borderless. On Linux, a focused fullscreen game can still stay above this window.",
-        )
-        row = self.add_checkbox(
-            frame,
-            row,
-            "Autofill on Kill",
-            tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
-            attr="autofill_on_kill"
-        )
-        row = self.add_hint(
-            frame,
-            row,
-            "A PvP kill names the one unknown commander from that visit. Turn this off to skip kills. Scans, wing adds, messages, and interdictions still name commanders.",
+            callback=self._on_topmost_toggle,
         )
 
-        spelling_actions = tk.Frame(frame)
-        spelling_actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(6, 2), sticky="w")
-        tk.Button(
-            spelling_actions,
-            text="Open Seen Commanders Folder",
-            command=self.open_seen_commanders_folder,
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            spelling_actions,
-            text="Update spelling from journals",
-            command=lambda: self.confirm_spelling_update(frame.winfo_toplevel()),
-        ).pack(side="left")
-        row += 1
-        row = self.add_hint(
-            frame,
-            row,
-            "Experimental. Copy seen_commanders.json first. THE LAST CONFIRM SAVES CHECKED NAMES.",
-        )
-        row = self.add_hint(
-            frame,
-            row,
-            "If EDMC Starts while you are already in a group, wait about 5 seconds in an EMPTY instance so alerts play when commanders arrive.",
-            gap=12,
-        )
+        row = self.add_section(frame, row, "Seen commanders")
+        row = self._button_row(frame, row, [
+            ("Open backups folder", self.open_backups_folder),
+            ("Back up now", lambda: self.backup_seen_now(owner())),
+            ("Restore backup...", lambda: self.open_restore_dialog(owner())),
+        ])
+        row = self._button_row(frame, row, [
+            ("Import names...", lambda: self.import_seen_names(owner())),
+            ("Update spelling", lambda: self.confirm_spelling_update(owner())),
+        ], gap=(0, 4))
+        row = self.add_hint(frame, row, "Import adds names only. Unknown entries are skipped and sounds become neutral.")
+        row = self.add_hint(frame, row, "Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names.")
+
+        help_state = {"open": False}
+        help_frame = tk.Frame(frame)
+        help_frame.columnconfigure(0, weight=1)
+        help_frame.grid(row=row + 1, column=0, columnspan=2, sticky="ew")
+        help_frame.grid_remove()
+
+        def toggle_help():
+            help_state["open"] = not help_state["open"]
+            if help_state["open"]:
+                help_frame.grid()
+                help_button.configure(text="Hide help")
+            else:
+                help_frame.grid_remove()
+                help_button.configure(text="Show help")
+
+        help_button = tk.Button(frame, text="Show help", command=toggle_help)
+        help_button.grid(row=row, column=0, columnspan=2, padx=5, pady=(14, 4), sticky="w")
+        row += 2
+
+        help_lines = [
+            "Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. "
+            "A file in the main sounds folder with the same name replaces a default (extension does not matter). "
+            "The newest file for each name is used.",
+            "Reload sounds picks up added or replaced files without restarting EDMC.",
+            "Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise.",
+            "Wing members: when off, no sounds play for wing members. This only affects wing alerts.",
+            "Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. "
+            "The name comes from Seen Commanders, so rename a commander there to change it.",
+            "Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window.",
+            "Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. "
+            "Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this.",
+            "Import: reads another player's seen_commanders.json. Only commanders with a real name are added. "
+            "Kills and seen counts are not copied, and names you already have are kept.",
+            "Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore.",
+        ]
+        help_row = 0
+        for text in help_lines:
+            help_row = self.add_hint(help_frame, help_row, text)
 
         def _on_mousewheel(event):
             num = getattr(event, "num", None)
@@ -3197,3 +3334,4 @@ class SeenCommandersGUI:
     
     
 gui_inst = SeenCommandersGUI()
+

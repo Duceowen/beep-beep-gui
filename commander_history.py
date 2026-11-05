@@ -255,6 +255,15 @@ _KILL_DROP_GUARD_SECONDS = 5.0
 _KILL_RELIST_GUARD_SECONDS = 600.0
 _RESTORE_WINDOW_SECONDS = 600.0
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
+_AUTO_BACKUP_NAME = re.compile(r"^seen_commanders-\d{8}-\d{6}\.json$")
+_MANUAL_BACKUP_NAME = re.compile(r"^seen_commanders-manual-.*\.json$")
+_IMPORT_EPOCH = "1970-01-01T00:00:00"
+
+
+def _import_last_seen(value) -> str:
+    """Use the other player's last_seen when it is a valid time, otherwise the epoch."""
+    parsed = parse_seen_time(value)
+    return parsed.isoformat() if parsed is not None else _IMPORT_EPOCH
 
 
 def _join_parts(parts: list[str]) -> str:
@@ -691,6 +700,8 @@ class CommanderHistoryManager:
         self._gone: dict[str, dict] = {}
         self._seen_dirty = False
         self._seen_saved_at = 0.0
+        # Held by backup, restore and import so they never interleave with a save.
+        self._data_lock = threading.RLock()
         self._live_kills: dict[str, int] = {}
         self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
         self._kill_tally: dict[str, int] = self._read_kill_tally()
@@ -964,33 +975,154 @@ class CommanderHistoryManager:
             log.exception("Failed to load seen_commanders.json, trying the newest backup")
             self.seen_data = self._load_latest_backup() or {}
                 
+        if self._normalize_seen_entries():
+            self.save_seen_commanders()
+
+    def _normalize_seen_entries(self) -> bool:
+        """Clean up loaded or restored rows in place. Returns True if anything changed."""
         changed = False
         for cmdr_id, entry in self.seen_data.items():
             if not isinstance(entry, dict):
                 continue
             if "sound" in entry:
                 entry["sound"] = os.path.splitext(entry["sound"])[0].lower()
+            raw_count = entry.get("seen_count", 1)
+            if raw_count is None:
+                raw_count = 1
             try:
-                entry["seen_count"] = int(entry.get("seen_count", 1) or 1)
+                entry["seen_count"] = int(raw_count)
             except (TypeError, ValueError):
                 entry["seen_count"] = 1
             if backfill_seen_record(entry):
                 changed = True
-        if changed:
-            self.save_seen_commanders()
+        return changed
 
     @property
     def backup_dir(self) -> str:
         return os.path.join(self.plugin_dir, "backups")
 
     def _backup_names(self) -> list[str]:
+        """Startup copies only. These are the ones the automatic pruning may delete."""
         try:
             return sorted(
                 name for name in os.listdir(self.backup_dir)
-                if name.startswith("seen_commanders-") and name.endswith(".json")
+                if _AUTO_BACKUP_NAME.match(name)
             )
         except OSError:
             return []
+
+    def list_backups(self) -> list[str]:
+        """Every backup file, newest first. Used by the restore list."""
+        try:
+            names = [
+                name for name in os.listdir(self.backup_dir)
+                if _AUTO_BACKUP_NAME.match(name) or _MANUAL_BACKUP_NAME.match(name)
+            ]
+        except OSError:
+            return []
+
+        def mtime(name):
+            try:
+                return os.path.getmtime(os.path.join(self.backup_dir, name))
+            except OSError:
+                return 0.0
+
+        return sorted(names, key=mtime, reverse=True)
+
+    def _backup_path(self, name: str) -> str:
+        if not isinstance(name, str) or os.path.basename(name) != name or name not in self.list_backups():
+            raise ValueError("Not a known backup file: %r" % (name,))
+        return os.path.join(self.backup_dir, name)
+
+    def backup_seen_commanders_now(self, label: str = "") -> str | None:
+        """Write the list in memory to a new manual backup file. Returns its path."""
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        name = f"seen_commanders-manual-{label}-{stamp}.json" if label else f"seen_commanders-manual-{stamp}.json"
+        try:
+            os.makedirs(self.backup_dir, exist_ok=True)
+            path = os.path.join(self.backup_dir, name)
+            with self._data_lock:
+                _atomic_write_json(path, self.seen_data)
+            log.info("Seen commanders backed up to %s", name)
+            return path
+        except (OSError, TypeError):
+            log.exception("Failed to write seen commanders backup")
+            return None
+
+    def restore_backup(self, name: str) -> int:
+        """Replace the current list with a backup. The current list is backed up first."""
+        path = self._backup_path(name)
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("That file is not a seen commanders list.")
+        with self._data_lock:
+            if not self.backup_seen_commanders_now("before-restore"):
+                raise OSError("Could not back up the current list, so nothing was restored.")
+            # Replace in place so references held by the worker stay valid.
+            self.seen_data.clear()
+            self.seen_data.update(data)
+            self._normalize_seen_entries()
+            self._seen_dirty = True
+            self.flush_seen_commanders(force=True)
+        log.info("Restored seen commanders from %s (%d entries)", name, len(data))
+        return len(data)
+
+    def import_commander_names(self, path: str) -> dict:
+        """Add names from another player's list. Only commander IDs and names are taken.
+
+        Existing IDs keep their names unless the existing name is unknown.
+        Imported sounds are always neutral. Kills and seen counts are never copied.
+        """
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("That file is not a seen commanders list.")
+
+        backup = self.backup_seen_commanders_now("before-import")
+        if backup is None:
+            raise OSError("Could not back up the current list, so nothing was imported.")
+
+        counts = {"added": 0, "filled": 0, "kept": 0, "skipped": 0, "total": len(data), "backup": backup}
+        with self._data_lock:
+            for key, entry in data.items():
+                if not isinstance(entry, dict):
+                    counts["skipped"] += 1
+                    continue
+                name = entry.get("name")
+                if is_unknown_name(name):
+                    counts["skipped"] += 1
+                    continue
+                cmdr_id = str(entry.get("commander_id", key)).strip()
+                if not cmdr_id:
+                    counts["skipped"] += 1
+                    continue
+                name = name.strip()
+
+                existing = self.seen_data.get(cmdr_id)
+                if existing is not None:
+                    if is_unknown_name(existing.get("name")):
+                        existing["name"] = name
+                        counts["filled"] += 1
+                    else:
+                        counts["kept"] += 1
+                    continue
+
+                self.seen_data[cmdr_id] = {
+                    "commander_id": cmdr_id,
+                    "name": name,
+                    "sound": "neutral",
+                    "last_seen": _import_last_seen(entry.get("last_seen")),
+                    "seen_count": 0,
+                }
+                counts["added"] += 1
+
+            if counts["added"] or counts["filled"]:
+                self._normalize_seen_entries()
+                self._seen_dirty = True
+                self.flush_seen_commanders(force=True)
+        log.info("Imported seen commander names from file: %s", {k: v for k, v in counts.items() if k != "backup"})
+        return counts
 
     def backup_seen_commanders(self) -> None:
         """Copy the saved file aside at startup and keep only the newest few copies."""
@@ -1026,13 +1158,14 @@ class CommanderHistoryManager:
             return
         if not force and time.monotonic() - self._seen_saved_at < _SAVE_INTERVAL_SECONDS:
             return
-        try:
-            _atomic_write_json(self.json_file_path, self.seen_data)
-        except (OSError, TypeError, RuntimeError):
-            log.exception("Failed to save seen_commanders.json")
-            return
-        self._seen_dirty = False
-        self._seen_saved_at = time.monotonic()
+        with self._data_lock:
+            try:
+                _atomic_write_json(self.json_file_path, self.seen_data)
+            except (OSError, TypeError, RuntimeError):
+                log.exception("Failed to save seen_commanders.json")
+                return
+            self._seen_dirty = False
+            self._seen_saved_at = time.monotonic()
             
     def resolve_commander_history_dir(self) -> str | None:
         if self._resolved_history_dir and os.path.isdir(self._resolved_history_dir):
