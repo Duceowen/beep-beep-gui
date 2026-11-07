@@ -9,3 +9,7 @@ instance_seen.json
 kill_tally.json
 kill_tally_v2.txt
 kills_backfilled.txt
+
+# Troubleshooting marks (local only)
+beep_marks.jsonl
+

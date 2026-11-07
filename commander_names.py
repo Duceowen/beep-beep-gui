@@ -42,6 +42,14 @@ def name_key(name: str) -> str:
     return name.strip().casefold()
 
 
+_CONFUSABLE = str.maketrans({"0": "o"})
+
+
+def confusable_key(name: str) -> str:
+    """name_key with look-alike characters folded together (0 reads as o)."""
+    return name_key(name).translate(_CONFUSABLE)
+
+
 def strip_cmdr_prefix(name: str) -> str:
     return _CMDR_PREFIX.sub("", name.strip(), count=1).strip()
 
@@ -146,6 +154,18 @@ def plan_spelling_updates(records: dict, spellings: list[tuple[str, str]]) -> li
         if rank >= current.get(cleaned, -1):
             current[cleaned] = rank
 
+    # Saved names that only differ by look-alikes (B0b vs Bob) are different
+    # commanders; never let a look-alike spelling cross between them.
+    loose_groups: dict[str, set[str]] = {}
+    for key in grouped:
+        loose_groups.setdefault(confusable_key(key), set()).add(key)
+    loose_best: dict[str, dict[str, int]] = {}
+    for bkey, spells in best.items():
+        target = loose_best.setdefault(confusable_key(bkey), {})
+        for spelling, rank in spells.items():
+            if rank >= target.get(spelling, -1):
+                target[spelling] = rank
+
     planned: list[tuple[str, str, str]] = []
     for key, rows in grouped.items():
         stored = {spelling for _cmdr_id, spelling in rows}
@@ -154,6 +174,7 @@ def plan_spelling_updates(records: dict, spellings: list[tuple[str, str]]) -> li
         current_name = next(iter(stored))
         current_score = case_score(current_name)
         improvements: dict[int, list[str]] = {}
+        exact_authoritative = any(rank > _KIND_RANK["chat"] for rank in best.get(key, {}).values())
         for spelling, rank in best.get(key, {}).items():
             # Chat can be typed in any case. A ship scan, wing name, kill,
             # or interdiction carries the capitalization the commander used.
@@ -162,6 +183,14 @@ def plan_spelling_updates(records: dict, spellings: list[tuple[str, str]]) -> li
             if case_score(spelling) <= current_score or spelling == current_name:
                 continue
             improvements.setdefault(rank, []).append(spelling)
+        lkey = confusable_key(key)
+        if not exact_authoritative and len(loose_groups.get(lkey, ())) == 1:
+            # The game never showed these exact letters, but did show the same
+            # name with o/0 swapped. Take the game's spelling as the real one.
+            for spelling, rank in loose_best.get(lkey, {}).items():
+                if rank <= _KIND_RANK["chat"] or name_key(spelling) == key:
+                    continue
+                improvements.setdefault(rank, []).append(spelling)
         if not improvements:
             continue
         # A ship scan outranks chat. A louder chat spelling must not replace it.

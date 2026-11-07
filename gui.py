@@ -10,6 +10,7 @@ from beep_beep_config import config
 from commander_history import history_inst, add_alias
 from beep_beep import beep_inst, sound_inst
 import clickthrough
+from logutil import log
 
 try:
     import theme as edmc_theme
@@ -1377,6 +1378,9 @@ class SeenCommandersGUI:
     def make_tree_editable(self):
         self.tree.bind("<Double-1>", self.on_tree_double_click_popup)
         self.tree.bind("<Return>", self.on_tree_enter_pressed)
+        # No prior row context menu — headers use Button-3 for columns only.
+        self.tree.bind("<Button-3>", self._popup_beep_mark_menu)
+        self.tree.bind("<Control-Button-1>", self._popup_beep_mark_menu)
 
     def on_tree_enter_pressed(self, _event):
         if self._options_are_open():
@@ -1410,7 +1414,177 @@ class SeenCommandersGUI:
     
         self.on_tree_double_click_popup(e)        
     
+
+    _BEEP_MARK_ITEMS = (
+        ("not_here", "Not here (shown as Now)"),
+        ("no_beep", "No beep (missed)"),
+        ("extra_beep", "Extra beep (unexpected)"),
+        ("beeped_early", "Beeped early"),
+        ("beeped_late", "Beeped late"),
+        ("interdiction", "Interdiction"),
+        ("killed", "Killed"),
+        ("wrong_name", "Wrong name"),
+    )
+
+    def _tree_cmdr_at_event(self, event):
+        """Commander id under the pointer, or the current selection."""
+        row_id = None
+        try:
+            row_id = self.tree.identify_row(getattr(event, "y", 0))
+        except Exception:
+            row_id = None
+        if not row_id:
+            selection = self.tree.selection()
+            row_id = selection[0] if selection else None
+        if not row_id:
+            return None
+        return next((k for k, v in self.tree_items.items() if v == row_id), None)
+
+    def _popup_beep_mark_menu(self, event):
+        """Right-click a Seen Commanders row to log a troubleshooting mark."""
+        if self._options_are_open():
+            return
+        cmdr_id = self._tree_cmdr_at_event(event)
+        if not cmdr_id:
+            return "break"
+        try:
+            self.tree.selection_set(self.tree_items[cmdr_id])
+        except Exception:
+            pass
+        self._close_beep_mark_menu()
+        palette = self._edmc_palette()
+        popup = tk.Toplevel(self.window)
+        popup.withdraw()
+        popup.overrideredirect(True)
+        try:
+            popup.attributes("-topmost", True)
+        except Exception:
+            pass
+        bg = palette.get("background") or _tk_default(popup, "background")
+        fg = palette.get("foreground") or _tk_default(popup, "foreground")
+        active_bg = palette.get("activebackground") or bg
+        active_fg = palette.get("activeforeground") or fg
+        popup.configure(background=fg)
+        inner = tk.Frame(popup, background=bg, highlightthickness=0, bd=0)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        title = tk.Label(
+            inner,
+            text="Report beep issue",
+            anchor="w",
+            background=bg,
+            foreground=fg,
+            padx=8,
+            pady=4,
+        )
+        title.pack(fill="x")
+        for kind, label in self._BEEP_MARK_ITEMS:
+            row = tk.Label(
+                inner,
+                text=label,
+                anchor="w",
+                background=bg,
+                foreground=fg,
+                padx=10,
+                pady=3,
+                cursor="hand2",
+            )
+            row.pack(fill="x")
+
+            def enter(_e, w=row, ab=active_bg, af=active_fg):
+                w.configure(background=ab, foreground=af)
+
+            def leave(_e, w=row, b=bg, f=fg):
+                w.configure(background=b, foreground=f)
+
+            def click(_e, k=kind, lab=label, cid=cmdr_id):
+                self._close_beep_mark_menu()
+                self._mark_beep_issue(k, lab, cid)
+
+            row.bind("<Enter>", enter)
+            row.bind("<Leave>", leave)
+            row.bind("<Button-1>", click)
+        self._beep_mark_menu = popup
+        x, y = self._pointer_root(event)
+        x, y = self._move_popup(popup, x, y)
+        popup.deiconify()
+        popup.lift()
+        if not getattr(self, "_beep_mark_menu_bound", False):
+            self.window.bind_all("<Button-1>", self._dismiss_beep_mark_menu, add="+")
+            self._beep_mark_menu_bound = True
+        popup.bind("<Escape>", lambda _e: self._close_beep_mark_menu())
+        try:
+            popup.focus_set()
+        except Exception:
+            pass
+        self._move_popup(popup, x, y)
+        return "break"
+
+    def _dismiss_beep_mark_menu(self, event):
+        menu = getattr(self, "_beep_mark_menu", None)
+        if not menu:
+            return
+        try:
+            if event.widget == menu or str(event.widget).startswith(str(menu)):
+                return
+        except Exception:
+            pass
+        self._close_beep_mark_menu()
+
+    def _close_beep_mark_menu(self):
+        menu = getattr(self, "_beep_mark_menu", None)
+        self._beep_mark_menu = None
+        if not menu:
+            return
+        try:
+            menu.destroy()
+        except Exception:
+            pass
+
+    def _mark_beep_issue(self, kind, label, cmdr_id):
+        try:
+            history_inst.record_beep_mark(kind, cmdr_id)
+        except Exception:
+            log.exception("Failed to record beep mark for %s", cmdr_id)
+            self._flash_mark_feedback("Mark failed")
+            return
+        self._flash_mark_feedback("Marked: %s" % label)
+
+    def _flash_mark_feedback(self, text):
+        """Brief on-window confirmation; does not add a permanent UI control."""
+        win = getattr(self, "window", None)
+        if not win or not win.winfo_exists():
+            return
+        job = getattr(self, "_mark_feedback_job", None)
+        if job:
+            try:
+                win.after_cancel(job)
+            except Exception:
+                pass
+        tip = getattr(self, "_mark_feedback", None)
+        if tip is not None:
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+        palette = self._edmc_palette()
+        bg = palette.get("background") or _tk_default(win, "background")
+        fg = palette.get("foreground") or _tk_default(win, "foreground")
+        tip = tk.Label(win, text=text, background=bg, foreground=fg, padx=8, pady=4, relief="solid", bd=1)
+        tip.place(relx=0.5, rely=0.02, anchor="n")
+        self._mark_feedback = tip
+
+        def hide():
+            self._mark_feedback_job = None
+            self._mark_feedback = None
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+
+        self._mark_feedback_job = win.after(1800, hide)
+
     def on_tree_double_click_popup(self, event):
+
         if self._options_are_open():
             return
         row_id = self.tree.identify_row(event.y)
@@ -2092,6 +2266,15 @@ class SeenCommandersGUI:
 
     def apply_edmc_theme(self, popup):
         palette = self._edmc_palette()
+        if not getattr(self, "_palette_logged", False):
+            # TEMPORARY: confirms the palette keys EDMC supplies. Remove after checking the log.
+            self._palette_logged = True
+            current = getattr(getattr(edmc_theme, "theme", None), "current", None)
+            log.info(
+                "TEMP palette from EDMC: %s (EDMC theme keys: %s)",
+                palette,
+                sorted(current) if isinstance(current, dict) else current,
+            )
         if not palette.get("background") and not palette.get("foreground"):
             return
         for widget in self._walk_widgets(popup):

@@ -34,6 +34,8 @@ def plugin_app(parent):
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:
     event = entry.get("event")
+    if isinstance(event, str) and event:
+        history_inst.note_last_journal(event, entry.get("timestamp"))
     if event in ("SupercruiseEntry", "SupercruiseExit", "FSDJump", "Location", "PVPKill"):
         log.info("TIMING journal %s ts=%s recv=%.3f", event, entry.get("timestamp"), __import__("time").time())
     on_foot = bool(state.get("OnFoot"))
@@ -44,8 +46,11 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     gui_inst.set_on_foot(on_foot)
     if event in ("FSDJump", "CarrierJump"):
         history_inst.note_jump(entry.get("timestamp"))
-    if event in ("StartUp", "LoadGame") or (event == "Music" and entry.get("MusicTrack") == "MainMenu"):
-        # Leaving to the main menu or loading in again ends the instance.
+    if event in ("StartUp", "LoadGame", "Shutdown", "ShutDown") or (
+        event == "Music" and entry.get("MusicTrack") == "MainMenu"
+    ):
+        # Main menu, load, quit, or Operations lobby (EDMC often sees that as ShutDown):
+        # clear presence and open load_batch so return re-lists stay quiet.
         history_inst.clear_presence(entry.get("timestamp"))
     if event in ("StartJump", "CarrierJump", "Shutdown", "ShutDown"):
         # Connection announcements belong to the system you are leaving.
@@ -53,7 +58,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     history_inst.note_journal_name(entry)
     system = entry.get("StarSystem", system)
     
-    if event in ("StartUp", "LoadGame", "Resurrected", "Died"):
+    if event in ("StartUp", "LoadGame", "Resurrect", "Resurrected", "Died"):
+        # Journal writes "Resurrect"; older code looked for "Resurrected".
         resume = event in ("StartUp", "LoadGame") and history_inst.take_resume_supercruise()
         location.set(1 if resume else 0, system)
         if event == "Died":
@@ -70,10 +76,16 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         history_inst.note_instance_reset()
         history_inst.trigger()
 
-    elif event in ("SupercruiseExit", "Location", "CarrierJump"): 
+    elif event in ("SupercruiseExit", "Location", "CarrierJump"):
         if event == "SupercruiseExit":
             # Record anyone who arrived since the last worker tick while still in supercruise.
             history_inst.record_presence_now()
+        if event == "Location":
+            new_system = entry.get("StarSystem", system) or system
+            # Respawn / detention / teleport: state often stays normal-space, so Location.set
+            # would not clear the instance. Drop stale people and open load_batch.
+            if location.system and new_system and new_system != location.system:
+                history_inst.clear_presence(entry.get("timestamp"))
         location.set(0, system, event)
         if event == "SupercruiseExit":
             history_inst.drop_supercruise_arrivals()
@@ -90,10 +102,27 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     elif event in ("WingJoin", "WingAdd"):
         location.set_wing(True)
         location.wing_changed()
-    
+        names = []
+        if event == "WingJoin":
+            others = entry.get("Others")
+            if isinstance(others, list):
+                names.extend(n for n in others if isinstance(n, str))
+        name = entry.get("Name")
+        if isinstance(name, str) and name.strip():
+            names.append(name)
+        if names:
+            history_inst.note_wing_mates(names)
+
+    elif event == "WingInvite":
+        # Invite accepted shortly after lists the invitee; silence their CH listing.
+        name = entry.get("Name")
+        if isinstance(name, str) and name.strip():
+            history_inst.note_wing_mates([name])
+
     elif event == "WingLeave":
         location.set_wing(False)
         location.wing_changed()
+        location.clear_wing_join_names()
     
     elif event == "Interdiction":
         # Only a successful interdiction keeps its target through the drop-in.

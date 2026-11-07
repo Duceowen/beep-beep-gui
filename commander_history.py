@@ -20,6 +20,9 @@ class Location:
         self.wing = False
         self.jump_ts = None
         self.wing_join = None
+        # name_key -> wall time when WingJoin/WingAdd/WingInvite named them.
+        # CommanderHistory often lists wingmates without WingMember on the first tick.
+        self.wing_join_names: dict[str, float] = {}
         self.interdiction_ts = None
         self.interdiction_target = None
         # Set on supercruise drop-in after a successful interdiction: target name and drop time.
@@ -139,7 +142,12 @@ class Location:
                 if isinstance(info, dict) and info.get("here") and info.get("state") == 1
             }
         # Late arrivals were first heard during the jump, so they are not members who stayed behind.
-        self.leave_snapshot = {str(cid) for cid in self.instance} - late_arrivals
+        # Only people marked here — stale instance rows must not silence later SC arrivals.
+        self.leave_snapshot = {
+            str(cid)
+            for cid, info in self.instance.items()
+            if isinstance(info, dict) and info.get("here")
+        } - late_arrivals
         if after_death:
             # Killed or escaped commanders were in this instance, so the death leaves them behind too.
             self.leave_snapshot |= self.kill_departed
@@ -186,9 +194,24 @@ class Location:
             self._jump_company_pending = False
             self._jump_company = {}
             
-    def wing_changed(self): 
+    def wing_changed(self):
         self.wing_join = time.time()
-        
+
+    def note_wing_mates(self, names) -> None:
+        """Remember wingmate display names for a short CommanderHistory silence window."""
+        now = time.time()
+        self.wing_join = now
+        for name in names:
+            if not isinstance(name, str):
+                continue
+            # name_key is imported later in this module; looked up at call time.
+            key = name_key(name) if name.strip() else ""
+            if key:
+                self.wing_join_names[key] = now
+
+    def clear_wing_join_names(self) -> None:
+        self.wing_join_names.clear()
+
     def interdiction(self, target=None):
         self.interdiction_ts = time.time()
         self.interdiction_target = target if isinstance(target, str) else None
@@ -218,6 +241,7 @@ from commander_names import (
     close_seen_time,
     is_unknown_name,
     name_key,
+    confusable_key,
     note_seen_time,
     parse_seen_time,
     utc_now,
@@ -246,6 +270,8 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
+_LEAVE_MEMORY_SECONDS = 600.0
+_WING_JOIN_SILENCE_SECONDS = 20.0
 _INTERDICTION_WINDOW_SECONDS = 60.0
 _SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
 # A killed or escaped commander can be re-listed by the game just after a
@@ -254,6 +280,8 @@ _SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
 _KILL_DROP_GUARD_SECONDS = 5.0
 _KILL_RELIST_GUARD_SECONDS = 600.0
 _RESTORE_WINDOW_SECONDS = 600.0
+_BEEP_MARKS_MAX_BYTES = 1_000_000
+_BEEP_MARKS_NAME = "beep_marks.jsonl"
 _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 _AUTO_BACKUP_NAME = re.compile(r"^seen_commanders-\d{8}-\d{6}\.json$")
 _MANUAL_BACKUP_NAME = re.compile(r"^seen_commanders-manual-.*\.json$")
@@ -705,6 +733,11 @@ class CommanderHistoryManager:
         self._live_kills: dict[str, int] = {}
         self.kill_tally_path = os.path.join(self.plugin_dir, "kill_tally.json")
         self._kill_tally: dict[str, int] = self._read_kill_tally()
+        # Last journal event seen by the plugin (for BEEPMARK / debug_snapshot).
+        self._last_journal_event: str | None = None
+        self._last_journal_ts: str | None = None
+        self._marks_path = os.path.join(self.plugin_dir, _BEEP_MARKS_NAME)
+        self._marks_lock = threading.Lock()
 
     def set_session_start(
         self,
@@ -765,21 +798,24 @@ class CommanderHistoryManager:
                 elif location.last_drop_ts is not None and now_ts - location.last_drop_ts < _KILL_DROP_GUARD_SECONDS:
                     return True
         return False
-    def _decide_new_arrival(self, cmdr_id: str, in_batch: bool) -> bool:
+    def _decide_new_arrival(self, cmdr_id: str, in_batch: bool, name=None) -> bool:
         """The one decision for a commander who is new to the instance: beep or stay quiet.
 
-        Quiet during the post-load batch, and for anyone whose announcement rules say no.
+        Quiet during the post-load batch, wing-join name window, and for anyone whose
+        announcement rules say no.
         """
         if in_batch:
-            return False
+            return self._beep_decision(cmdr_id, False, "load_batch")
+        if self._wing_join_name_silent(name if name is not None else self._name_for(cmdr_id)):
+            return self._beep_decision(cmdr_id, False, "wing_join")
         if location.state != 1 and journal_in_supercruise():
             # The game's listing beat the SupercruiseEntry event. They are still in the instance you are leaving.
             log.info("Not announcing %s (id %s): listed as you entered supercruise", self._name_for(cmdr_id), cmdr_id)
-            return False
+            return self._beep_decision(cmdr_id, False, "sc_entry_list")
         if self._is_interdicted_drop_in(cmdr_id):
             # The target you just interdicted drops back into normal space with you. Not an arrival.
             log.info("Not announcing %s (id %s): interdicted within the window", self._name_for(cmdr_id), cmdr_id)
-            return False
+            return self._beep_decision(cmdr_id, False, "interdiction")
         return self._should_announce(cmdr_id, time.monotonic())
 
     def _is_interdicted_drop_in(self, cmdr_id: str) -> bool:
@@ -795,34 +831,171 @@ class CommanderHistoryManager:
     def _should_announce(self, cmdr_id: str, now: float) -> bool:
         """Announce an arrival unless they were announced recently and have not left since.
 
-        A leave or a kill counts as leaving, so a quick return after a kill is still announced.
+        Beep rules ignore Now/quiet-display state. Only a real leave (left_at), departed
+        from kill/escape/detected leave, or the re-announce window gates beeps.
         """
         rec = self._gone.get(cmdr_id, {})
-        if rec.get("quiet_left"):
-            log.info("Not announcing %s (id %s): removed by the quiet timeout this visit", self._name_for(cmdr_id), cmdr_id)
-            return False
         left = rec.get("left_at")
         if left is not None and now - left < _REANNOUNCE_SECONDS:
             # Left by interdiction, high wake or similar and back within the window.
             # A return this soon is a stale re-add, not a new arrival.
             log.info("Not announcing %s (id %s): left %.0f s ago, inside the re-add window", self._name_for(cmdr_id), cmdr_id, now - left)
-            return False
+            return self._beep_decision(cmdr_id, False, "reannounce_window")
         last = self._announced_at.get(cmdr_id)
         if last is None or rec.get("departed") or now - last >= _REANNOUNCE_SECONDS:
             self._announced_at[cmdr_id] = now
             if cmdr_id in self._gone:
                 self._gone[cmdr_id]["departed"] = False
                 self._gone[cmdr_id].pop("removed_at", None)
-            return True
+            reason = "new_arrival" if last is None else ("return_after_leave" if rec.get("departed") else "reannounce_ok")
+            return self._beep_decision(cmdr_id, True, reason)
         log.info("Not announcing %s (id %s): announced %.0f s ago and not departed", self._name_for(cmdr_id), cmdr_id, now - last)
-        return False
+        return self._beep_decision(cmdr_id, False, "recent_announce")
 
     def _name_for(self, cmdr_id) -> str:
         info = self.seen_data.get(str(cmdr_id))
         return str(info.get("name", cmdr_id)) if isinstance(info, dict) else str(cmdr_id)
 
+    def note_last_journal(self, event, timestamp=None) -> None:
+        """Remember the latest journal event name for troubleshooting snapshots."""
+        if isinstance(event, str) and event:
+            self._last_journal_event = event
+            self._last_journal_ts = timestamp if isinstance(timestamp, str) else None
+
+    def _beep_decision(self, cmdr_id, beep: bool, reason: str) -> bool:
+        """Log one greppable announce/skip line and return whether to beep."""
+        log.info(
+            "BEEPDECISION %s reason=%s cmdr=%s id=%s",
+            "beep" if beep else "silent",
+            reason,
+            self._name_for(cmdr_id),
+            cmdr_id,
+        )
+        return beep
+
+    def _wing_join_name_silent(self, name) -> bool:
+        """True when this display name was in a recent WingJoin/WingAdd/WingInvite.
+
+        Unnamed/unknown rows are never silenced here — an interdiction unknown must
+        still beep. Matching uses name_key so casing and spacing variants align.
+        """
+        if not isinstance(name, str) or is_unknown_name(name):
+            return False
+        key = name_key(name)
+        now = time.time()
+        at = location.wing_join_names.get(key)
+        if at is None:
+            at = location.wing_join_names.get(name.strip().casefold())
+        if at is None:
+            return False
+        if now - at > _WING_JOIN_SILENCE_SECONDS:
+            location.wing_join_names.pop(key, None)
+            location.wing_join_names.pop(name.strip().casefold(), None)
+            return False
+        return True
+
+    def note_wing_mates(self, names) -> None:
+        """Record wingmate names from journal WingJoin/WingAdd/WingInvite for silence."""
+        location.note_wing_mates(names)
+
+    def debug_snapshot(self, cmdr_id) -> dict:
+        """Read-only presence/announce snapshot for troubleshooting. Does not mutate state."""
+        cid = str(cmdr_id)
+        now_mono = time.monotonic()
+        now_wall = time.time()
+        info = self.seen_data.get(cid)
+        name = str(info.get("name", cid)) if isinstance(info, dict) else cid
+        inst = location.instance.get(cid)
+        here = bool(isinstance(inst, dict) and inst.get("here"))
+        shown_now = self.is_shown_present(cid)
+        visit = self._visit.get(cid)
+        last_signal_age = None if visit is None else round(now_mono - visit, 3)
+        announced = self._announced_at.get(cid)
+        last_announced_age = None if announced is None else round(now_mono - announced, 3)
+        rec = self._gone.get(cid, {})
+        left = rec.get("left_at")
+        left_at_age = None if left is None else round(now_mono - left, 3)
+        return {
+            "cmdr": name,
+            "id": cid,
+            "utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "here": here,
+            "shown_now": shown_now,
+            "shown_now_flag": (inst.get("shown_now") if isinstance(inst, dict) else None),
+            "last_signal_age": last_signal_age,
+            "last_announced_age": last_announced_age,
+            "left_at_age": left_at_age,
+            "departed": bool(rec.get("departed")),
+            "quiet_left": bool(rec.get("quiet_left")),
+            "visit": "heard" if visit is not None else ("listed" if cid in self._visit else "absent"),
+            "system": location.system,
+            "state": location.state,
+            "instance_reset_pending": bool(location.instance_reset_pending),
+            "last_journal_event": self._last_journal_event,
+            "last_journal_ts": self._last_journal_ts,
+            "mono": round(now_mono, 3),
+            "wall": round(now_wall, 3),
+        }
+
+    @staticmethod
+    def format_beep_mark_line(kind: str, snap: dict) -> str:
+        """One INFO-friendly mark line from a debug_snapshot dict."""
+        def q(value):
+            s = str(value).replace("\\", "\\\\").replace('"', '\\"')
+            return '"' + s + '"'
+
+        parts = [
+            "BEEPMARK kind=%s" % kind,
+            "cmdr=%s" % q(snap.get("cmdr")),
+            "id=%s" % snap.get("id"),
+            "utc=%s" % snap.get("utc"),
+            "here=%s" % snap.get("here"),
+            "shown_now=%s" % snap.get("shown_now"),
+            "last_signal_age=%ss" % snap.get("last_signal_age"),
+            "last_announced_age=%ss" % snap.get("last_announced_age"),
+            "left_at_age=%s" % snap.get("left_at_age"),
+            "visit=%s" % snap.get("visit"),
+            "system=%s" % q(snap.get("system")),
+            "state=%s" % snap.get("state"),
+            "last_journal_event=%s" % snap.get("last_journal_event"),
+        ]
+        return " ".join(parts)
+
+    def record_beep_mark(self, kind: str, cmdr_id) -> dict:
+        """Log a BEEPMARK line and append JSON to beep_marks.jsonl. Never touches seen_commanders.json."""
+        snap = self.debug_snapshot(cmdr_id)
+        line = self.format_beep_mark_line(kind, snap)
+        log.info("%s", line)
+        record = {"kind": kind, **snap}
+        try:
+            payload = json.dumps(record, ensure_ascii=False) + "\n"
+            with self._marks_lock:
+                path = self._marks_path
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    size = 0
+                if size + len(payload.encode("utf-8")) > _BEEP_MARKS_MAX_BYTES:
+                    # Rotate: keep the newer half of the file.
+                    try:
+                        with open(path, "rb") as handle:
+                            data = handle.read()
+                        keep = data[len(data) // 2 :]
+                        cut = keep.find(b"\n")
+                        if cut >= 0:
+                            keep = keep[cut + 1 :]
+                        with open(path, "wb") as handle:
+                            handle.write(keep)
+                    except OSError:
+                        log.exception("Failed to rotate beep_marks.jsonl")
+                with open(path, "a", encoding="utf-8") as handle:
+                    handle.write(payload)
+        except OSError:
+            log.exception("Failed to append beep_marks.jsonl")
+        return snap
+
     def _forget_quiet_left(self) -> None:
-        """A jump, load or death starts a new visit: quiet removals no longer silence a return."""
+        """Scrub leftover quiet_left flags from older builds (no longer written)."""
         for rec in self._gone.values():
             rec.pop("quiet_left", None)
 
@@ -838,9 +1011,17 @@ class CommanderHistoryManager:
             self._visit[cid] = None
 
     def _touch(self, cmdr_id) -> None:
-        """Note that the game or the journal just showed this commander."""
-        self._visit[str(cmdr_id)] = time.monotonic()
+        """Note that the game or the journal just showed this commander.
+
+        Updates last-signal time used by the Now display, and turns shown_now back on
+        if they are still in the instance.
+        """
+        cid = str(cmdr_id)
+        self._visit[cid] = time.monotonic()
         self._instance_dirty = True
+        inst = location.instance.get(cid)
+        if isinstance(inst, dict) and inst.get("here"):
+            inst["shown_now"] = True
 
     def _touch_names(self, names) -> None:
         keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
@@ -851,8 +1032,13 @@ class CommanderHistoryManager:
                 self._touch(cid)
 
     def _expire_quiet_presence(self) -> None:
-        """Drop anyone not seen for a while. The game gives no leave signal for some
-        departures, so silence is the fallback. A later return is announced again."""
+        """Fade the Now display for anyone not heard recently.
+
+        Does NOT clear instance "here" and does NOT touch announce bookkeeping.
+        Beep presence stays until a real leave (jump, supercruise leave, death/load
+        clear, kill/escape). A CommanderHistory refresh while still here uses the
+        was_here path and stays silent; Now comes back via _touch → shown_now.
+        """
         now = time.monotonic()
         for cid, inst in list(location.instance.items()):
             if not (isinstance(inst, dict) and inst.get("here")):
@@ -862,13 +1048,19 @@ class CommanderHistoryManager:
                 self._visit[cid] = now
                 continue
             if now - last >= _PRESENCE_QUIET_SECONDS:
-                inst["here"] = False
-                # Silence is not proof of a leave, but a return after it is not announced either.
-                # The silence stays in force until the next jump, load or death.
-                self._gone.setdefault(cid, {})["quiet_left"] = True
-                info = self.seen_data.get(cid)
-                name = info.get("name", cid) if isinstance(info, dict) else cid
-                log.info("No signal from %s for %d minutes; no longer marked here", name, _PRESENCE_QUIET_SECONDS // 60)
+                # Display-only. Log once when Now fades, not on every worker poll.
+                was_shown = inst.get("shown_now")
+                if was_shown is False:
+                    continue
+                inst["shown_now"] = False
+                if was_shown is not False:
+                    info = self.seen_data.get(cid)
+                    name = info.get("name", cid) if isinstance(info, dict) else cid
+                    log.info(
+                        "No signal from %s for %d minutes; cleared Now display only (still present for beeps)",
+                        name,
+                        _PRESENCE_QUIET_SECONDS // 60,
+                    )
 
     def clear_presence(self, timestamp=None) -> None:
         """Forget everyone in the instance, e.g. after the main menu or a game load.
@@ -917,18 +1109,26 @@ class CommanderHistoryManager:
         self._heard_clear()
 
     def note_instance_reset(self) -> None:
-        """Entering supercruise left the instance, so nobody there is a stale re-add.
-        A quiet-timeout removal does not carry over: the drop-in back into the instance is a return."""
+        """Entering supercruise left the instance: clear leave/announce state for a fresh visit."""
         self._forget_quiet_left()
         self._announced_at.clear()
         self._clear_departures()
         self._heard_clear()
 
     def is_shown_present(self, cmdr_id) -> bool:
-        """Present for display: in the instance and heard within the quiet window."""
+        """Now-group / overlay display only — independent of beep announce decisions.
+
+        Must still be in the instance (`here`), and either shown_now is not faded or
+        they were heard within the quiet window (_visit). Old rows without shown_now
+        use the visit timestamp only (compatible with restored instance_seen.json).
+        """
         if not self.is_present(cmdr_id):
             return False
-        last = self._visit.get(str(cmdr_id))
+        cid = str(cmdr_id)
+        inst = location.instance.get(cid)
+        if isinstance(inst, dict) and inst.get("shown_now") is False:
+            return False
+        last = self._visit.get(cid)
         if last is None:
             return True
         return time.monotonic() - last < _PRESENCE_QUIET_SECONDS
@@ -1405,6 +1605,7 @@ class CommanderHistoryManager:
  
             if self._is_relist_silenced(cmdr_id, now_ts):
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
+                self._beep_decision(cmdr_id, False, "relist_silence")
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
                 self.last_interactions[cmdr_id] = current_flags
@@ -1420,6 +1621,7 @@ class CommanderHistoryManager:
                     # Frontier updates the killed commander's Epoch again
                     # after the kill. Keep them out of the instance until the
                     # update settles, so the kill itself is not announced.
+                    self._beep_decision(cmdr_id, False, "kill_suppress")
                     location.forget(cmdr_id)
                     self.last_interactions[cmdr_id] = current_flags
                     self._remember_sighting(info, existing)
@@ -1448,7 +1650,7 @@ class CommanderHistoryManager:
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
                 rec["departed"] = True
-                beep_this_commander = False
+                beep_this_commander = self._beep_decision(cmdr_id, False, "kill_reset")
                 rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
                 self.last_interactions[cmdr_id] = current_flags
                 self._remember_sighting(info, existing)
@@ -1476,16 +1678,33 @@ class CommanderHistoryManager:
                         "Not announcing %s; they were already here when you jumped",
                         info.get("name") or cmdr_id,
                     )
+                    self._beep_decision(cmdr_id, False, "jump_backup")
                     continue
     
-            if is_wing and wing_recent:
+            if (is_wing and wing_recent) or self._wing_join_name_silent(info.get("name")):
+                # WingMember + recent wing change, or a named WingJoin/WingAdd/WingInvite mate.
+                # Name-based silence covers mates listed without WingMember (EddiesMinion class).
+                reason = "wing_join" if self._wing_join_name_silent(info.get("name")) else "wing_join_batch"
+                self._beep_decision(cmdr_id, False, reason)
                 beep_this_commander = False
+                # Still record presence so they show as here; only the beep is suppressed.
+                if not inst:
+                    location.add_instance(cmdr_id, state=location.state, system=location.system)
+                    inst = location.get_instance()[cmdr_id]
+                inst["here"] = True
+                inst["shown_now"] = True
+                inst["state"] = location.state
+                inst["system"] = location.system
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                self.last_interactions[cmdr_id] = current_flags
+                changed_entries.append(info)
                 continue
 
             if inst:
                 if pvp_kill_recent:
                     inst["here"] = True
-                    beep_this_commander = False
+                    beep_this_commander = self._beep_decision(cmdr_id, False, "pvp_kill_recent")
                        
                     if killed_now and cmdr_id in self.last_interactions:
                         self.last_interactions[cmdr_id].discard("Killed")
@@ -1503,20 +1722,22 @@ class CommanderHistoryManager:
                 if was_here and interdiction_recent:
                     # An interdiction can carry someone who was already here with you
                     # into the new instance. They are still present: no alert, no departure.
-                    beep_this_commander = False
+                    beep_this_commander = self._beep_decision(cmdr_id, False, "interdiction_carry")
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
                 elif was_here:
                     # The game refreshes the record of everyone still in the instance.
-                    # A refresh is not a departure: they stay here, silently, until the
-                    # quiet timeout, a jump, supercruise, a kill or an escape removes them.
-                    beep_this_commander = False
+                    # A refresh is not a departure: they stay here, silently, until a
+                    # jump, supercruise leave, death/load clear, kill or escape removes them.
+                    # Quiet timeout only fades Now display; it does not clear "here".
+                    beep_this_commander = self._beep_decision(cmdr_id, False, "refresh")
                     if existing is not None:
                         info["seen_count"] = existing.get("seen_count", 1)
                 else:
                     inst["here"] = True
+                    inst["shown_now"] = True
                     # Right after a game load, the game rewrites everyone already here.
-                    beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch)
+                    beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch, info.get("name"))
 
                 inst["state"] = location.state
                 inst["system"] = location.system
@@ -1532,7 +1753,8 @@ class CommanderHistoryManager:
     
                 inst = location.get_instance()[cmdr_id]
                 inst["here"] = True
-                beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch)
+                inst["shown_now"] = True
+                beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch, info.get("name"))
     
     
             if not location.wing:
@@ -1542,7 +1764,9 @@ class CommanderHistoryManager:
                     allow_beep = self.wing_notify
                 else:
                     allow_beep = True
-                  
+
+            if beep_this_commander and not allow_beep:
+                self._beep_decision(cmdr_id, False, "wing_muted")
     
             # The overlay follows the same rule as the sound, so a wing member
             # hidden by the wing setting is not shown on screen either.
@@ -1705,7 +1929,7 @@ class CommanderHistoryManager:
                 continue
             if not isinstance(new_name, str) or is_unknown_name(new_name):
                 continue
-            if name_key(new_name) != name_key(old_name):
+            if confusable_key(new_name) != confusable_key(old_name):
                 continue
             add_alias(info, old_name, new_name)
             info["name"] = new_name
@@ -1815,14 +2039,29 @@ class CommanderHistoryManager:
         log.info("Interdiction target %s got away", name)
 
     def remember_leave_snapshot(self) -> None:
-        """Entering supercruise: everyone seen in this instance counts as already here.
+        """Entering supercruise: recently-heard people count as already here.
 
-        Runaways and anyone heard earlier in the visit are included, so the game's
-        re-list when you leave is not announced as new arrivals."""
-        # Supercruise arrivals were first heard after you left the instance, so they are not left behind.
-        # Commanders you killed or who escaped are not left behind either: their re-list after
-        # respawn is a new arrival, not a return to the instance you just left.
-        location.leave_snapshot = (set(location.leave_snapshot) | set(self._visit)) - set(location.supercruise_arrivals) - location.kill_departed
+        The game re-lists commanders who were with you; those must stay silent.
+        Only people heard within the last 10 minutes are kept — not every key in
+        the visit map. That way a sticky here-after-quiet entry cannot silence a
+        real supercruise arrival (Mossyone / ColonelPanic class of misses).
+        """
+        now = time.monotonic()
+        # Keep leave_instance members unless their last signal is known-stale
+        # (sticky here after quiet). Also include other recently-heard runaways.
+        kept = set()
+        for cid in location.leave_snapshot:
+            last = self._visit.get(cid)
+            if last is None or (isinstance(last, (int, float)) and now - last < _LEAVE_MEMORY_SECONDS):
+                kept.add(cid)
+        recent = {
+            cid
+            for cid, last in self._visit.items()
+            if isinstance(last, (int, float)) and now - last < _LEAVE_MEMORY_SECONDS
+        }
+        location.leave_snapshot = (
+            kept | recent
+        ) - set(location.supercruise_arrivals) - location.kill_departed
 
     def forget_instance(self) -> None:
         """Death: the instance you were in is gone. Its people stay in the snapshot, so a

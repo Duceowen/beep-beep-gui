@@ -12,6 +12,7 @@ import tempfile
 import time
 import types
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -42,10 +43,23 @@ class _Log:
 
 _stub("beep_beep_config", config=_Config())
 _stub("logutil", log=_Log())
+_stub("beep_beep", beep_inst=types.SimpleNamespace(
+    handle_event=lambda *a, **k: None, stop_playback=lambda: None
+))
+_stub("overlay_announcer", announce_connected=lambda *a: None, clear_connected=lambda: None)
+_stub("gui", gui_inst=types.SimpleNamespace(
+    add_or_update_commander=lambda *a, **k: None,
+    build_plugin_button=lambda p: None,
+    options_menu=lambda f: None,
+    set_on_foot=lambda x: None,
+))
+_stub("myNotebook")
+_stub("version", __version__="1.0.51")
 logging.disable(logging.CRITICAL)
 
 import commander_history as ch  # noqa: E402
 from commander_history import location  # noqa: E402
+import load as load_mod  # noqa: E402
 
 
 def epoch(when: datetime.datetime) -> int:
@@ -552,8 +566,10 @@ class ArrivalDecision(unittest.TestCase):
         self.assertTrue(h._decide_new_arrival("1", in_batch=False))
 
 class QuietTimeoutReturn(unittest.TestCase):
-    """Real: Valanga's low wake was seen at 05:09. The quiet timeout removed them, then a
-    normal-space update re-added and announced them at 05:10. They had left."""
+    """Quiet timeout fades Now only. Beep presence (`here`) stays until a real leave.
+
+    A CommanderHistory refresh while still here must not beep (was_here path).
+    """
 
     def setUp(self):
         self.h = fresh_history()
@@ -561,25 +577,45 @@ class QuietTimeoutReturn(unittest.TestCase):
         location.system, location.state = "Shinrarta Dezhra", 0
         location.add_instance("801", state=0, system="Shinrarta Dezhra")
         location.instance["801"]["here"] = True
+        location.instance["801"]["shown_now"] = True
         self.h._visit["801"] = time.monotonic() - 10_000
         self.h._presence_saved = {"801"}
+        self.h._announced_at["801"] = time.monotonic() - 120
 
-    def test_return_after_quiet_timeout_stays_silent(self):
+    def test_quiet_timeout_clears_now_but_keeps_here(self):
+        self.assertFalse(self.h.is_shown_present("801"))  # visit already stale
+        # Force shown_now on then expire
+        location.instance["801"]["shown_now"] = True
+        # visit still stale → expire fades Now
         self.h._expire_quiet_presence()
-        self.assertFalse(present("801"))
+        self.assertTrue(present("801"))
+        self.assertFalse(location.instance["801"].get("shown_now"))
+        self.assertFalse(self.h.is_shown_present("801"))
+        self.assertNotIn("quiet_left", self.h._gone.get("801", {}))
+
+    def test_refresh_after_quiet_timeout_does_not_beep(self):
+        self.h._expire_quiet_presence()
+        self.assertTrue(present("801"))
         feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 10, 23))
-        self.assertEqual(self.h.sent, [])  # silent; the game still lists them, so Now may show
+        self.assertEqual(self.h.sent, [])
+        self.assertTrue(present("801"))
+        # Now comes back when they refresh
+        self.assertTrue(self.h.is_shown_present("801"))
+        self.assertTrue(location.instance["801"].get("shown_now"))
 
-    def test_jump_lets_a_quiet_commander_announce_again(self):
+    def test_jump_then_return_does_beep(self):
         self.h._expire_quiet_presence()
+        self.assertTrue(present("801"))
+        # Real leave: jump clears visit/announce; instance is emptied by Location on jump path
+        location.instance.clear()
         self.h.note_jump("2026-11-03T05:20:00Z")
         feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 21, 0))
         self.assertEqual(self.h.sent, [["801"]])
 
-    def test_death_lets_a_quiet_commander_announce_again(self):
-        self.h._expire_quiet_presence()
+    def test_death_scrubs_stale_quiet_left(self):
+        self.h._gone.setdefault("801", {})["quiet_left"] = True
         self.h.forget_instance()
-        self.assertNotIn("quiet_left", self.h._gone["801"])
+        self.assertNotIn("quiet_left", self.h._gone.get("801", {}))
 
 class RelistRule(unittest.TestCase):
     def setUp(self):
@@ -635,7 +671,8 @@ class QuietReturnAfterSupercruise(unittest.TestCase):
         h._visit["1001"] = time.monotonic() - 10_000
         h._presence_saved = {"1001"}
         h._expire_quiet_presence()
-        self.assertTrue(h._gone["1001"].get("quiet_left"))
+        self.assertTrue(present("1001"))  # here stays; Now faded
+        self.assertFalse(h.is_shown_present("1001"))
         location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
         location.leave_instance()
         h.remember_leave_snapshot()
@@ -658,7 +695,9 @@ class QuietReturnAfterHyperspace(unittest.TestCase):
         h._visit["1101"] = time.monotonic() - 10_000
         h._presence_saved = {"1101"}
         h._expire_quiet_presence()
-        self.assertTrue(h._gone["1101"].get("quiet_left"))
+        self.assertTrue(present("1101"))
+        self.assertFalse(h.is_shown_present("1101"))
+        location.instance.clear()  # jump leaves the instance
         h.note_jump("2026-11-03T06:10:00Z")
         location.system = "Kivah"
         feed(h, ["1101"], datetime.datetime(2026, 11, 3, 6, 10, 30))
@@ -782,3 +821,168 @@ class Journal(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class LeaveSnapshotRecentOnly(unittest.TestCase):
+    """Sticky here-after-quiet must not put stale commanders into leave_snapshot.
+
+    Repro shape (Mossyone / ColonelPanic marks): heard earlier, quiet for a while with
+    here still True, enter supercruise, then they appear again — must beep as a SC arrival,
+    not be relist-silenced.
+    """
+
+    def test_stale_sticky_here_not_in_leave_snapshot_beeps_in_supercruise(self):
+        h = fresh_history()
+        location.system, location.state = "Sorbago", 0
+        add_row(h, "5645652", "Mossyone")
+        location.add_instance("5645652", state=0, system="Sorbago")
+        location.instance["5645652"]["here"] = True
+        location.instance["5645652"]["shown_now"] = False
+        # Heard long ago (beyond leave-memory), but sticky here from the Now/beep split.
+        h._visit["5645652"] = time.monotonic() - 900
+        location.set(1, "Sorbago", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        self.assertNotIn("5645652", location.leave_snapshot)
+        feed(h, ["5645652"], datetime.datetime(2026, 11, 6, 19, 27, 25))
+        self.assertEqual(h.sent, [["5645652"]])
+        self.assertTrue(present("5645652"))
+
+    def test_recently_heard_left_behind_still_silent_in_supercruise(self):
+        h = fresh_history()
+        location.system, location.state = "Sorbago", 0
+        add_row(h, "2627947", "ColonelPanic")
+        location.add_instance("2627947", state=0, system="Sorbago")
+        location.instance["2627947"]["here"] = True
+        h._visit["2627947"] = time.monotonic() - 30
+        location.set(1, "Sorbago", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        self.assertIn("2627947", location.leave_snapshot)
+        feed(h, ["2627947"], datetime.datetime(2026, 11, 6, 19, 27, 25))
+        self.assertEqual(h.sent, [])
+
+
+class QuietExpireLogsOnce(unittest.TestCase):
+    def test_expire_logs_once_when_now_fades(self):
+        h = fresh_history()
+        add_row(h, "1", "QuietOne")
+        location.system, location.state = "Sol", 0
+        location.add_instance("1", state=0, system="Sol")
+        location.instance["1"]["here"] = True
+        location.instance["1"]["shown_now"] = True
+        h._visit["1"] = time.monotonic() - 10_000
+        with mock.patch("commander_history.log") as log:
+            h._expire_quiet_presence()
+            h._expire_quiet_presence()
+            h._expire_quiet_presence()
+        info_calls = [c for c in log.info.call_args_list if c.args and "cleared Now display only" in str(c.args[0])]
+        self.assertEqual(len(info_calls), 1)
+        self.assertFalse(location.instance["1"].get("shown_now"))
+        self.assertTrue(present("1"))
+
+
+
+class WingJoinSilence(unittest.TestCase):
+    """WingJoin/WingAdd/WingInvite names silence CH listings briefly (EddiesMinion class)."""
+
+    def test_named_wingmate_listing_is_silent_without_wingmember(self):
+        h = fresh_history()
+        add_row(h, "970782", "EddiesMinion")
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        location.set_wing(True)
+        h.note_wing_mates(["EddiesMinion", "Castorhill"])
+        feed(h, ["970782"], datetime.datetime(2026, 11, 6, 21, 22, 34))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(present("970782"))
+
+    def test_later_real_wingmate_arrival_still_beeps(self):
+        h = fresh_history()
+        add_row(h, "970782", "EddiesMinion")
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        location.set_wing(True)
+        h.note_wing_mates(["EddiesMinion"])
+        # Expire the silence window.
+        location.wing_join_names["eddiesminion"] = time.time() - 30.0
+        feed(h, ["970782"], datetime.datetime(2026, 11, 6, 21, 23, 0))
+        self.assertEqual(h.sent, [["970782"]])
+
+    def test_unnamed_row_is_not_silenced_by_wing_window(self):
+        h = fresh_history()
+        add_row(h, "99", "unknown")
+        location.system, location.state = "Sol", 0
+        h.note_wing_mates(["EddiesMinion"])
+        feed(h, ["99"], datetime.datetime(2026, 11, 6, 21, 22, 34))
+        self.assertEqual(h.sent, [["99"]])
+
+    def test_wing_invite_name_silences_listing(self):
+        h = fresh_history()
+        add_row(h, "1", "Castorhill")
+        location.system, location.state = "Sol", 0
+        h.note_wing_mates(["Castorhill"])  # WingInvite accepted path
+        feed(h, ["1"], datetime.datetime(2026, 11, 6, 21, 22, 30))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(present("1"))
+
+
+class OperationsLobbyReturn(unittest.TestCase):
+    """Operations lobby looks like ShutDown; return re-lists must stay quiet via load_batch."""
+
+    def test_shutdown_opens_load_batch_like_menu(self):
+        h = fresh_history()
+        add_row(h, "1", "EddiesMinion")
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        location.add_instance("1", state=0, system=location.system)
+        location.instance["1"]["here"] = True
+        # None timestamp: full load_batch window (journal lag would eat a stale ts).
+        h.clear_presence(None)
+        self.assertFalse(present("1"))
+        self.assertGreater(h._batch_until, time.monotonic())
+        feed(h, ["1"], datetime.datetime(2026, 11, 6, 21, 22, 40))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(present("1"))
+
+    def test_location_system_change_after_death_clears_stale_and_batches(self):
+        """Died -> MainMenu re-lists old system -> Location to detention must not keep them here with beeps."""
+        h = fresh_history()
+        load_mod.history_inst = h
+        add_row(h, "244965", "Sajtkremporkolt")
+        location.system, location.state = "Sorbago", 0
+        location.add_instance("244965", state=0, system="Sorbago")
+        location.instance["244965"]["here"] = True
+        h._batch_until = 0
+        # Location teleport to detention (fresh ts so load_batch is not eaten by lag).
+        now_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        entry = {
+            "timestamp": now_ts,
+            "event": "Location",
+            "StarSystem": "Col 285 Sector YU-F c11-1",
+        }
+        load_mod.journal_entry(
+            "Space Pope Duce", False, "Sorbago", "", entry, {}
+        )
+        self.assertEqual(location.system, "Col 285 Sector YU-F c11-1")
+        self.assertFalse(present("244965"))
+        self.assertGreater(h._batch_until, time.monotonic())
+        feed(h, ["244965"], datetime.datetime(2026, 11, 6, 21, 22, 5))
+        self.assertEqual(h.sent, [])
+
+
+class ResurrectEventName(unittest.TestCase):
+    def test_journal_resurrect_updates_location(self):
+        h = fresh_history()
+        load_mod.history_inst = h
+        location.system, location.state = "Sorbago", 0
+        entry = {
+            "timestamp": "2026-11-06T21:21:57Z",
+            "event": "Resurrect",
+            "Option": "rebuy",
+            "Cost": 1,
+            "Bankrupt": False,
+        }
+        load_mod.journal_entry(
+            "Space Pope Duce", False, "Sorbago", "", entry, {}
+        )
+        self.assertEqual(location.state, 0)
+        self.assertEqual(location.system, "Sorbago")

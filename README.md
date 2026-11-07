@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.0](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.0/beep-beep-gui-1.1.0.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.1](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.1/beep-beep-gui-1.1.1.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -30,6 +30,15 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.1
+- Right-click a row in Seen Commanders to mark a missed beep, an extra beep, or a related issue (shown as Now but not here, beeped early or late, interdiction, killed, or wrong name). The mark is appended to beep_marks.jsonl in the plugin folder and written to the debug log. Each announce or skip is also logged as a decision line
+- Supercruise missed beeps caused by a stale leave snapshot are fixed. Commanders not heard in the last 10 minutes are dropped from that silence list, so a real supercruise arrival beeps. Commanders heard in the last 10 minutes that you left behind stay silent when the game re-lists them
+- The Now display logs the fade once, when Now clears, so the debug log is no longer flooded on every presence check
+- The quiet timeout only fades the Now display. Beep presence stays until a real leave, so a commander still with you does not beep again because Now faded, and a refresh of someone still here stays silent
+- Joining a wing no longer beeps for the wingmates the game lists, including a wing add or an accepted wing invite. They still show as here. An unnamed contact is not silenced by that short window, and a real arrival after it still beeps
+- Death, respawn, a Location event that changes system, and the Operations-screen ShutDown reset presence. Respawn is the journal Resurrect event. A system change clears the old instance and keeps the return re-list quiet, including detention or a teleport where you stay in normal space. The Operations screen arrives as ShutDown and clears presence the same way the main menu does
+- Update spelling treats o and 0 as look-alikes. When a ship scan, wing name, PvP kill, or interdiction shows a saved name with o and 0 swapped, and never shows the saved letters exactly, the row takes the game's spelling and keeps the old spelling as an alias. Chat alone does not swap them. Two saved commanders who differ only by o and 0 are left unchanged, and so are two different look-alike spellings from the game
 
 ## 1.1.0
 - Seen Commanders backups: "Back up now" saves a copy on demand, and "Open backups folder" opens the backups folder
