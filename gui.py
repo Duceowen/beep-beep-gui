@@ -315,7 +315,13 @@ class SeenCommandersGUI:
         self.resize_after_id = None
         self.row_offset = 0
         self.sort_field = "last_seen"
-        self.sort_asc = False       
+        self.sort_asc = False
+        # The history worker must not touch the tree. Updates wait here until
+        # the main thread draws them. _list_reloading is true while import or
+        # restore throws the old rows away and builds the new ones.
+        self._gui_lock = threading.Lock()
+        self._gui_pending = []
+        self._list_reloading = False
         self.refresh_interval = 5000
         self.presence_poll_ms = 250        
         self.beep_inst = None
@@ -415,6 +421,7 @@ class SeenCommandersGUI:
         self.topmost_var = tk.BooleanVar(value=bool(config.get_config("stay_on_top", False)))
 
         if self.window and self.window.winfo_exists():
+            self._window_open = True
             self.window.lift()
             self.build_ui(self.window)
             self._apply_topmost()
@@ -453,6 +460,7 @@ class SeenCommandersGUI:
         self.window.grid_columnconfigure(2, weight=1)
         
         
+        self._window_open = True
         self.build_ui(self.window)
         self.make_tree_editable()
         self.start_auto_refresh()
@@ -1319,6 +1327,14 @@ class SeenCommandersGUI:
         self.window.bind("<Configure>", on_resize)
         
         def on_window_close():
+            self._window_open = False
+            layout_job = getattr(self, "_header_layout_job", None)
+            if layout_job:
+                try:
+                    self.window.after_cancel(layout_job)
+                except Exception:
+                    pass
+                self._header_layout_job = None
             job = getattr(self.window, "_beep_topmost_job", None)
             if job:
                 try:
@@ -1760,7 +1776,9 @@ class SeenCommandersGUI:
 
             self.tree.bind("<Configure>", self._on_tree_configure, add="+")
             self.header_frame.bind("<Configure>", self._on_header_configure, add="+")
-            self.header_frame.after_idle(self._layout_tree_header)
+            # Schedule on the window. An idle callback on the header itself
+            # still fires after that header is destroyed and reports an error.
+            self._header_layout_job = parent.after_idle(self._layout_tree_header)
     
             self.widgets.clear()
             self.sound_vars.clear()
@@ -1770,10 +1788,12 @@ class SeenCommandersGUI:
             self.kills_vars.clear()
             self.tree_items = {}
 
-        if history_inst.seen_data:
-            new_ids = [cmdr_id for cmdr_id in history_inst.seen_data if cmdr_id not in self.tree_items]
-            if new_ids:
-                self.add_rows(new_ids)
+        with history_inst._data_lock:
+            # Copy the ids first. The history worker can insert a row while
+            # this list is built, and that used to raise and leave the tree empty.
+            new_ids = [cmdr_id for cmdr_id in list(history_inst.seen_data) if cmdr_id not in self.tree_items]
+        if new_ids:
+            self.add_rows(new_ids)
     
         self.sort_rows(sort_field, sort_asc)
 
@@ -2081,7 +2101,10 @@ class SeenCommandersGUI:
             except tk.TclError:
                 pass
         try:
-            window.after_idle(self._layout_tree_header)
+            job = getattr(self, "_header_layout_job", None)
+            if job:
+                window.after_cancel(job)
+            self._header_layout_job = window.after_idle(self._layout_tree_header)
         except Exception:
             pass
 
@@ -2330,107 +2353,205 @@ class SeenCommandersGUI:
     
         self.sort_rows(self.sort_field, self.sort_asc)
     
+    def _tree_alive(self):
+        tree = getattr(self, "tree", None)
+        if tree is None:
+            return False
+        try:
+            return bool(tree.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _row_text(self, info, key, default):
+        if not isinstance(info, dict):
+            return default
+        value = info.get(key, default)
+        if isinstance(value, str) and value:
+            return value
+        return default
+
+    def _sound_key(self, info):
+        """A sound name the row can store. A bad value must not abort the list."""
+        sound = info.get("sound") if isinstance(info, dict) else None
+        if not isinstance(sound, str) or not sound.strip():
+            fallback = getattr(sound_inst, "neutral", None)
+            sound = fallback if isinstance(fallback, str) and fallback else "neutral"
+        sound_key = sound.strip().lower()
+        files = getattr(sound_inst, "sound_files", None)
+        try:
+            if files is not None and sound_key not in files:
+                sound_key = "neutral"
+        except TypeError:
+            pass
+        return sound_key
+
+    def _commander_sort_value(self, cmdr_id, sort_field):
+        """Sort from the saved row, not from the on-screen text variables.
+
+        Rebuilding the list clears those variables before the rows exist.
+        Looking them up raised KeyError and left only the column headers.
+        """
+        info = history_inst.seen_data.get(cmdr_id)
+        if not isinstance(info, dict):
+            info = {}
+        if sort_field == "name":
+            return self._row_text(info, "name", "").lower()
+        if sort_field == "sound":
+            return self._sound_key(info)
+        if sort_field == "kills":
+            try:
+                return int(info.get("kills", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+        if sort_field == "seen_count":
+            try:
+                return int(info.get("seen_count", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+        if sort_field == "last_seen":
+            raw = info.get("last_seen", "")
+            try:
+                ts = datetime.fromisoformat(raw) if isinstance(raw, str) else None
+                if ts is None:
+                    raise ValueError
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                ts = datetime(1, 1, 1, tzinfo=timezone.utc)
+            try:
+                here = 1 if history_inst.is_shown_present(cmdr_id) else 0
+            except Exception:
+                here = 0
+            return (here, ts)
+        return str(cmdr_id)
+
+    def _ensure_row_vars(self, cmdr_id, info):
+        name = self._row_text(info, "name", "unknown")
+        self.name_vars.setdefault(cmdr_id, tk.StringVar(value=name))
+        if cmdr_id not in self.sound_vars:
+            self.sound_vars[cmdr_id] = tk.StringVar(value=self._sound_key(info))
+        self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.display_last_seen(cmdr_id, info)))
+        seen = info.get("seen_count", 0) if isinstance(info, dict) else 0
+        kills = info.get("kills", 0) if isinstance(info, dict) else 0
+        try:
+            seen = int(seen or 0)
+        except (TypeError, ValueError):
+            seen = 0
+        try:
+            kills = int(kills or 0)
+        except (TypeError, ValueError):
+            kills = 0
+        self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(seen)))
+        self.kills_vars.setdefault(cmdr_id, tk.StringVar(value=str(kills)))
+
+    def _insert_tree_row(self, cmdr_id):
+        values = (
+            self.name_vars[cmdr_id].get(),
+            self.sound_vars[cmdr_id].get().capitalize(),
+            self.seen_count_vars[cmdr_id].get(),
+            self.kills_vars[cmdr_id].get(),
+            self.last_seen_vars[cmdr_id].get(),
+        )
+        item = self.tree.insert("", "end", values=values)
+        self.tree_items[cmdr_id] = item
+        self.widgets[cmdr_id] = {}
+        self._remember_cells(cmdr_id, values)
+        self._content_dirty = True
+
     def add_rows(self, cmdr_ids: list[str]):
         if not hasattr(self, "tree_items"):
             self.tree_items = {}
         if not hasattr(self, "widgets"):
             self.widgets = {}
-    
-        sort_field = getattr(self, "sort_field", "last_seen")
-        sort_asc = getattr(self, "sort_asc", False)
-    
-        def sort_key(cmdr_id):
-            if sort_field == "name":
-                return self.name_vars[cmdr_id].get().lower()
-            if sort_field == "sound":
-                return self.sound_vars[cmdr_id].get().lower()
-            if sort_field == "kills":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "seen_count":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "last_seen":
-                try:
-                    ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                except Exception:
-                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
-                # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
-            return cmdr_id
-    
-        all_ids = list(history_inst.seen_data.keys())
-        sorted_ids = sorted(all_ids, key=sort_key, reverse=not sort_asc)
-    
+        if not self._tree_alive():
+            return
+
         for cmdr_id in cmdr_ids:
-            info = history_inst.seen_data[cmdr_id]
-    
-            self.name_vars.setdefault(cmdr_id, tk.StringVar(value=info.get("name", "unknown")))
-            if cmdr_id not in self.sound_vars:
-
-                sound_key = info.get("sound", "neutral").lower()
-                if sound_key not in sound_inst.sound_files:
-                    sound_key = "neutral"
-                
-                self.sound_vars[cmdr_id] = tk.StringVar(value=sound_key)
-
-
-            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.display_last_seen(cmdr_id, info)))
-            self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("seen_count", 0))))
-            self.kills_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("kills", 0))))
-    
-            index = 0
-            for sid in sorted_ids:
-                if sid == cmdr_id:
-                    break
-                if sid in self.tree_items:
-                    index += 1
-    
-            values = (
-                self.name_vars[cmdr_id].get(),
-                self.sound_vars[cmdr_id].get().capitalize(),
-                self.seen_count_vars[cmdr_id].get(),
-                self.kills_vars[cmdr_id].get(),
-                self.last_seen_vars[cmdr_id].get()
-            )
-            item = self.tree.insert("", index, values=values)
-            self.tree_items[cmdr_id] = item
-            self.widgets[cmdr_id] = {}
-            self._remember_cells(cmdr_id, values)
-            self._row_order = None
-            self._content_dirty = True
+            if cmdr_id in self.tree_items:
+                continue
+            info = history_inst.seen_data.get(cmdr_id)
+            if not isinstance(info, dict):
+                continue
+            self._ensure_row_vars(cmdr_id, info)
+            self._insert_tree_row(cmdr_id)
+        # sort_rows puts them in column order. It reads the saved rows, so it
+        # can run after the text variables were cleared and created again.
+        self._row_order = None
 
     def add_or_update_commander(self, data):
+        """Show sightings on the Tk thread. The history worker calls this too.
+
+        Do not touch the widgets from the worker. Even winfo_exists() raises
+        there, and a tree update during a reload used to hit a half-built list.
+        """
+        if threading.current_thread() is not threading.main_thread():
+            if not getattr(self, "_window_open", False):
+                return
+            with self._gui_lock:
+                self._gui_pending.append(data)
+            return
+        if getattr(self, "_list_reloading", False):
+            with self._gui_lock:
+                self._gui_pending.append(data)
+            return
+        window = getattr(self, "window", None)
+        try:
+            open_ = window is not None and window.winfo_exists()
+        except tk.TclError:
+            open_ = False
+        if not open_:
+            return
+        self._apply_commander_rows(data)
+
+    def _flush_gui_pending(self):
+        if getattr(self, "_list_reloading", False):
+            return
+        with self._gui_lock:
+            pending = self._gui_pending
+            self._gui_pending = []
+        for data in pending:
+            try:
+                self._apply_commander_rows(data)
+            except Exception:
+                log.exception("Failed to show a commander update")
+
+    def _apply_commander_rows(self, data):
         if not isinstance(data, list):
             data = [data]
-    
+
         new_cmdr_ids = []
-    
+        tree_alive = self._tree_alive() and self.window and self.window.winfo_exists()
+
         for info in data:
+            if not isinstance(info, dict) or "commander_id" not in info:
+                continue
             cmdr_id = info["commander_id"]
             cmdr_id_str = str(cmdr_id)
-    
-            self.name_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("name", "unknown"))
-            self.sound_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("sound", sound_inst.neutral).lower())
-            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.display_last_seen(cmdr_id_str, info))
-            self.seen_count_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("seen_count", 0)))
-            self.kills_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("kills", 0)))
-    
+            self._ensure_row_vars(cmdr_id_str, info)
+            # A later sighting must replace the text, not keep the first value.
+            self.name_vars[cmdr_id_str].set(self._row_text(info, "name", "unknown"))
+            self.sound_vars[cmdr_id_str].set(self._sound_key(info))
+            self.last_seen_vars[cmdr_id_str].set(self.display_last_seen(cmdr_id_str, info))
+            try:
+                seen = int(info.get("seen_count", 0) or 0)
+            except (TypeError, ValueError):
+                seen = 0
+            try:
+                kills = int(info.get("kills", 0) or 0)
+            except (TypeError, ValueError):
+                kills = 0
+            self.seen_count_vars[cmdr_id_str].set(str(seen))
+            self.kills_vars[cmdr_id_str].set(str(kills))
+
             item_id = self.tree_items.get(cmdr_id_str)
-            if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
+            if tree_alive:
                 if item_id:
                     values = (
-                        info.get("name", "unknown"),
-                        info.get("sound", sound_inst.neutral).capitalize(),
-                        str(info.get("seen_count", 0)),
-                        str(info.get("kills", 0)),
-                        self.display_last_seen(cmdr_id_str, info),
+                        self.name_vars[cmdr_id_str].get(),
+                        self.sound_vars[cmdr_id_str].get().capitalize(),
+                        str(seen),
+                        str(kills),
+                        self.last_seen_vars[cmdr_id_str].get(),
                     )
                     prev = (getattr(self, "_cell_snapshot", {}) or {}).get(cmdr_id_str)
                     if prev != values:
@@ -2445,13 +2566,15 @@ class SeenCommandersGUI:
                             self._fitted_cheap = None
                 else:
                     new_cmdr_ids.append(cmdr_id_str)
-    
-        if new_cmdr_ids and self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
+
+        if new_cmdr_ids and tree_alive:
             self.add_rows(new_cmdr_ids)
-    
-        if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
-            sort_field = config.get_config("sort_field", "last_seen")
+
+        if tree_alive:
+            sort_field = config.get_config("sort_field", "last_seen") or self.sort_field
             sort_asc = config.get_config("sort_asc", False)
+            if sort_asc is None:
+                sort_asc = self.sort_asc
             self.sort_rows(sort_field, sort_asc)
        
     def _refresh_header_text(self, sort_field, sort_asc):
@@ -2473,33 +2596,13 @@ class SeenCommandersGUI:
         if not hasattr(self, "tree") or not self.window or not self.window.winfo_exists():
             return        
         
-        def sort_key(cmdr_id):
-            if sort_field == "name":
-                return self.name_vars[cmdr_id].get().lower()
-            if sort_field == "sound":
-                return self.sound_vars[cmdr_id].get().lower()
-            if sort_field == "kills":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "seen_count":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "last_seen":
-                try:
-                    ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                except Exception:
-                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
-                # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
-            return cmdr_id
-    
-        sorted_ids = sorted(history_inst.seen_data.keys(), key=sort_key, reverse=not sort_asc)
+        with history_inst._data_lock:
+            ids = list(history_inst.seen_data)
+        sorted_ids = sorted(
+            ids,
+            key=lambda cmdr_id: self._commander_sort_value(cmdr_id, sort_field),
+            reverse=not bool(sort_asc),
+        )
         order = [cmdr_id for cmdr_id in sorted_ids if self.tree_items.get(cmdr_id)]
         previous = getattr(self, "_row_order", None)
         if previous == order:
@@ -2589,6 +2692,8 @@ class SeenCommandersGUI:
             if not self.window or not self.window.winfo_exists():
                 return
 
+            # Sightings reported by the history worker are drawn here, on the Tk thread.
+            self._flush_gui_pending()
             # Presence changes (the Now group) show up on the short poll, so arrivals
             # appear right away. The full pass over every row stays on the slow timer.
             present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_shown_present(cid))
@@ -3244,20 +3349,42 @@ class SeenCommandersGUI:
         return "%s    %s" % (when, backup_list_kind(name))
 
     def reload_seen_list(self):
-        """Rebuild the Seen Commanders rows from memory. Used after a restore or import."""
-        if not self.window or not self.window.winfo_exists():
+        """Rebuild the Seen Commanders rows from memory. Used after a restore or import.
+
+        Runs on the Tk thread, after the import dialog has closed. The history
+        worker's updates are held until the new rows are in place, so they
+        cannot draw into a tree that is being replaced.
+        """
+        window = getattr(self, "window", None)
+        try:
+            if not window or not window.winfo_exists():
+                return
+        except tk.TclError:
             return
-        for attr in ("scrollbar", "tree", "header_frame"):
-            widget = getattr(self, attr, None)
-            if widget is not None:
+        self._list_reloading = True
+        try:
+            job = getattr(self, "_header_layout_job", None)
+            if job:
                 try:
-                    widget.destroy()
+                    window.after_cancel(job)
                 except Exception:
                     pass
-                setattr(self, attr, None)
-        self.tree_items = {}
-        self.widgets = {}
-        self.build_ui(self.window)
+            self._header_layout_job = None
+            for attr in ("scrollbar", "tree", "header_frame"):
+                widget = getattr(self, attr, None)
+                if widget is not None:
+                    try:
+                        widget.destroy()
+                    except Exception:
+                        pass
+                    setattr(self, attr, None)
+            self.tree_items = {}
+            self.widgets = {}
+            self._row_order = None
+            self.build_ui(window)
+        finally:
+            self._list_reloading = False
+        self._flush_gui_pending()
 
     def backup_seen_now(self, parent):
         path = history_inst.backup_seen_commanders_now("")
