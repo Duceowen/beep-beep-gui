@@ -31,6 +31,9 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.3
+- After you confirm an import, Seen Commanders fills in straight away with the names you already had and the names just added. Sorting by Name or Sound no longer leaves that window blank until EDMC is restarted. Cancel leaves the list as it was
+
 ## 1.1.2
 - Importing commander names checks the file before anything is written. A file over 5 MB or 20,000 entries is refused. A file nested too deeply shows an error instead of freezing
 - Import shows a preview of new names, changed names, and skipped or invalid rows. The list is written only after you confirm. Cancel writes nothing, and no backup is made
