@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
 from beep_beep_config import config
-from commander_history import history_inst, add_alias
+from commander_history import backup_list_kind, describe_import_plan, history_inst, import_plan_lines, add_alias
 from beep_beep import beep_inst, sound_inst
 import clickthrough
 from logutil import log
@@ -3241,8 +3241,7 @@ class SeenCommandersGUI:
             when = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
         except OSError:
             when = "unknown time"
-        kind = "Manual" if name.startswith("seen_commanders-manual-") else "Startup"
-        return f"{when}    {kind}"
+        return "%s    %s" % (when, backup_list_kind(name))
 
     def reload_seen_list(self):
         """Rebuild the Seen Commanders rows from memory. Used after a restore or import."""
@@ -3330,22 +3329,82 @@ class SeenCommandersGUI:
         if not path:
             return
         try:
-            counts = history_inst.import_commander_names(path)
-        except (OSError, ValueError) as err:
+            plan = history_inst.plan_commander_import(path)
+        except (OSError, ValueError, RecursionError) as err:
             self._show_spelling_notice(parent, "Import failed: %s" % err, "Import failed")
             return
-        self.reload_seen_list()
-        message = (
-            "Added %d commanders.\n"
-            "Filled in %d unknown names.\n"
-            "Kept %d names you already had.\n"
-            "Skipped %d entries with no name.\n\n"
-            "Your list was backed up to %s."
-        ) % (
-            counts["added"], counts["filled"], counts["kept"], counts["skipped"],
-            os.path.basename(counts["backup"]),
+        # The plan is only a preview. Cancel closes this dialog and writes nothing.
+        self._confirm_import_plan(parent, plan)
+
+    def _confirm_import_plan(self, parent, plan):
+        dialog = tk.Toplevel(parent)
+        dialog.title("Import commander names")
+        dialog.transient(parent)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        summary = describe_import_plan(plan)
+        summary += (
+            "\n\nTimes, kills and seen counts in the file are ignored."
+            "\nNothing is written until you choose Import. Cancel leaves your list untouched."
         )
-        self._show_spelling_notice(parent, message, "Import finished")
+        tk.Label(dialog, text=summary, anchor="w", justify="left").pack(fill="x", padx=12, pady=(12, 6))
+
+        lines = import_plan_lines(plan)
+        holder = tk.Frame(dialog)
+        holder.pack(fill="both", expand=True, padx=12)
+        listbox = tk.Listbox(holder, height=12, width=64, exportselection=False)
+        bar = ThemedScrollbar(holder, command=listbox.yview)
+        listbox.configure(yscrollcommand=bar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        if lines:
+            for line in lines:
+                listbox.insert("end", line)
+        else:
+            listbox.insert("end", "No names would be added or changed.")
+
+        status = tk.Label(dialog, text="", anchor="w", justify="left")
+        status.pack(fill="x", padx=12, pady=(6, 0))
+
+        def do_import():
+            try:
+                counts = history_inst.apply_commander_import(plan)
+            except (OSError, ValueError, RecursionError) as err:
+                status.configure(text="Import failed: %s" % err)
+                return
+            dialog.destroy()
+            self.reload_seen_list()
+            backup = counts.get("backup")
+            if backup:
+                backup_line = "Your list was backed up to %s." % os.path.basename(backup)
+            else:
+                backup_line = "Nothing changed, so no backup was made."
+            message = (
+                "Added %d commanders.\n"
+                "Filled in %d unknown names.\n"
+                "Kept %d names you already had.\n"
+                "Skipped %d entries with no name.\n"
+                "Rejected %d invalid rows.\n\n"
+                "%s"
+            ) % (
+                counts.get("added", 0),
+                counts.get("filled", 0),
+                counts.get("kept", 0),
+                counts.get("skipped", 0),
+                counts.get("invalid", 0),
+                backup_line,
+            )
+            self._show_spelling_notice(parent, message, "Import finished")
+
+        will_write = bool(plan.get("added") or plan.get("filled"))
+        buttons = tk.Frame(dialog)
+        buttons.pack(fill="x", padx=12, pady=12)
+        if will_write:
+            tk.Button(buttons, text="Import", command=do_import).pack(side="right")
+        tk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+        self.apply_edmc_theme(dialog)
+        self._raise_in_front(dialog, parent)
 
     def _button_row(self, frame, row, buttons, gap=(2, 4)):
         holder = tk.Frame(frame)
@@ -3453,7 +3512,7 @@ class SeenCommandersGUI:
             ("Import names...", lambda: self.import_seen_names(owner())),
             ("Update spelling", lambda: self.confirm_spelling_update(owner())),
         ], gap=(0, 4))
-        row = self.add_hint(frame, row, "Import adds names only. Unknown entries are skipped and sounds become neutral.")
+        row = self.add_hint(frame, row, "Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral.")
         row = self.add_hint(frame, row, "Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names.")
 
         help_state = {"open": False}
@@ -3487,8 +3546,9 @@ class SeenCommandersGUI:
             "Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window.",
             "Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. "
             "Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this.",
-            "Import: reads another player's seen_commanders.json. Only commanders with a real name are added. "
-            "Kills and seen counts are not copied, and names you already have are kept.",
+            "Import: reads another player's seen_commanders.json and shows a preview first. "
+            "Only commanders with a real name are added. Times, kills and seen counts are not copied, "
+            "and names you already have are kept. Cancel writes nothing.",
             "Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore.",
         ]
         help_row = 0

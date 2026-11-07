@@ -6,6 +6,7 @@ import re
 import shutil
 import threading
 import time
+import unicodedata
 from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
@@ -286,12 +287,205 @@ _KILLS_BACKFILL_MARKER = "kill_tally_v2.txt"
 _AUTO_BACKUP_NAME = re.compile(r"^seen_commanders-\d{8}-\d{6}\.json$")
 _MANUAL_BACKUP_NAME = re.compile(r"^seen_commanders-manual-.*\.json$")
 _IMPORT_EPOCH = "1970-01-01T00:00:00"
+# A shared list is untrusted. These caps keep a huge or crowded file off the UI thread.
+_IMPORT_MAX_BYTES = 5 * 1024 * 1024
+_IMPORT_MAX_ENTRIES = 20_000
+_NAME_MAX_CHARS = 64
+_ID_MAX_DIGITS = 32
+# Cc is control characters (including newlines). Cf is format characters,
+# including bidi overrides and zero-width marks that can disguise a name.
+_HIDDEN_CATEGORIES = ("Cc", "Cf")
 
 
-def _import_last_seen(value) -> str:
-    """Use the other player's last_seen when it is a valid time, otherwise the epoch."""
-    parsed = parse_seen_time(value)
-    return parsed.isoformat() if parsed is not None else _IMPORT_EPOCH
+def backup_list_kind(name: str) -> str:
+    """Kind shown beside a file in the restore list."""
+    if isinstance(name, str) and name.startswith("seen_commanders-manual-before-import-"):
+        return "Before import"
+    if isinstance(name, str) and name.startswith("seen_commanders-manual-"):
+        return "Manual"
+    return "Startup"
+
+
+def _has_hidden_chars(text: str) -> bool:
+    return any(unicodedata.category(char) in _HIDDEN_CATEGORIES for char in text)
+
+
+def _without_hidden_chars(text: str) -> str:
+    return "".join(char for char in text if unicodedata.category(char) not in _HIDDEN_CATEGORIES)
+
+
+def _decimal_commander_id(value) -> str | None:
+    """Commander ids from the game are decimal digit strings. Nothing else is trusted."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        text = str(value)
+    elif isinstance(value, str):
+        text = value.strip()
+    else:
+        return None
+    if not text or len(text) > _ID_MAX_DIGITS:
+        return None
+    if not text.isascii() or not text.isdigit():
+        return None
+    return text
+
+
+def _classify_import_name(value) -> tuple[str, str | None]:
+    """Classify a name from a shared file.
+
+    'ok' is safe to store. 'skip' is empty or unknown, which imports already
+    ignore. 'bad' must not be trusted: the wrong length, or hidden characters.
+    """
+    if not isinstance(value, str):
+        if value is None:
+            return "skip", None
+        return "bad", None
+    text = value.strip()
+    if is_unknown_name(text):
+        return "skip", None
+    if len(text) > _NAME_MAX_CHARS or _has_hidden_chars(text):
+        return "bad", None
+    return "ok", text
+
+
+def _planned_import_name(item) -> tuple[str, str] | None:
+    if not isinstance(item, dict):
+        return None
+    cmdr_id = _decimal_commander_id(item.get("id"))
+    status, name = _classify_import_name(item.get("name"))
+    if cmdr_id is None or status != "ok" or name is None:
+        return None
+    return cmdr_id, name
+
+
+def _comparable_last_seen(existing) -> datetime.datetime | None:
+    """Naive timestamp for the sighting check, or None when it cannot be read.
+
+    None means the sighting is not skipped. An unreadable value must not raise
+    and must not hide the commander.
+    """
+    if not isinstance(existing, dict):
+        return None
+    raw = existing.get("last_seen")
+    if isinstance(raw, datetime.datetime):
+        parsed = raw
+    elif isinstance(raw, str):
+        try:
+            parsed = datetime.datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _safe_entry_int(existing, key: str, default: int = 0) -> int:
+    if not isinstance(existing, dict):
+        return default
+    try:
+        return int(existing.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_entry_text(existing, key: str, default: str) -> str:
+    if not isinstance(existing, dict):
+        return default
+    value = existing.get(key, default)
+    if isinstance(value, str):
+        return value
+    return default
+
+
+def _import_last_seen(_value=None) -> str:
+    """Do not take timestamps from a shared file.
+
+    Aggregation ignores a sighting that is not newer than the stored last_seen.
+    A future time in an imported file would hide that commander permanently.
+    Imported rows are stored at the epoch so the next real sighting is recorded.
+    """
+    return _IMPORT_EPOCH
+
+
+def _read_seen_json(path: str, *, max_bytes: int | None = None, max_entries: int | None = None):
+    """Read one seen-commanders file. Raises ValueError when it must not be used."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        raise
+    if max_bytes is not None and size > max_bytes:
+        raise ValueError("That file is larger than 5 MB, so it was not read.")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except RecursionError:
+        raise ValueError("That file is nested too deeply to read.") from None
+    except json.JSONDecodeError:
+        raise ValueError("That file is not valid JSON.") from None
+    except UnicodeError:
+        raise ValueError("That file could not be read as text.") from None
+    except MemoryError:
+        raise ValueError("That file is too large to read.") from None
+    if not isinstance(data, dict):
+        raise ValueError("That file is not a seen commanders list.")
+    if max_entries is not None and len(data) > max_entries:
+        raise ValueError("That file has more than 20,000 entries, so it was not imported.")
+    return data
+
+
+def describe_import_plan(plan: dict) -> str:
+    """Plain counts for the import preview. Does not read or write a file."""
+    if not isinstance(plan, dict):
+        return ""
+
+    def count(key: str) -> int:
+        try:
+            return int(plan.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    added = plan.get("added") if isinstance(plan.get("added"), list) else []
+    filled = plan.get("filled") if isinstance(plan.get("filled"), list) else []
+    return "\n".join((
+        "New names: %d" % len(added),
+        "Changed names: %d" % len(filled),
+        "Kept names you already have: %d" % count("kept"),
+        "Skipped (no name): %d" % count("skipped"),
+        "Invalid rows: %d" % count("invalid"),
+    ))
+
+
+def import_plan_lines(plan: dict, limit: int = 40) -> list[str]:
+    """Preview lines for names an import would add or change."""
+    if not isinstance(plan, dict):
+        return []
+    lines = []
+    shown = 0
+    groups = (
+        ("New    ", plan.get("added")),
+        ("Change ", plan.get("filled")),
+    )
+    total = 0
+    for _prefix, items in groups:
+        if isinstance(items, list):
+            total += len(items)
+    for prefix, items in groups:
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if shown >= limit:
+                break
+            if not isinstance(item, dict):
+                continue
+            lines.append("%s%s    %s" % (prefix, item.get("id", ""), item.get("name", "")))
+            shown += 1
+    extra = total - shown
+    if extra > 0:
+        lines.append("... and %d more" % extra)
+    return lines
 
 
 def _join_parts(parts: list[str]) -> str:
@@ -1165,36 +1359,173 @@ class CommanderHistoryManager:
     
     def load_seen_commanders(self):
         if not os.path.isfile(self.json_file_path) or os.path.getsize(self.json_file_path) == 0:
-            self.seen_data = {}
+            self.seen_data.clear()
             return
-    
+
         try:
-            with open(self.json_file_path, "r", encoding="utf-8") as f:
-                self.seen_data = json.load(f)
-        except (OSError, json.JSONDecodeError):
+            data = _read_seen_json(self.json_file_path)
+            cleaned, hardened = self._validated_seen_data(data)
+        except (OSError, ValueError, RecursionError) as err:
             log.exception("Failed to load seen_commanders.json, trying the newest backup")
-            self.seen_data = self._load_latest_backup() or {}
-                
-        if self._normalize_seen_entries():
-            self.save_seen_commanders()
+            log.error(
+                "Could not load seen_commanders.json (%s). That file was not applied.",
+                err,
+            )
+            cleaned = self._load_latest_backup()
+            if cleaned is None:
+                log.error("No usable backup was found. The current seen commanders list was left unchanged.")
+                return
+            hardened = False
+
+        # Validate fully before clear(), so a bad row cannot wipe the list.
+        with self._data_lock:
+            self.seen_data.clear()
+            self.seen_data.update(cleaned)
+            if hardened or self._normalize_seen_entries():
+                self.save_seen_commanders()
+
+    def _validated_seen_data(self, data) -> tuple[dict, bool]:
+        """Copy a parsed list into safe rows. The caller's list is not touched.
+
+        Raises ValueError when the file is not a commander list, or when it has
+        rows and none of them are usable. One bad row is dropped, not fatal.
+        """
+        if not isinstance(data, dict):
+            raise ValueError("That file is not a seen commanders list.")
+        cleaned = {}
+        dropped = 0
+        hardened = False
+        for key, entry in data.items():
+            if not isinstance(entry, dict):
+                dropped += 1
+                continue
+            row = dict(entry)
+            cmdr_id = _decimal_commander_id(key) or _decimal_commander_id(row.get("commander_id"))
+            if cmdr_id is None or cmdr_id in cleaned:
+                dropped += 1
+                continue
+            if row.get("commander_id") != cmdr_id:
+                row["commander_id"] = cmdr_id
+                hardened = True
+            if self._normalize_loaded_fields(row):
+                hardened = True
+            cleaned[cmdr_id] = row
+        if dropped:
+            hardened = True
+            log.warning(
+                "Skipped %d invalid seen commander entr%s",
+                dropped,
+                "y" if dropped == 1 else "ies",
+            )
+        if data and not cleaned:
+            raise ValueError("That file has no valid commander entries.")
+        return cleaned, hardened
+
+    def _normalize_loaded_fields(self, entry: dict) -> bool:
+        """Make one row safe to store and aggregate. Returns True when a value changed."""
+        changed = False
+        if "sound" in entry:
+            sound = entry["sound"]
+            if isinstance(sound, str):
+                cleaned_sound = os.path.splitext(sound)[0].lower()
+            else:
+                cleaned_sound = "neutral"
+            if sound != cleaned_sound:
+                entry["sound"] = cleaned_sound
+                changed = True
+
+        raw_count = entry.get("seen_count", 1)
+        if raw_count is None:
+            raw_count = 1
+        try:
+            seen_count = int(raw_count)
+        except (TypeError, ValueError):
+            seen_count = 1
+        if entry.get("seen_count") != seen_count:
+            entry["seen_count"] = seen_count
+            changed = True
+
+        if "kills" in entry:
+            try:
+                kills = int(entry["kills"])
+            except (TypeError, ValueError):
+                kills = 0
+            if entry["kills"] != kills:
+                entry["kills"] = kills
+                changed = True
+
+        name = entry.get("name")
+        if isinstance(name, str):
+            visible = _without_hidden_chars(name)
+            if visible != name:
+                entry["name"] = visible if visible.strip() else "unknown"
+                changed = True
+        elif "name" in entry:
+            entry["name"] = "unknown"
+            changed = True
+
+        if "aliases" in entry:
+            raw_aliases = entry["aliases"]
+            if isinstance(raw_aliases, list):
+                aliases = [
+                    alias for alias in raw_aliases
+                    if isinstance(alias, str) and alias.strip() and not _has_hidden_chars(alias)
+                ]
+            else:
+                aliases = []
+            if aliases != raw_aliases:
+                entry["aliases"] = aliases
+                changed = True
+
+        stable_seen = self._stable_last_seen(entry.get("last_seen"))
+        if entry.get("last_seen") != stable_seen:
+            entry["last_seen"] = stable_seen
+            changed = True
+        return changed
+
+    @staticmethod
+    def _stable_last_seen(value) -> str:
+        """Keep a naive timestamp string aggregation can compare, or the epoch."""
+        if isinstance(value, str):
+            try:
+                parsed = datetime.datetime.fromisoformat(value)
+            except ValueError:
+                parsed = None
+            if parsed is not None and parsed.tzinfo is None:
+                return value
+        parsed = parse_seen_time(value)
+        if parsed is None:
+            return _IMPORT_EPOCH
+        return parsed.isoformat()
 
     def _normalize_seen_entries(self) -> bool:
         """Clean up loaded or restored rows in place. Returns True if anything changed."""
         changed = False
-        for cmdr_id, entry in self.seen_data.items():
+        cleaned = {}
+        for key, entry in list(self.seen_data.items()):
             if not isinstance(entry, dict):
+                changed = True
                 continue
-            if "sound" in entry:
-                entry["sound"] = os.path.splitext(entry["sound"])[0].lower()
-            raw_count = entry.get("seen_count", 1)
-            if raw_count is None:
-                raw_count = 1
-            try:
-                entry["seen_count"] = int(raw_count)
-            except (TypeError, ValueError):
-                entry["seen_count"] = 1
+            if self._normalize_loaded_fields(entry):
+                changed = True
             if backfill_seen_record(entry):
                 changed = True
+            cmdr_id = _decimal_commander_id(key) or _decimal_commander_id(entry.get("commander_id"))
+            if cmdr_id is None:
+                changed = True
+                continue
+            if entry.get("commander_id") != cmdr_id:
+                entry["commander_id"] = cmdr_id
+                changed = True
+            cleaned[cmdr_id] = entry
+        replaced = (
+            len(cleaned) != len(self.seen_data)
+            or any(self.seen_data.get(cid) is not row for cid, row in cleaned.items())
+        )
+        if replaced:
+            self.seen_data.clear()
+            self.seen_data.update(cleaned)
+            changed = True
         return changed
 
     @property
@@ -1252,77 +1583,174 @@ class CommanderHistoryManager:
     def restore_backup(self, name: str) -> int:
         """Replace the current list with a backup. The current list is backed up first."""
         path = self._backup_path(name)
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if not isinstance(data, dict):
-            raise ValueError("That file is not a seen commanders list.")
+        try:
+            data = _read_seen_json(path)
+            cleaned, _hardened = self._validated_seen_data(data)
+        except (OSError, ValueError, RecursionError) as err:
+            log.error(
+                "Restore of %s was refused (%s). The current seen commanders list was left unchanged.",
+                name,
+                err,
+            )
+            if isinstance(err, OSError):
+                raise
+            raise ValueError(str(err)) from None
         with self._data_lock:
             if not self.backup_seen_commanders_now("before-restore"):
                 raise OSError("Could not back up the current list, so nothing was restored.")
-            # Replace in place so references held by the worker stay valid.
+            # Validate finished above. clear() only runs once the new list is safe.
             self.seen_data.clear()
-            self.seen_data.update(data)
+            self.seen_data.update(cleaned)
             self._normalize_seen_entries()
             self._seen_dirty = True
             self.flush_seen_commanders(force=True)
-        log.info("Restored seen commanders from %s (%d entries)", name, len(data))
-        return len(data)
+        log.info("Restored seen commanders from %s (%d entries)", name, len(cleaned))
+        return len(cleaned)
 
-    def import_commander_names(self, path: str) -> dict:
-        """Add names from another player's list. Only commander IDs and names are taken.
+    def plan_commander_import(self, path: str) -> dict:
+        """Describe what an import would change. Does not write a backup or the list.
 
-        Existing IDs keep their names unless the existing name is unknown.
-        Imported sounds are always neutral. Kills and seen counts are never copied.
+        Only ids and names are considered. Timestamps in the file are ignored,
+        so a future last_seen cannot be part of the plan.
         """
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if not isinstance(data, dict):
-            raise ValueError("That file is not a seen commanders list.")
+        try:
+            data = _read_seen_json(
+                path,
+                max_bytes=_IMPORT_MAX_BYTES,
+                max_entries=_IMPORT_MAX_ENTRIES,
+            )
+        except (OSError, ValueError, RecursionError) as err:
+            log.error("Refusing to import commander names (%s). Nothing was written.", err)
+            if isinstance(err, ValueError):
+                raise
+            raise ValueError(str(err)) from err
+
+        added = []
+        filled = []
+        kept = 0
+        skipped = 0
+        invalid = 0
+        seen_ids = set()
+        with self._data_lock:
+            for key, entry in data.items():
+                if not isinstance(entry, dict):
+                    invalid += 1
+                    continue
+                cmdr_id = _decimal_commander_id(entry.get("commander_id", key))
+                if cmdr_id is None or cmdr_id in seen_ids:
+                    invalid += 1
+                    continue
+                seen_ids.add(cmdr_id)
+                status, name = _classify_import_name(entry.get("name"))
+                if status == "skip":
+                    skipped += 1
+                    continue
+                if status != "ok":
+                    invalid += 1
+                    continue
+                existing = self.seen_data.get(cmdr_id)
+                if isinstance(existing, dict) and not is_unknown_name(existing.get("name")):
+                    kept += 1
+                    continue
+                item = {"id": cmdr_id, "name": name}
+                if isinstance(existing, dict):
+                    filled.append(item)
+                else:
+                    added.append(item)
+        return {
+            "added": added,
+            "filled": filled,
+            "kept": kept,
+            "skipped": skipped,
+            "invalid": invalid,
+            "total": len(data),
+            "path": path,
+        }
+
+    def apply_commander_import(self, plan: dict) -> dict:
+        """Write a confirmed import. Timestamps from the shared file are never used."""
+        if not isinstance(plan, dict):
+            raise ValueError("That import plan is not valid.")
+        added = []
+        filled = []
+        for item in plan.get("added") or []:
+            pair = _planned_import_name(item)
+            if pair is not None:
+                added.append(pair)
+        for item in plan.get("filled") or []:
+            pair = _planned_import_name(item)
+            if pair is not None:
+                filled.append(pair)
+
+        def plan_count(key: str) -> int:
+            try:
+                return int(plan.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        counts = {
+            "added": 0,
+            "filled": 0,
+            "kept": plan_count("kept"),
+            "skipped": plan_count("skipped"),
+            "invalid": plan_count("invalid"),
+            "total": plan_count("total"),
+            "backup": None,
+        }
+        if not added and not filled:
+            log.info("Import plan has no names to write")
+            return counts
 
         backup = self.backup_seen_commanders_now("before-import")
         if backup is None:
             raise OSError("Could not back up the current list, so nothing was imported.")
+        counts["backup"] = backup
 
-        counts = {"added": 0, "filled": 0, "kept": 0, "skipped": 0, "total": len(data), "backup": backup}
         with self._data_lock:
-            for key, entry in data.items():
-                if not isinstance(entry, dict):
-                    counts["skipped"] += 1
-                    continue
-                name = entry.get("name")
-                if is_unknown_name(name):
-                    counts["skipped"] += 1
-                    continue
-                cmdr_id = str(entry.get("commander_id", key)).strip()
-                if not cmdr_id:
-                    counts["skipped"] += 1
-                    continue
-                name = name.strip()
-
+            for cmdr_id, name in filled:
                 existing = self.seen_data.get(cmdr_id)
-                if existing is not None:
+                if isinstance(existing, dict) and is_unknown_name(existing.get("name")):
+                    existing["name"] = name
+                    counts["filled"] += 1
+            for cmdr_id, name in added:
+                existing = self.seen_data.get(cmdr_id)
+                if isinstance(existing, dict):
                     if is_unknown_name(existing.get("name")):
                         existing["name"] = name
                         counts["filled"] += 1
                     else:
                         counts["kept"] += 1
                     continue
-
                 self.seen_data[cmdr_id] = {
                     "commander_id": cmdr_id,
                     "name": name,
                     "sound": "neutral",
-                    "last_seen": _import_last_seen(entry.get("last_seen")),
+                    "last_seen": _import_last_seen(None),
                     "seen_count": 0,
                 }
                 counts["added"] += 1
-
             if counts["added"] or counts["filled"]:
                 self._normalize_seen_entries()
                 self._seen_dirty = True
                 self.flush_seen_commanders(force=True)
-        log.info("Imported seen commander names from file: %s", {k: v for k, v in counts.items() if k != "backup"})
+        log.info(
+            "Imported seen commander names: %s",
+            {key: value for key, value in counts.items() if key != "backup"},
+        )
         return counts
+
+    def import_commander_names(self, path: str, plan: dict | None = None) -> dict:
+        """Add names from another player's list.
+
+        Only commander ids and names are taken. Timestamps, sounds, kills and
+        seen counts in the file are ignored. Existing ids keep their names
+        unless that name is unknown. Pass a plan from plan_commander_import
+        to write exactly what was confirmed. Calling this writes a backup
+        and the list.
+        """
+        if plan is None:
+            plan = self.plan_commander_import(path)
+        return self.apply_commander_import(plan)
 
     def backup_seen_commanders(self) -> None:
         """Copy the saved file aside at startup and keep only the newest few copies."""
@@ -1339,14 +1767,14 @@ class CommanderHistoryManager:
 
     def _load_latest_backup(self):
         for name in reversed(self._backup_names()):
+            path = os.path.join(self.backup_dir, name)
             try:
-                with open(os.path.join(self.backup_dir, name), "r", encoding="utf-8") as handle:
-                    data = json.load(handle)
-            except (OSError, json.JSONDecodeError):
+                data = _read_seen_json(path)
+                cleaned, _hardened = self._validated_seen_data(data)
+            except (OSError, ValueError, RecursionError):
                 continue
-            if isinstance(data, dict):
-                log.error("Restored seen commanders from backup %s", name)
-                return data
+            log.error("Restored seen commanders from backup %s", name)
+            return cleaned
         return None
 
     def save_seen_commanders(self):
@@ -1502,21 +1930,11 @@ class CommanderHistoryManager:
                 
                 ts = frontier_epoch + datetime.timedelta(seconds=entry["Epoch"])
     
-                existing = self.seen_data.get(cmdr_id)
-                if existing:
-                    last_seen_existing = datetime.datetime.fromisoformat(existing["last_seen"])
-                    if ts <= last_seen_existing:
-                        continue
-        
-          
-                info: CommanderEntry = {
-                    "commander_id": cmdr_id,
-                    "name": existing.get("name", "unknown") if existing else "unknown",
-                    "sound": existing.get("sound", "neutral") if existing else "neutral",
-                    "last_seen": ts.isoformat(),
-                    "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
-                    "kills": int(existing.get("kills", 0)) if existing else 0,
-                }
+                existing, skip = self._row_for_sighting(cmdr_id, ts)
+                if skip:
+                    continue
+
+                info: CommanderEntry = self._sighting_info(cmdr_id, existing, ts)
         
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -1572,14 +1990,10 @@ class CommanderHistoryManager:
             cmdr_id = str(entry["CommanderID"])
             ts = frontier_epoch + datetime.timedelta(seconds=entry["Epoch"])
     
-            existing = self.seen_data.get(cmdr_id)
-    
-            if existing:
-                last_seen_existing = datetime.datetime.fromisoformat(existing["last_seen"])
-                if ts <= last_seen_existing:
-                    continue
-                
-                
+            existing, skip = self._row_for_sighting(cmdr_id, ts)
+            if skip:
+                continue
+
             self._touch(cmdr_id)
             current_flags = set(interactions)
             previous_flags = self.last_interactions.get(cmdr_id, set())
@@ -1589,14 +2003,7 @@ class CommanderHistoryManager:
     
             is_wing = "WingMember" in interactions
     
-            info: CommanderEntry = {
-                "commander_id": cmdr_id,
-                "name": existing.get("name", "unknown") if existing else "unknown",
-                "sound": existing.get("sound", "neutral") if existing else "neutral",
-                "last_seen": ts.isoformat(),
-                "seen_count": (existing.get("seen_count", 0) if existing else 0) + 1,
-                "kills": int(existing.get("kills", 0)) if existing else 0,
-            }
+            info: CommanderEntry = self._sighting_info(cmdr_id, existing, ts)
 
             if killed_now and is_unknown_name(info.get("name")):
                 killed_unknown_ids.append(cmdr_id)
@@ -1669,7 +2076,7 @@ class CommanderHistoryManager:
                     # you jump. They did not jump in. Keep the new Epoch so the
                     # same refresh is not announced after the jump window.
                     if existing is not None:
-                        info["seen_count"] = existing.get("seen_count", 1)
+                        info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                     self._remember_sighting(info, existing)
                     self.seen_data[cmdr_id] = info
                     self.last_interactions[cmdr_id] = current_flags
@@ -1724,7 +2131,7 @@ class CommanderHistoryManager:
                     # into the new instance. They are still present: no alert, no departure.
                     beep_this_commander = self._beep_decision(cmdr_id, False, "interdiction_carry")
                     if existing is not None:
-                        info["seen_count"] = existing.get("seen_count", 1)
+                        info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                 elif was_here:
                     # The game refreshes the record of everyone still in the instance.
                     # A refresh is not a departure: they stay here, silently, until a
@@ -1732,7 +2139,7 @@ class CommanderHistoryManager:
                     # Quiet timeout only fades Now display; it does not clear "here".
                     beep_this_commander = self._beep_decision(cmdr_id, False, "refresh")
                     if existing is not None:
-                        info["seen_count"] = existing.get("seen_count", 1)
+                        info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                 else:
                     inst["here"] = True
                     inst["shown_now"] = True
@@ -1865,14 +2272,42 @@ class CommanderHistoryManager:
                 ids.append(str(cmdr_id))
         return ids
 
+    def _row_for_sighting(self, cmdr_id: str, ts: datetime.datetime):
+        """Return (stored row, skip).
+
+        skip is True when the stored last_seen is already this new or newer.
+        A missing or unreadable time does not skip and does not raise, so one
+        bad row cannot stop the rest of the update.
+        """
+        existing = self.seen_data.get(cmdr_id)
+        if not isinstance(existing, dict):
+            return None, False
+        last_seen_existing = _comparable_last_seen(existing)
+        if last_seen_existing is not None and ts <= last_seen_existing:
+            return existing, True
+        return existing, False
+
+    def _sighting_info(self, cmdr_id: str, existing, ts: datetime.datetime) -> CommanderEntry:
+        return {
+            "commander_id": cmdr_id,
+            "name": _safe_entry_text(existing, "name", "unknown"),
+            "sound": _safe_entry_text(existing, "sound", "neutral"),
+            "last_seen": ts.isoformat(),
+            "seen_count": _safe_entry_int(existing, "seen_count", 0) + 1,
+            "kills": _safe_entry_int(existing, "kills", 0),
+        }
+
     def _known_name_keys(self) -> set[str]:
         keys = set()
         for info in self.seen_data.values():
             if not isinstance(info, dict):
                 continue
             name = info.get("name")
-            if isinstance(name, str) and not is_unknown_name(name):
-                keys.add(name_key(name))
+            # Hidden characters are not a real saved name. They must not block
+            # Update Spelling or a journal name for someone else.
+            if not isinstance(name, str) or is_unknown_name(name) or _has_hidden_chars(name):
+                continue
+            keys.add(name_key(name))
         return keys
 
     def _resolve_unknown_names(self, killed_unknown_ids=None, new_wing_unknown_ids=None) -> None:

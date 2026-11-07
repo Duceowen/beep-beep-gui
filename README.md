@@ -31,6 +31,14 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.2
+- Importing commander names checks the file before anything is written. A file over 5 MB or 20,000 entries is refused. A file nested too deeply shows an error instead of freezing
+- Import shows a preview of new names, changed names, and skipped or invalid rows. The list is written only after you confirm. Cancel writes nothing, and no backup is made
+- A shared file can add names only. Times in the file are ignored, so a future last-seen time cannot hide a commander. Sounds, kills and seen counts are not copied
+- Commander ids must be numbers. Names must be 1 to 64 characters, with no hidden control or bidirectional characters. Bad rows are counted and skipped. Good rows are kept
+- The backup made just before an import is labeled "Before import" in the restore list
+- Restoring a backup, or loading seen_commanders.json at startup, checks each row before replacing the list in memory. A corrupt file leaves the current list in place and is recorded in the log
+
 ## 1.1.1
 - Right-click a row in Seen Commanders to mark a missed beep, an extra beep, or a related issue (shown as Now but not here, beeped early or late, interdiction, killed, or wrong name). The mark is appended to beep_marks.jsonl in the plugin folder and written to the debug log. Each announce or skip is also logged as a decision line
 - Supercruise missed beeps caused by a stale leave snapshot are fixed. Commanders not heard in the last 10 minutes are dropped from that silence list, so a real supercruise arrival beeps. Commanders heard in the last 10 minutes that you left behind stay silent when the game re-lists them
