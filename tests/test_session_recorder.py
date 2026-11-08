@@ -30,6 +30,34 @@ def _folder_size(folder):
 
 
 class RecorderFile(unittest.TestCase):
+    def test_session_header_reads_this_plugins_version_file(self):
+        """Another plugin's version module must not become the session version."""
+        import sys
+        import types
+
+        folder = tempfile.mkdtemp()
+        version_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "version.py")
+        namespace = {}
+        with open(version_path, encoding="utf-8") as handle:
+            exec(compile(handle.read(), version_path, "exec"), namespace)
+        fake = types.ModuleType("version")
+        fake.__version__ = "0.9.2"
+        previous = sys.modules.get("version")
+        sys.modules["version"] = fake
+        try:
+            rec = SessionRecorder(folder)
+            rec.enabled_override = True
+            rec.record("mark", {"mark": "extra_beep", "id": "1"})
+            rec.close()
+            lines = _lines(rec.directory())
+        finally:
+            if previous is None:
+                sys.modules.pop("version", None)
+            else:
+                sys.modules["version"] = previous
+        self.assertEqual(lines[0]["kind"], "session")
+        self.assertEqual(lines[0]["version"], namespace["__version__"])
+
     def test_lines_are_json_and_history_diff_is_compact(self):
         folder = tempfile.mkdtemp()
         rec = SessionRecorder(folder, max_total_bytes=50 * 1024 * 1024)

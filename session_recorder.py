@@ -3,6 +3,7 @@
 Writes JSONL under the plugin's recordings folder. It never changes beep
 decisions and never raises to its caller. Chat message text is not stored.
 """
+import importlib.util
 import json
 import os
 import threading
@@ -50,11 +51,24 @@ def _utc_now() -> str:
 
 
 def _plugin_version():
+    """The version in this plugin's version.py.
+
+    EDMC puts every plugin on sys.path, so ``import version`` can be another
+    plugin's file. Read this folder's version.py by path.
+    """
     try:
-        from version import __version__
-        return __version__
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.py")
+        spec = importlib.util.spec_from_file_location("_beep_beep_plugin_version", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        value = getattr(module, "__version__", None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     except Exception:
         return None
+    return None
 
 
 def _text(value):
