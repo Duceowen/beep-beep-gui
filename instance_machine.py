@@ -33,6 +33,8 @@ from commander_names import confusable_key, is_unknown_name, name_key
 # Also the worst-case wait for a history-only arrival when no journal line
 # arrives to force an immediate read.
 HISTORY_POLL_SECONDS = 0.05
+# A jump that never receives FSDJump or SupercruiseEntry must not stage forever.
+PENDING_COMMIT_SECONDS = 5.0
 
 # FSD cooldown after an interdiction. Success (the minigame was lost, or the
 # outgoing interdiction reports Success) is 60 s. Submitting is 10 s.
@@ -63,10 +65,14 @@ class InstanceMachine:
         self.cooldown_until = {}
         self.relog_open = False
         self.present_before_jump = set()
+        self.jump_open = False
+        self.pending_since = None
 
     def note_pending(self, present_ids=None) -> None:
         """StartJump: history that arrives before the jump completes is staged."""
         self.pending = True
+        self.jump_open = True
+        self.pending_since = time.monotonic()
         self.present_before_jump = set(self.confirmed) | set(self.announced)
         if present_ids:
             self.present_before_jump.update(str(cid) for cid in present_ids)
@@ -76,17 +82,20 @@ class InstanceMachine:
         if cid not in self.staged:
             self.staged.append(cid)
 
-    def commit(self, departure_ids, relog: bool = False):
+    def commit(self, departure_ids, relog: bool = False, preserve_announced: bool = False):
         """Open a generation. Return ids staged during the jump that are new."""
         staged = [str(cid) for cid in self.staged]
         before = set() if relog else {str(cid) for cid in self.present_before_jump}
+        kept_ids = set(self.announced) if preserve_announced else set()
+        kept_names = set(self.announced_names) if preserve_announced else set()
         self.staged = []
         self.pending = False
+        self.pending_since = None
         self.generation += 1
         self.announced = set()
         self.confirmed = set()
         self.killed = set()
-        self.announced_names = set()
+        self.announced_names = set(kept_names)
         self.display_names = {}
         self.claimed_unknown_ids = set()
         self.anonymous_claims = 0
@@ -101,15 +110,25 @@ class InstanceMachine:
                 if str(cid) not in staged or str(cid) in before
             }
             self.seen_ids |= self.departure_ids
-        known = set(self.seen_ids)
         fresh = []
         for cid in staged:
             self.seen_ids.add(cid)
+            if cid in kept_ids:
+                self._mark_announced(cid)
+                continue
             if cid in before or cid in self.departure_ids:
                 continue
             self._mark_announced(cid)
             fresh.append(cid)
+        for cid in kept_ids:
+            self._mark_announced(cid)
         return fresh
+
+    def pending_expired(self, now: float | None = None) -> bool:
+        if not self.pending or self.pending_since is None:
+            return False
+        moment = time.monotonic() if now is None else now
+        return moment - self.pending_since >= PENDING_COMMIT_SECONDS
 
     def relog(self) -> None:
         self.commit(set(), relog=True)

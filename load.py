@@ -99,9 +99,12 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     elif event == "StartJump":
         location.set(1, entry.get("StarSystem", system))
         location.jump()
-        history_inst.note_transition_pending()
+        history_inst.note_transition_pending(entry.get("JumpType"))
         
     elif event == "FSDJump":
+        # Hyperspace arrives in supercruise. There is no SupercruiseEntry.
+        location.set(1, system)
+        history_inst.note_hyperspace_arrival()
         history_inst.trigger()
         
     elif event in ("WingJoin", "WingAdd"):

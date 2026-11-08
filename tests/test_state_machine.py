@@ -268,6 +268,97 @@ class NowEvidenceAndQuiet(unittest.TestCase):
         self.assertLess(time.monotonic() - h._visit["42"], 5)
 
 
+class HyperspaceArrival(unittest.TestCase):
+    """FSDJump commits the jump. SupercruiseEntry does not follow a hyperspace arrival."""
+
+    def test_sorbago_jump_announces_before_the_station_drop(self):
+        h = fresh_history()
+        for cid, name in (
+            ("3824485", "unknown"),
+            ("10561923", "TwoDankHill"),
+            ("8149898", "unknown"),
+            ("3742485", "unknown"),
+            ("6628870", "hackingllama"),
+            ("1", "LeftBehind"),
+        ):
+            add_row(h, cid, name)
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        location.add_instance("1", state=0, system=location.system)
+        location.instance["1"]["here"] = True
+        h.machine.note_announced("1")
+        play(h, "StartJump", JumpType="Hyperspace", StarSystem="Sorbago",
+             timestamp="2026-11-08T08:44:42Z")
+        self.assertTrue(h.machine.pending)
+        feed(h, ["3824485"], datetime.datetime(2026, 11, 8, 8, 44, 52))
+        self.assertEqual(h.sent, [])
+        arrived = play(h, "FSDJump", StarSystem="Sorbago", timestamp="2026-11-08T08:45:00Z")
+        self.assertFalse(h.machine.pending)
+        self.assertEqual(arrived, [["3824485"]])
+        self.assertTrue(present("3824485"))
+        # A row that lands after the jump is the new instance, not still staged.
+        feed(h, ["10561923"], datetime.datetime(2026, 11, 8, 8, 45, 4))
+        self.assertEqual(ids(h), ["3824485", "10561923"])
+        self.assertNotIn("10561923", h.machine.staged)
+        for stage in (1, 2, 3):
+            self.assertEqual(_target(h, "Barrymacuckiner", stage, ship="ferdelance"), [])
+        self.assertEqual(ids(h), ["3824485", "10561923"])
+        # The station drop is a new generation. Old supercruise contacts stay quiet.
+        play(h, "SupercruiseExit", StarSystem="Sorbago", Body="Hencke Orbital",
+             BodyType="Station", timestamp="2026-11-08T08:46:36Z")
+        h.sent.clear()
+        feed(h, ["8149898", "3742485", "6628870", "3824485", "10561923"],
+             datetime.datetime(2026, 11, 8, 8, 46, 40))
+        self.assertEqual(ids(h), ["8149898", "3742485", "6628870"])
+        self.assertFalse(any(cid in ids(h) for cid in ("3824485", "10561923", "1")))
+
+    def test_scan_during_a_pending_jump_beeps_immediately(self):
+        h = fresh_history()
+        add_row(h, "3824485", "unknown")
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        play(h, "StartJump", JumpType="Hyperspace", StarSystem="Sorbago",
+             timestamp="2026-11-08T08:44:42Z")
+        beeped = _target(h, "Barrymacuckiner", 1, ship="ferdelance")
+        self.assertEqual(beeped, [["Barrymacuckiner"]])
+        self.assertTrue(h.machine.pending)
+        self.assertEqual(_target(h, "Barrymacuckiner", 3, ship="ferdelance"), [])
+
+    def test_back_to_back_jumps_do_not_carry_the_previous_system(self):
+        h = fresh_history()
+        add_row(h, "3824485", "unknown")
+        add_row(h, "10561923", "TwoDankHill")
+        location.system, location.state = "Col 285 Sector YU-F c11-1", 0
+        play(h, "StartJump", JumpType="Hyperspace", StarSystem="Psi Octantis",
+             timestamp="2026-11-08T08:43:39Z")
+        feed(h, ["3824485"], datetime.datetime(2026, 11, 8, 8, 43, 50))
+        first = play(h, "FSDJump", StarSystem="Psi Octantis", timestamp="2026-11-08T08:43:57Z")
+        self.assertEqual(first, [["3824485"]])
+        play(h, "StartJump", JumpType="Hyperspace", StarSystem="Sorbago",
+             timestamp="2026-11-08T08:44:42Z")
+        feed(h, ["3824485", "10561923"], datetime.datetime(2026, 11, 8, 8, 44, 52))
+        h.sent.clear()
+        second = play(h, "FSDJump", StarSystem="Sorbago", timestamp="2026-11-08T08:45:00Z")
+        self.assertEqual(second, [["10561923"]])
+        self.assertNotIn("3824485", ids(h))
+        self.assertFalse(h.machine.pending)
+
+    def test_staging_commits_itself_after_the_short_bound(self):
+        h = fresh_history()
+        add_row(h, "3824485", "unknown")
+        location.system, location.state = "Sol", 0
+        play(h, "StartJump", JumpType="Hyperspace", StarSystem="Sorbago",
+             timestamp="2026-11-08T08:44:42Z")
+        feed(h, ["3824485"], datetime.datetime(2026, 11, 8, 8, 44, 52))
+        h.machine.pending_since = time.monotonic() - 6
+        h.release_stale_pending()
+        self.assertEqual(h.sent, [["3824485"]])
+        self.assertFalse(h.machine.pending)
+        self.assertTrue(h.machine.jump_open)
+        h.sent.clear()
+        play(h, "FSDJump", StarSystem="Sorbago", timestamp="2026-11-08T08:45:00Z")
+        self.assertEqual(h.sent, [])
+        self.assertFalse(h.machine.jump_open)
+
+
 class SessionMarks(unittest.TestCase):
     """The 13 marks from the 7 Nov 2026 recording, replayed as the events that mattered."""
 

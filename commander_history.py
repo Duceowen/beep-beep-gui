@@ -1457,16 +1457,67 @@ class CommanderHistoryManager:
         self._announced_at.clear()
         self._clear_departures()
         self._heard_clear()
-        fresh = self.machine.commit(set(location.leave_snapshot))
-        self._emit_fresh(fresh)
+        self._finish_open_jump(hyperspace=False)
 
-    def note_transition_pending(self) -> None:
+    def note_transition_pending(self, jump_type=None) -> None:
         """StartJump: hold history rows until the jump actually completes."""
+        hyperspace = str(jump_type or "").strip().lower() == "hyperspace"
+        if self.machine.jump_open or self.machine.pending or self.machine.staged:
+            # A second jump must not keep the previous system's staged rows.
+            self._finish_open_jump(hyperspace=getattr(self, "_pending_hyperspace", False))
+        self._pending_hyperspace = hyperspace
         here = [
             cid for cid, inst in location.instance.items()
             if isinstance(inst, dict) and inst.get("here")
         ]
         self.machine.note_pending(here)
+
+    def note_hyperspace_arrival(self) -> None:
+        """FSDJump arrives in supercruise. No SupercruiseEntry follows it."""
+        self._finish_open_jump(hyperspace=True)
+
+    def release_stale_pending(self) -> None:
+        """Commit a jump that has been staging longer than the short bound."""
+        if not self.machine.pending_expired():
+            return
+        self._finish_open_jump(
+            hyperspace=getattr(self, "_pending_hyperspace", False),
+            final=False,
+        )
+
+    def _finish_open_jump(self, hyperspace: bool, final: bool = True) -> None:
+        """Open the destination generation and announce rows staged for it.
+
+        A timeout commit leaves the jump open so the later FSDJump or
+        SupercruiseEntry does not start a second generation. People already
+        announced by a scan during the jump are not announced again.
+        """
+        already = (
+            self.machine.jump_open
+            and not self.machine.pending
+            and not self.machine.staged
+        )
+        if already:
+            if final:
+                self.machine.jump_open = False
+            return
+        if not self.machine.pending and not self.machine.staged:
+            if hyperspace:
+                return
+            # SupercruiseEntry with no StartJump is still a new instance.
+            fresh = self.machine.commit(set(location.leave_snapshot))
+            self._emit_fresh(fresh)
+            return
+        if hyperspace:
+            # The system you left is not a leave-snapshot filter. Only people
+            # who were already with you stay out of the destination beep.
+            departure = set(self.machine.present_before_jump)
+        else:
+            departure = set(location.leave_snapshot)
+        fresh = self.machine.commit(departure, preserve_announced=True)
+        if final:
+            self.machine.jump_open = False
+        self._emit_fresh(fresh)
 
     def poll_history_now(self) -> None:
         """Apply a CommanderHistory file that has already changed. No extra wait."""
@@ -1584,12 +1635,7 @@ class CommanderHistoryManager:
         try:
             if not isinstance(name, str) or is_unknown_name(name):
                 return
-            if self.machine.pending and kind != "interdiction":
-                self.machine.hold_evidence(name, kind)
-                cid = self.resolve_commander(name)
-                if cid:
-                    self.machine.index_name(cid, name)
-                return
+            # A scan, local line, or interdiction beeps even while a jump is staged.
             cid = self.resolve_commander(name)
             if cid is None:
                 self.machine.hold_evidence(name, kind)
@@ -3166,6 +3212,8 @@ class CommanderHistoryManager:
         if target and location.state != 1:
             self._establish_presence_by_name(target)
         sc_ids = set(self.machine.announced) | set(dropped) | set(location.leave_snapshot)
+        # The drop is its own instance, even if a jump was still marked open.
+        self.machine.jump_open = False
         self._emit_fresh(self.machine.commit(sc_ids))
         if target and location.state != 1:
             seconds = getattr(location, "interdiction_cooldown", None) or INTERDICTION_SUCCESS_COOLDOWN
@@ -3337,6 +3385,7 @@ class CommanderHistoryManager:
                     break
                 self._process_departures()
                 self.aggregated_commanders()
+                self.release_stale_pending()
                 self._resolve_unknown_names()
                 self._tick += 1
                 if self._tick % 7 == 0:

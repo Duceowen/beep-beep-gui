@@ -32,6 +32,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.10
+- Arriving in a system by hyperspace announces the commanders staged during the jump as soon as the jump completes. A scan, local chat line, or interdiction still beeps immediately if the jump has not finished. A jump cannot stay staged for more than a few seconds
+- Dropping into a station is a separate instance. New contacts there are announced on that drop. Someone already announced in supercruise is not announced again by the station's history list
+- "Last heard" still shows on Now after a quiet minute. The row keeps its normal color
+
 ## 1.1.9
 - Clicking a row in Seen Commanders no longer leaves the bright selection bar on that row. The bar clears after a few seconds with no further click. It stays while the name editor is open, and while Shift or Control is held
 
