@@ -253,5 +253,94 @@ class ImportListRefresh(unittest.TestCase):
         self.assertEqual(threading.current_thread(), threading.main_thread())
 
 
+@unittest.skipUnless(tk is not None, "tkinter is not installed")
+class SelectionHighlight(unittest.TestCase):
+    """A click's green bar is the tree selection. It should not sit there."""
+
+    def setUp(self):
+        defaults = _Defaults()
+        gui_mod.config = defaults
+        ch.config = defaults
+        beep_beep_config.config = defaults
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.tmp = tempfile.mkdtemp()
+        self._plugin = history_inst.plugin_dir
+        self._json = history_inst.json_file_path
+        self._seen = dict(history_inst.seen_data)
+        history_inst.plugin_dir = self.tmp
+        history_inst.json_file_path = os.path.join(self.tmp, "seen_commanders.json")
+        history_inst.seen_data.clear()
+        history_inst.seen_data["1"] = _row("1", "Klemyr")
+        history_inst.seen_data["2"] = _row("2", "Droomzz")
+        self.gui = SeenCommandersGUI()
+        self.gui.open(self.root)
+        self.root.update_idletasks()
+
+    def tearDown(self):
+        self.gui._cancel_selection_clear()
+        try:
+            self.gui.window.destroy()
+        except tk.TclError:
+            pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+        history_inst.plugin_dir = self._plugin
+        history_inst.json_file_path = self._json
+        history_inst.seen_data.clear()
+        history_inst.seen_data.update(self._seen)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_selection_bar_is_not_the_list_accent(self):
+        bar, text = gui_mod.selection_colors("#101010", "#13ec39")
+        self.assertEqual(text, "#13ec39")
+        self.assertNotEqual(bar.lower(), "#13ec39")
+        self.assertNotEqual(bar.lower(), "#101010")
+        self.assertEqual(gui_mod.SELECTION_CLEAR_MS, 5000)
+
+    def test_click_selection_clears_and_resets_and_holds_for_the_editor(self):
+        item = self.gui.tree_items["1"]
+        self.gui.tree.selection_set(item)
+        self.root.update()
+        self.assertTrue(self.gui.tree.selection())
+        first = self.gui._selection_clear_job
+        self.assertIsNotNone(first)
+        self.gui.tree.selection_set(self.gui.tree_items["2"])
+        self.root.update()
+        second = self.gui._selection_clear_job
+        self.assertIsNotNone(second)
+        self.assertNotEqual(first, second)
+        self.gui._clear_tree_selection()
+        self.assertEqual(self.gui.tree.selection(), ())
+
+        self.gui.tree.selection_set(item)
+        self.root.update_idletasks()
+        editor = tk.Toplevel(self.gui.window)
+        self.gui._edit_popup = editor
+        self.gui._clear_tree_selection()
+        self.assertEqual(self.gui.tree.selection(), (item,))
+        editor.destroy()
+        self.gui._edit_popup = None
+        self.gui._clear_tree_selection()
+        self.assertEqual(self.gui.tree.selection(), ())
+
+        bindings = self.gui.tree.bind()
+        self.assertIn("<Double-Button-1>", bindings)
+        self.assertIn("<Button-3>", bindings)
+
+    def test_shift_held_does_not_clear(self):
+        item = self.gui.tree_items["1"]
+        self.gui.tree.selection_set(item)
+        self.root.update()
+        self.gui._selection_keys = {"Shift_L"}
+        self.gui._clear_tree_selection()
+        self.assertEqual(self.gui.tree.selection(), (item,))
+        self.gui._selection_keys.clear()
+        self.gui._clear_tree_selection()
+        self.assertEqual(self.gui.tree.selection(), ())
+
+
 if __name__ == "__main__":
     unittest.main()

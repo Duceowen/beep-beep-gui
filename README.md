@@ -32,6 +32,9 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.9
+- Clicking a row in Seen Commanders no longer leaves the bright selection bar on that row. The bar clears after a few seconds with no further click. It stays while the name editor is open, and while Shift or Control is held
+
 ## 1.1.8
 - A scan, local chat line, or interdiction refreshes that commander's Now timer, including a name matched to an unnamed contact for this session. The Now row shows that journal name. It is not saved while the contact is still unnamed
 - After a minute with no new evidence, a commander still on Now is shown grey with "last heard … ago". They leave Now after the usual three minutes. A new sighting puts them back

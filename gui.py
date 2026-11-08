@@ -22,6 +22,8 @@ _WIN_DATETIME_FMT = None
 
 MIN_COL_WIDTH = 50
 TOPMOST_REASSERT_MS = 1000
+# A click's selection bar clears itself. It is not the Now highlight.
+SELECTION_CLEAR_MS = 5000
 SEEN_COLUMNS = ("name", "sound", "seen_count", "kills", "last_seen")
 COLUMN_LABELS = (
     ("name", "Name"),
@@ -33,6 +35,46 @@ COLUMN_LABELS = (
 COLUMN_BUFFER = 24
 DIVIDER_HIT = 8
 DIVIDER_LINE = 1
+
+
+def _hex_channels(color):
+    text = str(color or "").strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return None
+    try:
+        return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+
+
+def _mix_hex(start, end, amount):
+    left = _hex_channels(start)
+    right = _hex_channels(end)
+    if left is None or right is None:
+        return None
+    mixed = []
+    for a, b in zip(left, right):
+        mixed.append(int(round(a + (b - a) * amount)))
+    return "#%02x%02x%02x" % tuple(mixed)
+
+
+def selection_colors(background, foreground):
+    """Bar and text for a clicked row.
+
+    The list text uses the theme accent. Painting the selection with that
+    same accent makes a click look like the row is present.
+    """
+    text = foreground or "#f2f2f2"
+    bg = background or "#1c1c1c"
+    channels = _hex_channels(bg)
+    if channels is None:
+        return "#3a3a3a", text
+    luminance = (0.299 * channels[0] + 0.587 * channels[1] + 0.114 * channels[2]) / 255
+    toward = "#000000" if luminance > 0.6 else "#ffffff"
+    bar = _mix_hex(bg, toward, 0.22) or "#3a3a3a"
+    return bar, text
 
 
 def layout_seen_columns(available, visible, fixed, mins):
@@ -472,7 +514,7 @@ class SeenCommandersGUI:
         self.attach_resize_listener()
         
         
-        self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits)
+        self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits, add="+")
         self.window.after(50, self._enforce_column_limits)
 
         self._apply_topmost()
@@ -1333,6 +1375,7 @@ class SeenCommandersGUI:
         
         def on_window_close():
             self._window_open = False
+            self._cancel_selection_clear()
             layout_job = getattr(self, "_header_layout_job", None)
             if layout_job:
                 try:
@@ -1402,6 +1445,115 @@ class SeenCommandersGUI:
         # No prior row context menu — headers use Button-3 for columns only.
         self.tree.bind("<Button-3>", self._popup_beep_mark_menu)
         self.tree.bind("<Control-Button-1>", self._popup_beep_mark_menu)
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_selection, add="+")
+        self.tree.bind("<ButtonPress-1>", self._on_selection_press, add="+")
+        self.tree.bind("<ButtonRelease-1>", self._on_selection_release, add="+")
+        self.tree.bind("<KeyPress>", self._on_selection_key, add="+")
+        self.tree.bind("<KeyRelease>", self._on_selection_key, add="+")
+
+    def _edit_popup_open(self) -> bool:
+        popup = getattr(self, "_edit_popup", None)
+        if popup is None:
+            return False
+        try:
+            return bool(popup.winfo_exists())
+        except Exception:
+            return False
+
+    def _selection_busy(self) -> bool:
+        """True while an edit, a modifier, or a click gesture should keep the bar."""
+        if self._edit_popup_open():
+            return True
+        if getattr(self, "_selection_keys", None):
+            return True
+        if getattr(self, "_selection_gesture", False):
+            return True
+        return False
+
+    def _cancel_selection_clear(self) -> None:
+        job = getattr(self, "_selection_clear_job", None)
+        self._selection_clear_job = None
+        window = getattr(self, "window", None)
+        if not job or window is None:
+            return
+        try:
+            window.after_cancel(job)
+        except Exception:
+            pass
+
+    def _arm_selection_clear(self) -> None:
+        """Start the clear delay over. Each new click calls this again."""
+        self._cancel_selection_clear()
+        if self._selection_busy():
+            return
+        window = getattr(self, "window", None)
+        tree = getattr(self, "tree", None)
+        if window is None or tree is None:
+            return
+        try:
+            if not tree.selection():
+                return
+            self._selection_clear_job = window.after(SELECTION_CLEAR_MS, self._clear_tree_selection)
+        except Exception:
+            self._selection_clear_job = None
+
+    def _clear_tree_selection(self) -> None:
+        self._selection_clear_job = None
+        if self._selection_busy():
+            self._arm_selection_clear()
+            return
+        tree = getattr(self, "tree", None)
+        if tree is None:
+            return
+        self._clearing_selection = True
+        try:
+            selected = tree.selection()
+            if selected:
+                tree.selection_remove(selected)
+        except Exception:
+            pass
+        finally:
+            self._clearing_selection = False
+
+    def _on_tree_selection(self, _event=None):
+        if getattr(self, "_clearing_selection", False):
+            return
+        if self._selection_busy():
+            self._cancel_selection_clear()
+            return
+        self._arm_selection_clear()
+
+    def _on_selection_press(self, event):
+        state = getattr(event, "state", 0) or 0
+        # Shift or Control: the selection gesture is still going.
+        if state & 0x1 or state & 0x4:
+            self._selection_gesture = True
+            self._cancel_selection_clear()
+
+    def _on_selection_release(self, event=None):
+        self._selection_gesture = False
+        state = getattr(event, "state", 0) or 0
+        if state & 0x1 or state & 0x4:
+            self._cancel_selection_clear()
+            return
+        if not self._selection_busy():
+            self._arm_selection_clear()
+
+    def _on_selection_key(self, event):
+        if event.keysym not in ("Shift_L", "Shift_R", "Control_L", "Control_R"):
+            return
+        held = getattr(self, "_selection_keys", None)
+        if held is None:
+            held = set()
+            self._selection_keys = held
+        kind = str(getattr(event, "type", ""))
+        if "Release" in kind:
+            held.discard(event.keysym)
+            if not self._selection_busy():
+                self._arm_selection_clear()
+        else:
+            held.add(event.keysym)
+            self._cancel_selection_clear()
 
     def on_tree_enter_pressed(self, _event):
         if self._options_are_open():
@@ -1629,8 +1781,10 @@ class SeenCommandersGUI:
                 return
             if getattr(self, "_edit_popup", None) is editor:
                 self._edit_popup = None
+            self._arm_selection_clear()
 
         popup.bind("<Destroy>", forget_edit)
+        self._cancel_selection_clear()
     
     
         tk.Label(popup, text="Name:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -1958,18 +2112,17 @@ class SeenCommandersGUI:
             return
         background = palette.get("background")
         foreground = palette.get("foreground")
-        activebackground = palette.get("activebackground") or background
-        activeforeground = palette.get("activeforeground") or foreground
         try:
             parent.configure(background=background)
         except Exception:
             pass
+        selected_bg, selected_fg = selection_colors(background, foreground)
         style = ttk.Style(parent)
         style.configure("Beep.Treeview", background=background, fieldbackground=background, foreground=foreground)
         style.map(
             "Beep.Treeview",
-            background=[("selected", activebackground)],
-            foreground=[("selected", activeforeground)],
+            background=[("selected", selected_bg)],
+            foreground=[("selected", selected_fg)],
         )
         style.configure("Beep.Treeview.Heading", background=background, foreground=foreground)
         if getattr(self, "tree", None) and self.tree.winfo_exists():
