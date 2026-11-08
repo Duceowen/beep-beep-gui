@@ -165,14 +165,17 @@ class Supercruise(unittest.TestCase):
         self.h.drop_supercruise_arrivals()
         self.assertFalse(present("3"))
 
-    def test_drop_in_announces_people_listed_in_the_new_instance(self):
+    def test_drop_in_relist_of_people_you_left_is_silent_and_a_newcomer_beeps(self):
         location.state = 1
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 3, 1, 28))
         self.assertEqual(self.h.sent, [])
         location.set(0, "Sol", "SupercruiseExit")
         self.h.drop_supercruise_arrivals()
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 3, 1, 29))
-        self.assertEqual(sorted(sum(self.h.sent, [])), ["1", "2"])
+        self.assertEqual(self.h.sent, [])
+        add_row(self.h, "4", "Newcomer")
+        feed(self.h, ["4"], datetime.datetime(2026, 11, 3, 1, 30))
+        self.assertEqual(self.h.sent, [["4"]])
 
     def test_removal_at_supercruise_entry_is_not_a_departure(self):
         self.assertIsNone(left_at(self.h, "1"))
@@ -364,7 +367,7 @@ class RestartInSupercruise(unittest.TestCase):
         self.assertEqual(location.state, 1)
         self.assertEqual(set(location.leave_snapshot), {"101", "102"})
 
-    def test_restart_in_supercruise_relist_is_silent_and_drop_in_announces(self):
+    def test_restart_in_supercruise_relist_stays_silent_after_drop(self):
         h = self.restore(self.saved_visit(["101", "102"]), in_supercruise=True)
         h.sent = []
         h._sound_listener = lambda infos: h.sent.append([i["commander_id"] for i in infos])
@@ -377,8 +380,12 @@ class RestartInSupercruise(unittest.TestCase):
         self.assertTrue(h.take_resume_supercruise())
         location.set(0, "Sol", "SupercruiseExit")
         h.drop_supercruise_arrivals()
+        # Saved instance members are people already with you, not a new arrival.
         feed(h, ["101", "102"], datetime.datetime(2026, 11, 3, 1, 2))
-        self.assertEqual(sorted(sum(h.sent, [])), ["101", "102"])
+        self.assertEqual(h.sent, [])
+        add_row(h, "103", "Newcomer")
+        feed(h, ["103"], datetime.datetime(2026, 11, 3, 1, 3))
+        self.assertEqual(h.sent, [["103"]])
 
     def test_restart_in_normal_space_marks_recent_present(self):
         self.restore(self.saved_visit(["101"]), in_supercruise=False)
@@ -640,9 +647,17 @@ class RelistRule(unittest.TestCase):
 
     def test_drop_grace_silences_then_releases(self):
         location.state = 0
+        # Grace is for someone only heard in supercruise, not the leave snapshot.
+        location.leave_snapshot = set()
         location.supercruise_dropped = {"11": self.now}
         self.assertTrue(self.h._is_relist_silenced("11", self.now + 5))
         self.assertFalse(self.h._is_relist_silenced("11", self.now + 60))
+
+    def test_leave_snapshot_still_silences_after_the_drop(self):
+        location.state = 0
+        location.instance_reset_pending = False
+        self.assertTrue(self.h._is_relist_silenced("11", self.now))
+        self.assertTrue(self.h._is_relist_silenced("11", self.now + 60))
 
 class SameSessionStart(unittest.TestCase):
     """Real: EDMC reloaded during a session (synthesized StartUp). The game re-listed everyone

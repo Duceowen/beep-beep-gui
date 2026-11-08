@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.1](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.1/beep-beep-gui-1.1.1.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.4](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.4/beep-beep-gui-1.1.4.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -30,6 +30,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.4
+- A commander who was already with you is no longer beeped as a new arrival when the game refreshes their record after you drop out of supercruise. That includes someone who pulled you out of supercruise, and someone you had already targeted in the instance you dropped into
+- Someone you left behind stays quiet when the game lists them again from recent contacts after you drop. A commander who was not already with you still beeps when they arrive after the drop
+- Targeting a ship while you are in supercruise does not count as that commander being in the instance you drop into
 
 ## 1.1.3
 - After you confirm an import, Seen Commanders fills in straight away with the names you already had and the names just added. Sorting by Name or Sound no longer leaves that window blank until EDMC is restarted. Cancel leaves the list as it was

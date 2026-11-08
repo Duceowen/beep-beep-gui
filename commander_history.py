@@ -121,9 +121,11 @@ class Location:
     def leave_instance(self, record_departures: bool = True, after_death: bool = False):
         """Entering supercruise in the same system takes you out of the instance.
 
-        Everyone in it is gone until you drop back into normal space, so they are
-        cleared now and their return counts as a new arrival. A later jump still
-        uses this snapshot as its jump backup if the instance is empty by then.
+        Everyone in it is cleared now. The leave snapshot remembers who was
+        already here, so a later re-list of those commanders is not a new
+        arrival. A commander who was not in that snapshot still counts as one.
+        A later jump still uses this snapshot as its jump backup if the
+        instance is empty by then.
         """
         if record_departures:
             self._record_departures()
@@ -133,14 +135,16 @@ class Location:
                 for cmdr_id, info in self.instance.items()
             }
         # The worker can hear a new commander between StartJump and the
-        # SupercruiseEntry event. That row was added while in supercruise, so
-        # it is a drop-out arrival, not someone left in the old instance.
+        # SupercruiseEntry event. StartJump already sets state to supercruise,
+        # and a refresh of someone already here copies that state onto their
+        # row. Only a commander who first became present in supercruise is a
+        # drop-out arrival. Someone who was already here stayed behind.
         late_arrivals = set()
         if self.state == 1:
             late_arrivals = {
                 str(cid)
                 for cid, info in self.instance.items()
-                if isinstance(info, dict) and info.get("here") and info.get("state") == 1
+                if isinstance(info, dict) and info.get("here") and info.get("arrived_in_supercruise")
             }
         # Late arrivals were first heard during the jump, so they are not members who stayed behind.
         # Only people marked here — stale instance rows must not silence later SC arrivals.
@@ -975,10 +979,16 @@ class CommanderHistoryManager:
     def _is_relist_silenced(self, cmdr_id: str, now_ts: float) -> bool:
         """True when an update is a re-list of people you have already left behind, not an arrival.
 
-        Silent while supercruise or a death keeps the old visit in force, and for a short grace
-        after a supercruise drop-out, which covers the immediate re-list.
+        Silent for anyone still on the leave snapshot (supercruise, the drop
+        back into normal space, and a death), and for a short grace after a
+        supercruise drop-out, which covers the immediate re-list of someone
+        who was only heard in supercruise.
         """
-        if (location.death_snapshot or (location.instance_reset_pending and location.state == 1)) and cmdr_id in location.leave_snapshot:
+        # The snapshot is who you left behind. It stays in force after the drop:
+        # CommanderHistory bumps Met for recent contacts whether or not they
+        # entered the new instance. A jump or a load clears the snapshot.
+        # While you are still in supercruise the same list covers the re-list.
+        if cmdr_id in location.leave_snapshot:
             return True
         dropped_at = location.supercruise_dropped.get(cmdr_id)
         if dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS:
@@ -2095,11 +2105,13 @@ class CommanderHistoryManager:
                 self._beep_decision(cmdr_id, False, reason)
                 beep_this_commander = False
                 # Still record presence so they show as here; only the beep is suppressed.
+                already_here = bool(isinstance(inst, dict) and inst.get("here"))
                 if not inst:
                     location.add_instance(cmdr_id, state=location.state, system=location.system)
                     inst = location.get_instance()[cmdr_id]
                 inst["here"] = True
                 inst["shown_now"] = True
+                self._note_supercruise_join(inst, already_here)
                 inst["state"] = location.state
                 inst["system"] = location.system
                 self._remember_sighting(info, existing)
@@ -2143,6 +2155,7 @@ class CommanderHistoryManager:
                 else:
                     inst["here"] = True
                     inst["shown_now"] = True
+                    self._note_supercruise_join(inst, False)
                     # Right after a game load, the game rewrites everyone already here.
                     beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch, info.get("name"))
 
@@ -2161,6 +2174,7 @@ class CommanderHistoryManager:
                 inst = location.get_instance()[cmdr_id]
                 inst["here"] = True
                 inst["shown_now"] = True
+                self._note_supercruise_join(inst, False)
                 beep_this_commander = self._decide_new_arrival(cmdr_id, in_batch, info.get("name"))
     
     
@@ -2241,6 +2255,58 @@ class CommanderHistoryManager:
             existing if isinstance(existing, dict) else None,
             visit_is_new(previous_last, seen_at),
         )
+
+    def _note_supercruise_join(self, inst, already_here: bool) -> None:
+        """Mark a commander who first showed up while you were in supercruise.
+
+        StartJump sets the location state before SupercruiseEntry. A refresh of
+        someone already here copies that state onto the row, so the state field
+        cannot tell a new supercruise contact from someone who stayed behind.
+        """
+        if location.state == 1 and not already_here and isinstance(inst, dict):
+            inst["arrived_in_supercruise"] = True
+
+    def _establish_presence(self, cmdr_id) -> None:
+        """Record that this commander is in the current instance, without a beep.
+
+        Used when the journal has already shown they are here (a ship you have
+        targeted in normal space, or the commander who just pulled you out).
+        A later CommanderHistory epoch is then a refresh.
+        """
+        cid = str(cmdr_id)
+        inst = location.instance.get(cid)
+        already_here = isinstance(inst, dict) and bool(inst.get("here"))
+        if not isinstance(inst, dict):
+            location.add_instance(cid, state=location.state, system=location.system)
+            inst = location.instance[cid]
+        inst["here"] = True
+        inst["shown_now"] = True
+        inst["state"] = location.state
+        inst["system"] = location.system
+        self._note_supercruise_join(inst, already_here)
+        self._touch(cid)
+
+    def _establish_presence_by_name(self, name) -> None:
+        if not isinstance(name, str) or is_unknown_name(name):
+            return
+        key = name_key(name)
+        for cid, info in self.seen_data.items():
+            if isinstance(info, dict) and row_has_name(info, key):
+                self._establish_presence(cid)
+
+    def note_ship_present(self, entry: dict) -> None:
+        """A targeted player ship in normal space is already in this instance.
+
+        Targeting in supercruise does not put them in the instance you later
+        drop into. Unlocking a target does not remove anyone.
+        """
+        if location.state != 0 or not isinstance(entry, dict):
+            return
+        if entry.get("event") != "ShipTargeted" or not entry.get("TargetLocked"):
+            return
+        for kind, name in journal_player_names(entry):
+            if kind == "scan":
+                self._establish_presence_by_name(name)
 
     def note_journal_name(self, entry: dict) -> None:
         if not isinstance(entry, dict) or not journal_player_names(entry):
@@ -2610,12 +2676,17 @@ class CommanderHistoryManager:
             location.forget(cid)
         now = time.time()
         location.last_drop_ts = now
-        # Commanders who were in the instance before supercruise are real members, not arrivals.
-        # Their next listing is announced, so they do not get the post-drop silence.
+        # People only heard in supercruise get a short grace so the drop-out
+        # re-list does not bring them straight back. People you left behind
+        # stay on the leave snapshot, which keeps that re-list quiet.
         location.supercruise_dropped.update({cid: now for cid in dropped if cid not in location.leave_snapshot})
         location.supercruise_arrivals = set()
-        # The drop-out has been handled, so later updates are ordinary. Until
-        # then, everyone left behind by the supercruise entry stays silent.
+        # The commander who pulled you out, or who you pulled out, is in this
+        # instance. Record them now so a later Met epoch is not a new arrival.
+        if target and location.state != 1:
+            self._establish_presence_by_name(target)
+        # The drop-out has been handled. The leave snapshot still silences
+        # people you left behind; everyone else is an ordinary update.
         location.instance_reset_pending = False
 
     def record_kill(self, victim) -> None:

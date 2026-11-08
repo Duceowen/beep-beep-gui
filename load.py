@@ -129,6 +129,17 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         location.interdiction(entry.get("Interdicted") if entry.get("Success") is not False else None)
         if entry.get("Success") is False and entry.get("IsPlayer") is True:
             history_inst.note_escape(entry.get("Interdicted"))
+
+    elif event == "Interdicted":
+        # The other commander pulled you out of supercruise. They drop in with you.
+        # Escaping is EscapeInterdiction, which does not land you in their instance.
+        if entry.get("IsPlayer") is True:
+            location.interdiction(entry.get("Interdictor"))
+
+    elif event == "ShipTargeted":
+        # A locked player ship in normal space is already in this instance.
+        # A lock while you are still in supercruise is only a contact out there.
+        history_inst.note_ship_present(entry)
             
     elif event == "PVPKill":
         victim = entry.get("Victim")        
