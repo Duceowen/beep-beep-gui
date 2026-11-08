@@ -57,6 +57,8 @@ class InstanceMachine:
         self.held = {}
         self.held_confusable = {}
         self.announced_names = set()
+        self.claimed_unknown_ids = set()
+        self.anonymous_claims = 0
         self.cooldown_until = {}
         self.relog_open = False
         self.present_before_jump = set()
@@ -84,6 +86,8 @@ class InstanceMachine:
         self.confirmed = set()
         self.killed = set()
         self.announced_names = set()
+        self.claimed_unknown_ids = set()
+        self.anonymous_claims = 0
         self.relog_open = bool(relog)
         if relog:
             self.departure_ids = set()
@@ -179,6 +183,28 @@ class InstanceMachine:
             return False, "refresh"
         beep, reason = self.confirm(cid, held_kind)
         return beep, reason
+
+    def claim_unresolved_name(self, name, unknown_ids) -> str:
+        """Fit a journal name that has no saved id onto an unnamed contact.
+
+        Returns "absorb" when an announced unknown contact in this instance can
+        account for the name, and "new" when every such contact is already
+        claimed. Several unknowns are not paired with particular names. A single
+        leftover unknown is remembered for this session only.
+        """
+        available = [str(cid) for cid in unknown_ids if str(cid) not in self.claimed_unknown_ids]
+        free = len(available) - self.anonymous_claims
+        if free <= 0:
+            self.mark_name_announced(name)
+            return "new"
+        if free == 1 and len(available) == 1 and self.anonymous_claims == 0:
+            self.claimed_unknown_ids.add(available[0])
+            self.index_name(available[0], name)
+            self.mark_name_announced(name)
+            return "absorb"
+        self.anonymous_claims += 1
+        self.mark_name_announced(name)
+        return "absorb"
 
     def hold_evidence(self, name, kind) -> None:
         if not isinstance(name, str) or is_unknown_name(name):

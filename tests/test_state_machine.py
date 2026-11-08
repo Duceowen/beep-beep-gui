@@ -112,6 +112,69 @@ class Latency(unittest.TestCase):
         self.assertEqual(location.interdiction_cooldown, 60.0)
 
 
+def _target(h, name, stage, ship="federation_corvette"):
+    return play(
+        h, "ShipTargeted", TargetLocked=True, ScanStage=stage, Ship=ship,
+        PilotName=f"$cmdr_decorate:#name={name};",
+        PilotName_Localised=f"CMDR {name}",
+        timestamp=f"2026-11-08T07:22:{50 + stage:02d}Z",
+    )
+
+
+class UnresolvedScanDedup(unittest.TestCase):
+    """23:22 at Hencke Orbital: two unnamed rows, then scans of those people."""
+
+    def _two_unknowns(self):
+        h = fresh_history()
+        add_row(h, "403737", "unknown")
+        add_row(h, "8330095", "unknown")
+        location.system, location.state = "Sorbago", 0
+        play(h, "SupercruiseExit", StarSystem="Sorbago", Body="Hencke Orbital", BodyType="Station",
+             timestamp="2026-11-08T07:22:39Z")
+        h.sent.clear()
+        feed(h, ["403737", "8330095"], datetime.datetime(2026, 11, 8, 7, 22, 45))
+        return h
+
+    def test_two_unnamed_contacts_then_two_scans_beep_twice(self):
+        h = self._two_unknowns()
+        self.assertEqual(ids(h), ["403737", "8330095"])
+        for stage in (1, 2, 3):
+            self.assertEqual(_target(h, "DROOMZZ", stage), [])
+        for stage in (1, 2, 3):
+            self.assertEqual(_target(h, "MigA", stage, ship="anacondamkii"), [])
+        self.assertEqual(ids(h), ["403737", "8330095"])
+        self.assertEqual(h.seen_data["403737"]["name"], "unknown")
+        self.assertEqual(h.seen_data["8330095"]["name"], "unknown")
+        self.assertIsNone(h.machine.resolve("DROOMZZ"))
+        self.assertIsNone(h.machine.resolve("MigA"))
+        saved = open(h.json_file_path, encoding="utf-8").read() if __import__("os").path.exists(h.json_file_path) else ""
+        self.assertNotIn("DROOMZZ", saved)
+        self.assertNotIn("MigA", saved)
+
+    def test_a_third_unresolved_name_still_beeps(self):
+        h = self._two_unknowns()
+        self.assertEqual(_target(h, "DROOMZZ", 1), [])
+        self.assertEqual(_target(h, "MigA", 1, ship="anacondamkii"), [])
+        arrived = _target(h, "Newcomer", 1, ship="python")
+        self.assertEqual(arrived, [["Newcomer"]])
+        self.assertEqual(_target(h, "Newcomer", 2, ship="python"), [])
+        self.assertEqual(ids(h), ["403737", "8330095", "Newcomer"])
+        self.assertEqual(h.seen_data["403737"]["name"], "unknown")
+        self.assertEqual(h.seen_data["8330095"]["name"], "unknown")
+
+    def test_one_unknown_is_remembered_for_dedup_and_not_saved(self):
+        h = fresh_history()
+        add_row(h, "403737", "unknown")
+        location.system, location.state = "Sorbago", 0
+        feed(h, ["403737"], datetime.datetime(2026, 11, 8, 7, 22, 45))
+        self.assertEqual(_target(h, "DROOMZZ", 1), [])
+        self.assertEqual(_target(h, "DROOMZZ", 3), [])
+        self.assertEqual(h.machine.resolve("DROOMZZ"), "403737")
+        self.assertEqual(h.seen_data["403737"]["name"], "unknown")
+        extra = _target(h, "MigA", 1, ship="anacondamkii")
+        self.assertEqual(extra, [["MigA"]])
+
+
 class SessionMarks(unittest.TestCase):
     """The 13 marks from the 7 Nov 2026 recording, replayed as the events that mattered."""
 

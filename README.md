@@ -32,6 +32,9 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.7
+- Scanning or talking to someone who was already announced as an unnamed contact does not beep a second time. A name that does not fit those unnamed contacts still beeps. A guessed name is not saved while more than one unnamed contact is here
+
 ## 1.1.6
 - Each new instance (a drop, a glide, low-wake into supercruise, a jump, respawn, or a relog) starts clean. Someone is announced once in that instance. A later history refresh does not beep them again. A relog or the main menu announces the people in the new instance. Restarting EDMC in the same game session stays quiet
 - A ship you target, a local chat line, or an interdiction announces that commander on that journal line. Beep Beep does not wait for the history file, and it does not add a wait in front of a real arrival. A lock while you are in supercruise is this instance only. People left behind at a station are not announced just because leaving refreshed their rows

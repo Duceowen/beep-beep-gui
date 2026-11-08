@@ -1574,7 +1574,13 @@ class CommanderHistoryManager:
                 self.machine.hold_evidence(name, kind)
                 if self.machine.name_was_announced(name):
                     return
-                self.machine.mark_name_announced(name)
+                # An unnamed contact already announced in this instance is the
+                # same person until every such contact has a journal name.
+                # Several unknowns are not written back as a guessed mapping.
+                outcome = self.machine.claim_unresolved_name(name, self._announced_unknowns())
+                if outcome == "absorb":
+                    self._beep_decision(name, False, "unresolved_contact")
+                    return
                 self._emit_named(name, kind)
                 return
             if cooldown:
@@ -2660,6 +2666,18 @@ class CommanderHistoryManager:
 
     def forget_pending_names(self) -> None:
         self._names.clear()
+
+    def _announced_unknowns(self) -> list[str]:
+        """Announced contacts in this instance whose display name is still unknown."""
+        ids = []
+        for cid in self.machine.announced:
+            if not self.is_present(cid):
+                continue
+            info = self.seen_data.get(str(cid))
+            name = info.get("name") if isinstance(info, dict) else None
+            if not isinstance(info, dict) or is_unknown_name(name):
+                ids.append(str(cid))
+        return ids
 
     def _unknown_ids_here(self) -> list[str]:
         ids = []
