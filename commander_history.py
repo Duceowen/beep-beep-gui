@@ -282,6 +282,8 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
+# Still on Now, but dimmed, once this long has passed with no new evidence.
+_QUIET_DISPLAY_SECONDS = 60.0
 _LEAVE_MEMORY_SECONDS = 600.0
 _WING_JOIN_SILENCE_SECONDS = 20.0
 _INTERDICTION_WINDOW_SECONDS = 60.0
@@ -1345,7 +1347,11 @@ class CommanderHistoryManager:
         self._instance_dirty = True
         inst = location.instance.get(cid)
         if isinstance(inst, dict) and inst.get("here"):
+            was_quiet = inst.get("quiet_display") is True
             inst["shown_now"] = True
+            inst["quiet_display"] = False
+            if was_quiet:
+                self._record_quiet_transition(cid, False)
 
     def _touch_names(self, names) -> None:
         keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
@@ -1368,15 +1374,22 @@ class CommanderHistoryManager:
             if not (isinstance(inst, dict) and inst.get("here")):
                 continue
             last = self._visit.get(cid)
-            if last is None:
-                self._visit[cid] = now
+            if not isinstance(last, (int, float)):
+                # A missing time is not an open-ended Now. Manual names used to
+                # stay highlighted because is_shown_present treated None as fresh
+                # and this loop rewrote None to "now" on every pass.
+                if inst.get("shown_now") is not False:
+                    inst["shown_now"] = False
+                    inst["quiet_display"] = False
                 continue
-            if now - last >= _PRESENCE_QUIET_SECONDS:
+            age = now - last
+            if age >= _PRESENCE_QUIET_SECONDS:
                 # Display-only. Log once when Now fades, not on every worker poll.
                 was_shown = inst.get("shown_now")
                 if was_shown is False:
                     continue
                 inst["shown_now"] = False
+                inst["quiet_display"] = False
                 if was_shown is not False:
                     info = self.seen_data.get(cid)
                     name = info.get("name", cid) if isinstance(info, dict) else cid
@@ -1385,6 +1398,14 @@ class CommanderHistoryManager:
                         name,
                         _PRESENCE_QUIET_SECONDS // 60,
                     )
+                continue
+            if age >= _QUIET_DISPLAY_SECONDS:
+                if inst.get("quiet_display") is not True:
+                    inst["quiet_display"] = True
+                    self._record_quiet_transition(cid, True, age)
+            elif inst.get("quiet_display") is True:
+                inst["quiet_display"] = False
+                self._record_quiet_transition(cid, False)
 
     def clear_presence(self, timestamp=None) -> None:
         """Forget everyone in the instance, e.g. after the main menu or a game load.
@@ -1573,18 +1594,21 @@ class CommanderHistoryManager:
             if cid is None:
                 self.machine.hold_evidence(name, kind)
                 if self.machine.name_was_announced(name):
+                    self._refresh_resolved_evidence(name)
                     return
                 # An unnamed contact already announced in this instance is the
                 # same person until every such contact has a journal name.
                 # Several unknowns are not written back as a guessed mapping.
                 outcome = self.machine.claim_unresolved_name(name, self._announced_unknowns())
                 if outcome == "absorb":
+                    self._refresh_resolved_evidence(name)
                     self._beep_decision(name, False, "unresolved_contact")
                     return
                 self._emit_named(name, kind)
                 return
             if cooldown:
                 self.machine.note_cooldown(cid, cooldown)
+            self._touch(cid)
             beep, reason = self.machine.confirm(cid, kind)
             if beep:
                 self._emit_arrival(cid, reason)
@@ -1631,9 +1655,98 @@ class CommanderHistoryManager:
         if isinstance(inst, dict) and inst.get("shown_now") is False:
             return False
         last = self._visit.get(cid)
-        if last is None:
-            return True
+        if not isinstance(last, (int, float)):
+            return False
         return time.monotonic() - last < _PRESENCE_QUIET_SECONDS
+
+    def now_display_state(self, cmdr_id) -> str:
+        """'now', 'quiet', or 'off'. Quiet stays on Now until the 180 s fade."""
+        if not self.is_shown_present(cmdr_id):
+            return "off"
+        last = self._visit.get(str(cmdr_id))
+        if not isinstance(last, (int, float)):
+            return "off"
+        if time.monotonic() - last >= _QUIET_DISPLAY_SECONDS:
+            return "quiet"
+        return "now"
+
+    def now_label(self, cmdr_id):
+        """Text for the Last Encounter cell while this commander is on Now."""
+        state = self.now_display_state(cmdr_id)
+        if state == "off":
+            return None
+        if state == "quiet":
+            last = self._visit.get(str(cmdr_id))
+            age = max(0, int(time.monotonic() - last))
+            if age >= 60:
+                return "last heard %dm ago" % (age // 60)
+            return "last heard %ds ago" % age
+        return "Now"
+
+    def session_name(self, cmdr_id):
+        """Journal name claimed for an unnamed contact. Not written to the seen file."""
+        info = self.seen_data.get(str(cmdr_id))
+        saved = info.get("name") if isinstance(info, dict) else None
+        if isinstance(saved, str) and not is_unknown_name(saved):
+            return None
+        name = self.machine.display_names.get(str(cmdr_id))
+        if isinstance(name, str) and name.strip() and not is_unknown_name(name):
+            return name.strip()
+        return None
+
+    def note_manual_name(self, cmdr_id) -> None:
+        """A typed name starts the Now clock. It does not refresh one already running.
+
+        The Seen Commanders editor (double-click, Save) and Update spelling call
+        this. Previously a commander who was `here` with no visit time stayed on
+        Now forever: is_shown_present treated a missing time as fresh, and the
+        quiet pass rewrote that missing time to "now" instead of letting it age.
+        """
+        cid = str(cmdr_id)
+        inst = location.instance.get(cid)
+        if not (isinstance(inst, dict) and inst.get("here")):
+            return
+        if isinstance(self._visit.get(cid), (int, float)):
+            return
+        inst["shown_now"] = True
+        inst["quiet_display"] = False
+        self._visit[cid] = time.monotonic()
+        self._instance_dirty = True
+
+    def _refresh_resolved_evidence(self, name) -> None:
+        """A scan, local chat line, or interdiction refreshes the resolved id's Now row."""
+        try:
+            cid = self.resolve_commander(name)
+        except Exception:
+            return
+        if not cid:
+            return
+        self.machine.remember_display_name(cid, name)
+        self._touch(cid)
+
+    def _record_quiet_transition(self, cmdr_id, quiet: bool, age: float | None = None) -> None:
+        try:
+            info = self.seen_data.get(str(cmdr_id))
+            name = self.session_name(cmdr_id)
+            if not name and isinstance(info, dict):
+                saved = info.get("name")
+                if isinstance(saved, str):
+                    name = saved
+            fields = {"id": str(cmdr_id), "quiet": bool(quiet)}
+            if name:
+                fields["name"] = name
+            if age is not None:
+                fields["ago_s"] = int(age)
+            self.recorder.record("quiet" if quiet else "unquiet", fields)
+        except Exception:
+            pass
+
+    def instance_ids(self) -> list[str]:
+        """Commander ids currently marked here. For the Now list only."""
+        return [
+            str(cid) for cid, inst in location.instance.items()
+            if isinstance(inst, dict) and inst.get("here")
+        ]
 
     def is_present(self, cmdr_id) -> bool:
         """True while the commander is recorded as in your current instance."""
@@ -2786,6 +2899,7 @@ class CommanderHistoryManager:
                 continue
             add_alias(info, old_name, new_name)
             info["name"] = new_name
+            self.note_manual_name(cmdr_id)
             applied.append((str(cmdr_id), old_name, new_name))
             updated.append(info)
         if not updated:

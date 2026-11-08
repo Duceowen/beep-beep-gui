@@ -57,6 +57,7 @@ class InstanceMachine:
         self.held = {}
         self.held_confusable = {}
         self.announced_names = set()
+        self.display_names = {}
         self.claimed_unknown_ids = set()
         self.anonymous_claims = 0
         self.cooldown_until = {}
@@ -86,6 +87,7 @@ class InstanceMachine:
         self.confirmed = set()
         self.killed = set()
         self.announced_names = set()
+        self.display_names = {}
         self.claimed_unknown_ids = set()
         self.anonymous_claims = 0
         self.relog_open = bool(relog)
@@ -205,6 +207,12 @@ class InstanceMachine:
         self.anonymous_claims += 1
         self.mark_name_announced(name)
         return "absorb"
+
+    def remember_display_name(self, cmdr_id, name) -> None:
+        """Session-only label for an unnamed contact. Not written to the seen file."""
+        if not isinstance(name, str) or is_unknown_name(name):
+            return
+        self.display_names[str(cmdr_id)] = name.strip()
 
     def hold_evidence(self, name, kind) -> None:
         if not isinstance(name, str) or is_unknown_name(name):

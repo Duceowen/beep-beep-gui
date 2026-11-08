@@ -32,6 +32,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.8
+- A scan, local chat line, or interdiction refreshes that commander's Now timer, including a name matched to an unnamed contact for this session. The Now row shows that journal name. It is not saved while the contact is still unnamed
+- After a minute with no new evidence, a commander still on Now is shown grey with "last heard … ago". They leave Now after the usual three minutes. A new sighting puts them back
+- Typing a name, or accepting a spelling change, starts that same timer. It no longer leaves the row on Now with no clock
+
 ## 1.1.7
 - Scanning or talking to someone who was already announced as an unnamed contact does not beep a second time. A name that does not fit those unnamed contacts still beeps. A guessed name is not saved while more than one unnamed contact is here
 

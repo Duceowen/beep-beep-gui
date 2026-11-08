@@ -341,8 +341,13 @@ class SeenCommandersGUI:
         
     def display_last_seen(self, cmdr_id, info: dict) -> str:
         """Show Now for commanders in your instance, otherwise the last encounter time."""
-        if history_inst.is_shown_present(cmdr_id):
-            return "Now"
+        label = None
+        try:
+            label = history_inst.now_label(cmdr_id)
+        except Exception:
+            label = "Now" if history_inst.is_shown_present(cmdr_id) else None
+        if label:
+            return label
         return self.format_last_seen(info.get("last_seen"))
 
     def format_last_seen(self, ts_iso: str) -> str:
@@ -1667,9 +1672,12 @@ class SeenCommandersGUI:
             add_alias(history_inst.seen_data[cmdr_id], history_inst.seen_data[cmdr_id].get("name"), new_name)
             history_inst.seen_data[cmdr_id]["name"] = new_name
             history_inst.seen_data[cmdr_id]["sound"] = new_sound
-            
+            history_inst.note_manual_name(cmdr_id)
+
             self.tree.set(row_id, "name", new_name)
             self.tree.set(row_id, "sound", new_sound.capitalize())
+            self.tree.set(row_id, "last_seen", self.display_last_seen(cmdr_id, history_inst.seen_data[cmdr_id]))
+            self._set_quiet_tag(row_id, history_inst.now_display_state(cmdr_id) == "quiet")
         
             history_inst.save_seen_commanders()
         
@@ -1726,6 +1734,7 @@ class SeenCommandersGUI:
     
             self.tree = ttk.Treeview(parent, columns=SEEN_COLUMNS, show="", style="Beep.Treeview")
             self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
+            self._configure_quiet_tag()
 
             self.header_frame = tk.Frame(parent, height=row_height + 6)
             self.header_frame.grid(row=0, column=0, columnspan=3, sticky="ew")
@@ -1966,6 +1975,7 @@ class SeenCommandersGUI:
         if getattr(self, "tree", None) and self.tree.winfo_exists():
             try:
                 self.tree.configure(style="Beep.Treeview")
+                self._configure_quiet_tag()
             except Exception:
                 pass
         self.apply_edmc_theme(parent)
@@ -2636,6 +2646,75 @@ class SeenCommandersGUI:
             self._cell_snapshot = snapshot
         snapshot[cmdr_id] = tuple(values)
 
+    def _configure_quiet_tag(self):
+        """Grey a quiet Now row. One tag, so it follows the tree on either theme."""
+        tree = getattr(self, "tree", None)
+        if tree is None:
+            return
+        try:
+            tree.tag_configure("quiet", foreground="#8d8d8d")
+        except Exception:
+            pass
+
+    def _set_quiet_tag(self, item_id, quiet: bool) -> None:
+        tree = getattr(self, "tree", None)
+        if tree is None or not item_id:
+            return
+        try:
+            current = tree.item(item_id, "tags")
+        except Exception:
+            return
+        if isinstance(current, str):
+            current = tuple(part for part in current.split() if part)
+        else:
+            current = tuple(current or ())
+        if quiet:
+            wanted = current if "quiet" in current else current + ("quiet",)
+        else:
+            wanted = tuple(tag for tag in current if tag != "quiet")
+        if wanted == current:
+            return
+        try:
+            tree.item(item_id, tags=wanted)
+        except Exception:
+            pass
+
+    def _shown_name(self, cmdr_id, info) -> str:
+        try:
+            provisional = history_inst.session_name(cmdr_id)
+        except Exception:
+            provisional = None
+        if provisional:
+            return provisional
+        return self._row_text(info, "name", "unknown")
+
+    def _refresh_now_rows(self):
+        """Keep Now labels and the quiet grey current between full list passes."""
+        if not self._tree_alive():
+            return
+        try:
+            here = history_inst.instance_ids()
+        except Exception:
+            return
+        for cmdr_id in here:
+            item_id = self.tree_items.get(str(cmdr_id))
+            if not item_id:
+                continue
+            info = history_inst.seen_data.get(str(cmdr_id))
+            if not isinstance(info, dict):
+                info = {}
+            try:
+                label = self.display_last_seen(str(cmdr_id), info)
+                name = self._shown_name(str(cmdr_id), info)
+                quiet = history_inst.now_display_state(str(cmdr_id)) == "quiet"
+                if self.tree.set(item_id, "last_seen") != label:
+                    self.tree.set(item_id, "last_seen", label)
+                if self.tree.set(item_id, "name") != name:
+                    self.tree.set(item_id, "name", name)
+                self._set_quiet_tag(item_id, quiet)
+            except Exception:
+                continue
+
     def refresh_gui(self):
         if not self.tree or not self.tree.winfo_exists():
             return
@@ -2698,6 +2777,7 @@ class SeenCommandersGUI:
             # appear right away. The full pass over every row stays on the slow timer.
             present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_shown_present(cid))
             now = time.monotonic()
+            self._refresh_now_rows()
             if present != getattr(self, "_sorted_present", None) or now - getattr(self, "_last_full_refresh", 0.0) >= self.refresh_interval / 1000:
                 self._last_full_refresh = now
                 self.refresh_gui()

@@ -175,6 +175,99 @@ class UnresolvedScanDedup(unittest.TestCase):
         self.assertEqual(extra, [["MigA"]])
 
 
+class NowEvidenceAndQuiet(unittest.TestCase):
+    """Scans and chat keep a matched unnamed contact on Now. Quiet is display-only."""
+
+    def test_droomzz_scan_and_local_chat_refresh_his_now_row(self):
+        h = fresh_history()
+        h.recorder.enabled_override = True
+        add_row(h, "8330095", "unknown")
+        location.system, location.state = "Sorbago", 0
+        feed(h, ["8330095"], datetime.datetime(2026, 11, 8, 7, 22, 45))
+        self.assertTrue(h.is_shown_present("8330095"))
+        h._visit["8330095"] = time.monotonic() - 170
+        h._expire_quiet_presence()
+        self.assertEqual(h.now_display_state("8330095"), "quiet")
+        self.assertTrue(h.is_shown_present("8330095"))
+        self.assertTrue(h.now_label("8330095").startswith("last heard "))
+        for stage in (1, 2, 3):
+            self.assertEqual(_target(h, "DROOMZZ", stage), [])
+        play(
+            h, "ReceiveText", Channel="local", From="DROOMZZ", Message="still here",
+            timestamp="2026-11-08T07:25:13Z",
+        )
+        self.assertEqual(h.now_display_state("8330095"), "now")
+        self.assertEqual(h.now_label("8330095"), "Now")
+        self.assertEqual(h.session_name("8330095"), "DROOMZZ")
+        self.assertEqual(h.seen_data["8330095"]["name"], "unknown")
+        self.assertLess(time.monotonic() - h._visit["8330095"], 5)
+        h.recorder.close()
+        folder = h.recorder.directory()
+        name = __import__("os").listdir(folder)[0]
+        with open(__import__("os").path.join(folder, name), encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn('"kind":"quiet"', text)
+        self.assertIn('"kind":"unquiet"', text)
+
+    def test_quiet_label_then_recovery_and_the_three_minute_fade(self):
+        h = fresh_history()
+        add_row(h, "1", "Ada")
+        location.system, location.state = "Sol", 0
+        location.add_instance("1", state=0, system="Sol")
+        location.instance["1"]["here"] = True
+        location.instance["1"]["shown_now"] = True
+        h._visit["1"] = time.monotonic() - 30
+        self.assertEqual(h.now_display_state("1"), "now")
+        h._visit["1"] = time.monotonic() - 75
+        h._expire_quiet_presence()
+        self.assertEqual(h.now_display_state("1"), "quiet")
+        self.assertEqual(h.now_label("1"), "last heard 1m ago")
+        self.assertTrue(h.is_shown_present("1"))
+        self.assertTrue(present("1"))
+        h._touch("1")
+        self.assertEqual(h.now_display_state("1"), "now")
+        self.assertFalse(location.instance["1"].get("quiet_display"))
+        h._visit["1"] = time.monotonic() - 181
+        h._expire_quiet_presence()
+        self.assertFalse(h.is_shown_present("1"))
+        self.assertFalse(location.instance["1"].get("shown_now"))
+        self.assertTrue(present("1"))
+
+    def test_manual_name_starts_the_now_clock_and_does_not_refresh_it(self):
+        """Double-click Save and Update spelling both call note_manual_name.
+
+        A missing visit time used to count as Now forever.
+        """
+        h = fresh_history()
+        add_row(h, "42", "unknown")
+        location.system, location.state = "Sol", 0
+        location.add_instance("42", state=0, system="Sol")
+        location.instance["42"]["here"] = True
+        location.instance["42"]["shown_now"] = True
+        h._visit["42"] = None
+        before = set(h.seen_data["42"])
+        self.assertFalse(h.is_shown_present("42"))
+        h.note_manual_name("42")
+        self.assertTrue(h.is_shown_present("42"))
+        self.assertEqual(h.now_display_state("42"), "now")
+        self.assertEqual(set(h.seen_data["42"]), before)
+        h._visit["42"] = time.monotonic() - 90
+        h.note_manual_name("42")
+        self.assertGreaterEqual(time.monotonic() - h._visit["42"], 80)
+        self.assertEqual(h.now_display_state("42"), "quiet")
+        h.seen_data["42"]["name"] = "Droomzz"
+        h.apply_spelling_updates([("42", "Droomzz", "Dr0omzz")])
+        self.assertEqual(h.seen_data["42"]["name"], "Dr0omzz")
+        self.assertGreaterEqual(time.monotonic() - h._visit["42"], 80)
+        play(
+            h, "ShipTargeted", TargetLocked=True, ScanStage=1, Ship="federation_corvette",
+            PilotName="$cmdr_decorate:#name=Dr0omzz;",
+            PilotName_Localised="CMDR Dr0omzz",
+        )
+        self.assertEqual(h.now_display_state("42"), "now")
+        self.assertLess(time.monotonic() - h._visit["42"], 5)
+
+
 class SessionMarks(unittest.TestCase):
     """The 13 marks from the 7 Nov 2026 recording, replayed as the events that mattered."""
 
