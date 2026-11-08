@@ -603,6 +603,8 @@ class QuietTimeoutReturn(unittest.TestCase):
     def test_refresh_after_quiet_timeout_does_not_beep(self):
         self.h._expire_quiet_presence()
         self.assertTrue(present("801"))
+        # Past the 3-minute Now fade, still inside the 10-minute visit gap.
+        self.h._visit["801"] = time.monotonic() - 200
         feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 10, 23))
         self.assertEqual(self.h.sent, [])
         self.assertTrue(present("801"))

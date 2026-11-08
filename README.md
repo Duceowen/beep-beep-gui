@@ -32,17 +32,21 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.11
+- A commander who has been quiet for 10 minutes beeps once when their history row updates, or when you scan them, hear local chat, or interdict them, even if you never left the instance. A refresh within that 10 minutes stays silent
+- The Now label reads "Last Seen" instead of "last heard"
+
 ## 1.1.10
 - Arriving in a system by hyperspace announces the commanders staged during the jump as soon as the jump completes. A scan, local chat line, or interdiction still beeps immediately if the jump has not finished. A jump cannot stay staged for more than a few seconds
 - Dropping into a station is a separate instance. New contacts there are announced on that drop. Someone already announced in supercruise is not announced again by the station's history list
-- "Last heard" still shows on Now after a quiet minute. The row keeps its normal color
+- "Last Seen" still shows on Now after a quiet minute. The row keeps its normal color
 
 ## 1.1.9
 - Clicking a row in Seen Commanders no longer leaves the bright selection bar on that row. The bar clears after a few seconds with no further click. It stays while the name editor is open, and while Shift or Control is held
 
 ## 1.1.8
 - A scan, local chat line, or interdiction refreshes that commander's Now timer, including a name matched to an unnamed contact for this session. The Now row shows that journal name. It is not saved while the contact is still unnamed
-- After a minute with no new evidence, a commander still on Now is shown grey with "last heard … ago". They leave Now after the usual three minutes. A new sighting puts them back
+- After a minute with no new evidence, a commander still on Now is shown grey with "Last Seen … ago". They leave Now after the usual three minutes. A new sighting puts them back
 - Typing a name, or accepting a spelling change, starts that same timer. It no longer leaves the row on Now with no clock
 
 ## 1.1.7

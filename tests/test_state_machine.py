@@ -9,6 +9,7 @@ import time
 import unittest
 
 from test_scenarios import add_row, feed, fresh_history, load_mod, location, present
+from commander_history import VISIT_REARM_SECONDS
 from instance_machine import (
     HISTORY_POLL_SECONDS,
     INTERDICTION_SUBMIT_COOLDOWN,
@@ -189,7 +190,7 @@ class NowEvidenceAndQuiet(unittest.TestCase):
         h._expire_quiet_presence()
         self.assertEqual(h.now_display_state("8330095"), "quiet")
         self.assertTrue(h.is_shown_present("8330095"))
-        self.assertTrue(h.now_label("8330095").startswith("last heard "))
+        self.assertTrue(h.now_label("8330095").startswith("Last Seen "))
         for stage in (1, 2, 3):
             self.assertEqual(_target(h, "DROOMZZ", stage), [])
         play(
@@ -221,7 +222,7 @@ class NowEvidenceAndQuiet(unittest.TestCase):
         h._visit["1"] = time.monotonic() - 75
         h._expire_quiet_presence()
         self.assertEqual(h.now_display_state("1"), "quiet")
-        self.assertEqual(h.now_label("1"), "last heard 1m ago")
+        self.assertEqual(h.now_label("1"), "Last Seen 1m ago")
         self.assertTrue(h.is_shown_present("1"))
         self.assertTrue(present("1"))
         h._touch("1")
@@ -357,6 +358,77 @@ class HyperspaceArrival(unittest.TestCase):
         play(h, "FSDJump", StarSystem="Sorbago", timestamp="2026-11-08T08:45:00Z")
         self.assertEqual(h.sent, [])
         self.assertFalse(h.machine.jump_open)
+
+
+class SameInstanceReturn(unittest.TestCase):
+    """A long silence in one instance can beep again. A short refresh cannot."""
+
+    def _arrive(self, cid, name, when):
+        h = fresh_history()
+        add_row(h, cid, name)
+        location.system, location.state = "Sorbago", 0
+        play(h, "SupercruiseExit", StarSystem="Sorbago", Body="Hencke Orbital",
+             BodyType="Station", timestamp="2026-11-08T09:26:57Z")
+        h.sent.clear()
+        feed(h, [cid], when)
+        self.assertEqual(h.sent, [[cid]])
+        return h
+
+    def _age(self, h, cid, seconds):
+        h._visit[cid] = time.monotonic() - seconds
+
+    def test_chachamaru_shuttle_returns_beep_twice(self):
+        """2:07:49 after 15 min, then ~2:34 after 21 min. Same id, same station."""
+        h = self._arrive("8268520", "chachamaru10212", datetime.datetime(2026, 11, 8, 9, 48, 11))
+        before = set(h.seen_data["8268520"])
+        # Three-minute Now fade must not itself re-arm a beep.
+        self._age(h, "8268520", 180)
+        feed(h, ["8268520"], datetime.datetime(2026, 11, 8, 9, 52, 34))
+        self.assertEqual(h.sent, [["8268520"]])
+        # 15 min 15 s since the previous row.
+        self._age(h, "8268520", 15 * 60 + 15)
+        feed(h, ["8268520"], datetime.datetime(2026, 11, 8, 10, 7, 49))
+        self.assertEqual(h.sent, [["8268520"], ["8268520"]])
+        self._age(h, "8268520", 40)
+        feed(h, ["8268520"], datetime.datetime(2026, 11, 8, 10, 8, 30))
+        self.assertEqual(len(h.sent), 2)
+        # 20 min 39 s until the next shuttle return.
+        self._age(h, "8268520", 20 * 60 + 39)
+        feed(h, ["8268520"], datetime.datetime(2026, 11, 8, 10, 33, 53))
+        self.assertEqual(h.sent, [["8268520"], ["8268520"], ["8268520"]])
+        self.assertEqual(h.seen_data["8268520"]["name"], "chachamaru10212")
+        self.assertEqual(set(h.seen_data["8268520"]), before)
+
+    def test_n0m_relog_return_beeps_once_then_the_scan_does_not(self):
+        """2:35:12 history return after 38 min, then a scan two minutes later."""
+        h = self._arrive("1129026", "N0m", datetime.datetime(2026, 11, 8, 9, 54, 53))
+        self._age(h, "1129026", 45)
+        feed(h, ["1129026"], datetime.datetime(2026, 11, 8, 9, 56, 38))
+        self.assertEqual(h.sent, [["1129026"]])
+        self._age(h, "1129026", 38 * 60 + 34)
+        feed(h, ["1129026"], datetime.datetime(2026, 11, 8, 10, 35, 12))
+        self.assertEqual(h.sent, [["1129026"], ["1129026"]])
+        for stage in (1, 2, 3):
+            self.assertEqual(_target(h, "n0m", stage, ship="viper"), [])
+        self.assertEqual(h.sent, [["1129026"], ["1129026"]])
+        self.assertEqual(h.seen_data["1129026"]["name"], "N0m")
+
+    def test_scan_after_the_rearm_gap_beeps_once(self):
+        h = self._arrive("1129026", "N0m", datetime.datetime(2026, 11, 8, 9, 54, 53))
+        self._age(h, "1129026", VISIT_REARM_SECONDS + 5)
+        first = _target(h, "n0m", 1, ship="viper")
+        self.assertEqual(first, [["1129026"]])
+        self.assertEqual(_target(h, "n0m", 2, ship="viper"), [])
+        self.assertEqual(_target(h, "n0m", 3, ship="viper"), [])
+
+    def test_ordinary_gaps_do_not_rebeep(self):
+        h = self._arrive("8268520", "chachamaru10212", datetime.datetime(2026, 11, 8, 9, 48, 11))
+        stamp = datetime.datetime(2026, 11, 8, 9, 49, 0)
+        for gap in (20, 45, 60):
+            self._age(h, "8268520", gap)
+            stamp += datetime.timedelta(seconds=gap)
+            feed(h, ["8268520"], stamp)
+        self.assertEqual(h.sent, [["8268520"]])
 
 
 class SessionMarks(unittest.TestCase):

@@ -282,8 +282,16 @@ def _atomic_write_json(path: str, data) -> None:
         json.dump(data, handle, separators=(",", ":"))
     os.replace(tmp, path)
 _PRESENCE_QUIET_SECONDS = 180.0
-# Still on Now, but dimmed, once this long has passed with no new evidence.
+# Still on Now, once this long has passed with no new evidence. The row keeps its color.
 _QUIET_DISPLAY_SECONDS = 60.0
+# One more arrival beep after this much silence, even in the same instance.
+# Recorded history gaps in one instance run about 5–582 s (median near 23 s;
+# a wider count of the same sessions has median 49 s and a 90th percentile
+# near 3 min). People confirmed still here have stayed quiet for a few
+# minutes, sometimes around 7–8. The missed returns were 15, 21, and 39 min.
+# Ten minutes is past that ordinary spread and past the 3-minute Now fade,
+# and short of those returns. A longer quiet spell can beep again.
+VISIT_REARM_SECONDS = 600.0
 _LEAVE_MEMORY_SECONDS = 600.0
 _WING_JOIN_SILENCE_SECONDS = 20.0
 _INTERDICTION_WINDOW_SECONDS = 60.0
@@ -943,8 +951,9 @@ class CommanderHistoryManager:
         self._tick = 0
         self._batch_until = 0.0
         self._announced_at: dict[str, float] = {}
-        # cid -> last heard (monotonic), or None: in this visit but not heard recently.
+        # cid -> last signal (monotonic), or None: in this visit but not seen recently.
         self._visit: dict[str, float | None] = {}
+        self._rearm_pending: set[str] = set()
         self._instance_dirty = False
         self._instance_saved_at = 0.0
         self._skip_start_event = False
@@ -1072,8 +1081,9 @@ class CommanderHistoryManager:
         """Announce once per instance. A later history refresh is not another arrival.
 
         A commander marked departed (they left, or the kill window has passed and
-        they are back) can be announced again. Elapsed time alone never turns a
-        refresh into an arrival.
+        they are back) can be announced again. A short refresh is not another
+        arrival. A silence of VISIT_REARM_SECONDS clears the beep token first,
+        so the next sighting is announced once.
         """
         rec = self._gone.get(cmdr_id, {})
         left = rec.get("left_at")
@@ -1343,6 +1353,8 @@ class CommanderHistoryManager:
         if they are still in the instance.
         """
         cid = str(cmdr_id)
+        if self._visit_rearm_due(cid) and not self.machine.pending:
+            self._rearm_pending.add(cid)
         self._visit[cid] = time.monotonic()
         self._instance_dirty = True
         inst = location.instance.get(cid)
@@ -1359,6 +1371,9 @@ class CommanderHistoryManager:
             return
         for cid, info in self.seen_data.items():
             if isinstance(info, dict) and any(row_has_name(info, k) for k in keys):
+                # Leave a stale visit untouched so the beep decision can re-arm it.
+                if self._visit_rearm_due(cid):
+                    continue
                 self._touch(cid)
 
     def _expire_quiet_presence(self) -> None:
@@ -1637,6 +1652,11 @@ class CommanderHistoryManager:
                 return
             # A scan, local line, or interdiction beeps even while a jump is staged.
             cid = self.resolve_commander(name)
+            if cid and not self.machine.pending and (
+                self._visit_rearm_due(cid) or cid in self._rearm_pending
+            ):
+                self._rearm_pending.discard(cid)
+                self._rearm_visit(cid)
             if cid is None:
                 self.machine.hold_evidence(name, kind)
                 if self.machine.name_was_announced(name):
@@ -1725,9 +1745,22 @@ class CommanderHistoryManager:
             last = self._visit.get(str(cmdr_id))
             age = max(0, int(time.monotonic() - last))
             if age >= 60:
-                return "last heard %dm ago" % (age // 60)
-            return "last heard %ds ago" % age
+                return "Last Seen %dm ago" % (age // 60)
+            return "Last Seen %ds ago" % age
         return "Now"
+
+    def _visit_rearm_due(self, cmdr_id) -> bool:
+        """True when this commander's last real signal is past the visit gap."""
+        last = self._visit.get(str(cmdr_id))
+        if not isinstance(last, (int, float)):
+            return False
+        return time.monotonic() - last >= VISIT_REARM_SECONDS
+
+    def _rearm_visit(self, cmdr_id) -> None:
+        """End the current visit so the next sighting can beep once."""
+        cid = str(cmdr_id)
+        self.machine.clear_announcement(cid)
+        self._announced_at.pop(cid, None)
 
     def session_name(self, cmdr_id):
         """Journal name claimed for an unnamed contact. Not written to the seen file."""
@@ -2467,6 +2500,11 @@ class CommanderHistoryManager:
             if skip:
                 continue
 
+            # Read the gap before _touch resets it. A long quiet spell in this
+            # same instance is a new visit. A short refresh is not.
+            return_visit = (
+                not self.machine.pending and self._visit_rearm_due(cmdr_id)
+            )
             self._touch(cmdr_id)
             current_flags = set(interactions)
             previous_flags = self.last_interactions.get(cmdr_id, set())
@@ -2643,9 +2681,17 @@ class CommanderHistoryManager:
                     beep_this_commander = self._beep_decision(cmdr_id, False, "interdiction_carry")
                     if existing is not None:
                         info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
+                elif was_here and return_visit and not killed_now:
+                    # Same instance, but this commander has been silent past the
+                    # visit gap. Announce once, then short refreshes stay quiet.
+                    self._rearm_pending.discard(cmdr_id)
+                    self._rearm_visit(cmdr_id)
+                    beep_this_commander = self._should_announce(cmdr_id, time.monotonic())
+                    if existing is not None:
+                        info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                 elif was_here:
                     # The game refreshes the record of everyone still in the instance.
-                    # A refresh is not a departure: they stay here, silently, until a
+                    # A short refresh is not a departure: they stay here, silently, until a
                     # jump, supercruise leave, death/load clear, kill or escape removes them.
                     # Quiet timeout only fades Now display; it does not clear "here".
                     beep_this_commander = self._beep_decision(cmdr_id, False, "refresh")

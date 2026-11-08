@@ -142,6 +142,15 @@ class InstanceMachine:
             return False
         return cid in self.departure_ids
 
+    def clear_announcement(self, cmdr_id) -> None:
+        """Drop this visit's beep token. Does not write the seen list."""
+        cid = str(cmdr_id)
+        self.announced.discard(cid)
+        self.confirmed.discard(cid)
+        for key, ids in list(self.by_name.items()):
+            if cid in ids and len(ids) == 1:
+                self.announced_names.discard(key)
+
     def note_announced(self, cmdr_id) -> None:
         cid = str(cmdr_id)
         self.seen_ids.add(cid)
