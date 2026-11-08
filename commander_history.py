@@ -11,6 +11,12 @@ from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
 from session_recorder import SessionRecorder
+from instance_machine import (
+    HISTORY_POLL_SECONDS,
+    INTERDICTION_SUBMIT_COOLDOWN,
+    INTERDICTION_SUCCESS_COOLDOWN,
+    InstanceMachine,
+)
 
 class Location:
     def __init__(self):
@@ -875,6 +881,26 @@ def add_alias(info, old_name, new_name) -> None:
     if old_name not in aliases:
         aliases.append(old_name)
 
+def _one_edit(left: str, right: str) -> bool:
+    """True when two casefolded names differ by one insertion or one substitution."""
+    if left == right or abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    if len(left) == len(right):
+        return sum(a != b for a, b in zip(left, right)) == 1
+    skipped = 0
+    index = 0
+    for char in right:
+        if index < len(left) and left[index] == char:
+            index += 1
+        else:
+            skipped += 1
+            if skipped > 1:
+                return False
+    return index == len(left)
+
+
 def row_has_name(info, key) -> bool:
     """True if the row was ever known by this name (current name or an earlier one)."""
     if not isinstance(info, dict):
@@ -939,6 +965,8 @@ class CommanderHistoryManager:
         self._marks_lock = threading.Lock()
         # Reads plugin_dir at write time, so a test can point the folder elsewhere.
         self.recorder = SessionRecorder(lambda: self.plugin_dir)
+        self.machine = InstanceMachine()
+        self._agg_lock = threading.RLock()
 
     def set_session_start(
         self,
@@ -998,7 +1026,7 @@ class CommanderHistoryManager:
         # CommanderHistory bumps Met for recent contacts whether or not they
         # entered the new instance. A jump or a load clears the snapshot.
         # While you are still in supercruise the same list covers the re-list.
-        if cmdr_id in location.leave_snapshot:
+        if cmdr_id in location.leave_snapshot or self.machine.suppresses(cmdr_id):
             return True
         dropped_at = location.supercruise_dropped.get(cmdr_id)
         if dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS:
@@ -1026,10 +1054,6 @@ class CommanderHistoryManager:
             # The game's listing beat the SupercruiseEntry event. They are still in the instance you are leaving.
             log.info("Not announcing %s (id %s): listed as you entered supercruise", self._name_for(cmdr_id), cmdr_id)
             return self._beep_decision(cmdr_id, False, "sc_entry_list")
-        if self._is_interdicted_drop_in(cmdr_id):
-            # The target you just interdicted drops back into normal space with you. Not an arrival.
-            log.info("Not announcing %s (id %s): interdicted within the window", self._name_for(cmdr_id), cmdr_id)
-            return self._beep_decision(cmdr_id, False, "interdiction")
         return self._should_announce(cmdr_id, time.monotonic())
 
     def _is_interdicted_drop_in(self, cmdr_id: str) -> bool:
@@ -1043,28 +1067,31 @@ class CommanderHistoryManager:
         info = self.seen_data.get(str(cmdr_id))
         return isinstance(info, dict) and row_has_name(info, name_key(target))
     def _should_announce(self, cmdr_id: str, now: float) -> bool:
-        """Announce an arrival unless they were announced recently and have not left since.
+        """Announce once per instance. A later history refresh is not another arrival.
 
-        Beep rules ignore Now/quiet-display state. Only a real leave (left_at), departed
-        from kill/escape/detected leave, or the re-announce window gates beeps.
+        A commander marked departed (they left, or the kill window has passed and
+        they are back) can be announced again. Elapsed time alone never turns a
+        refresh into an arrival.
         """
         rec = self._gone.get(cmdr_id, {})
         left = rec.get("left_at")
-        if left is not None and now - left < _REANNOUNCE_SECONDS:
-            # Left by interdiction, high wake or similar and back within the window.
-            # A return this soon is a stale re-add, not a new arrival.
+        if left is not None and now - left < _REANNOUNCE_SECONDS and not rec.get("departed"):
             log.info("Not announcing %s (id %s): left %.0f s ago, inside the re-add window", self._name_for(cmdr_id), cmdr_id, now - left)
             return self._beep_decision(cmdr_id, False, "reannounce_window")
-        last = self._announced_at.get(cmdr_id)
-        if last is None or rec.get("departed") or now - last >= _REANNOUNCE_SECONDS:
+        if str(cmdr_id) in self.machine.announced and not rec.get("departed"):
+            return self._beep_decision(cmdr_id, False, "refresh")
+        if rec.get("departed"):
             self._announced_at[cmdr_id] = now
-            if cmdr_id in self._gone:
-                self._gone[cmdr_id]["departed"] = False
-                self._gone[cmdr_id].pop("removed_at", None)
-            reason = "new_arrival" if last is None else ("return_after_leave" if rec.get("departed") else "reannounce_ok")
-            return self._beep_decision(cmdr_id, True, reason)
-        log.info("Not announcing %s (id %s): announced %.0f s ago and not departed", self._name_for(cmdr_id), cmdr_id, now - last)
-        return self._beep_decision(cmdr_id, False, "recent_announce")
+            self.machine.killed.discard(str(cmdr_id))
+            self.machine.note_announced(cmdr_id)
+            rec["departed"] = False
+            rec.pop("removed_at", None)
+            return self._beep_decision(cmdr_id, True, "return_after_leave")
+        if self._announced_at.get(cmdr_id) is not None:
+            return self._beep_decision(cmdr_id, False, "refresh")
+        self._announced_at[cmdr_id] = now
+        self.machine.note_announced(cmdr_id)
+        return self._beep_decision(cmdr_id, True, "new_arrival")
 
     def _name_for(self, cmdr_id) -> str:
         info = self.seen_data.get(str(cmdr_id))
@@ -1373,13 +1400,11 @@ class CommanderHistoryManager:
             # already here, so stay quiet for a short window from now, not from the old journal time.
             self._batch_until = time.monotonic() + _RESTART_BATCH_SECONDS
             return
-        lag = 0.0
-        event_at = _journal_time(timestamp)
-        if event_at is not None:
-            now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-            lag = max(0.0, (now_utc - event_at).total_seconds())
-        self._batch_until = time.monotonic() + max(0.0, _LOAD_BATCH_SECONDS - lag)
-        # A load or menu return ends any supercruise drop-in, so its rewrite is not one.
+        # A real load or menu return is a new session: the next history list is
+        # everyone there, announced as they are read. A same-session EDMC restart
+        # took the quiet path above and does not reach this.
+        self._batch_until = 0.0
+        self.machine.relog()
         location.instance_reset_pending = False
         self._announced_at.clear()
         self._clear_departures()
@@ -1411,6 +1436,180 @@ class CommanderHistoryManager:
         self._announced_at.clear()
         self._clear_departures()
         self._heard_clear()
+        fresh = self.machine.commit(set(location.leave_snapshot))
+        self._emit_fresh(fresh)
+
+    def note_transition_pending(self) -> None:
+        """StartJump: hold history rows until the jump actually completes."""
+        here = [
+            cid for cid, inst in location.instance.items()
+            if isinstance(inst, dict) and inst.get("here")
+        ]
+        self.machine.note_pending(here)
+
+    def poll_history_now(self) -> None:
+        """Apply a CommanderHistory file that has already changed. No extra wait."""
+        try:
+            self.aggregated_commanders()
+        except Exception:
+            log.exception("Immediate history read failed")
+
+    def _emit_fresh(self, ids) -> None:
+        for cid in ids or []:
+            try:
+                self._emit_arrival(str(cid), "new_arrival")
+            except Exception:
+                log.exception("Failed to announce a staged arrival")
+
+    def _mark_present(self, cmdr_id) -> None:
+        cid = str(cmdr_id)
+        inst = location.instance.get(cid)
+        if not isinstance(inst, dict):
+            location.add_instance(cid, state=location.state, system=location.system)
+            inst = location.instance[cid]
+        inst["here"] = True
+        inst["shown_now"] = True
+        inst["state"] = location.state
+        inst["system"] = location.system
+        self._touch(cid)
+
+    def _emit_arrival(self, cmdr_id, reason: str) -> None:
+        """Beep now. Does not create a seen_commanders row."""
+        cid = str(cmdr_id)
+        self._announced_at[cid] = time.monotonic()
+        self.machine.note_announced(cid)
+        self._mark_present(cid)
+        if not self._beep_decision(cid, True, reason):
+            return
+        if self._wing_muted(cid):
+            self._beep_decision(cid, False, "wing_muted")
+            return
+        info = self.seen_data.get(cid)
+        if not isinstance(info, dict):
+            info = {
+                "commander_id": cid,
+                "name": self._known_name(cid) or self._name_for(cid),
+                "sound": "neutral",
+            }
+        if self._sound_listener:
+            self._sound_listener([info])
+
+    def _one_edit_match(self, name):
+        """One saved commander whose name is a single-character misspelling.
+
+        Used for journal spellings such as COILMILLOWOLF and Colmillowolf.
+        Short names are left alone, and two equally close commanders are not merged.
+        """
+        target = name_key(name)
+        if len(target) < 8:
+            return None
+        found = []
+        for cid, info in self.seen_data.items():
+            if not isinstance(info, dict):
+                continue
+            names = [info.get("name")]
+            aliases = info.get("aliases")
+            if isinstance(aliases, list):
+                names.extend(aliases)
+            for candidate in names:
+                if not isinstance(candidate, str) or is_unknown_name(candidate):
+                    continue
+                if _one_edit(target, name_key(candidate)):
+                    found.append(str(cid))
+                    break
+        unique = set(found)
+        if len(unique) == 1:
+            return found[0]
+        return None
+
+    def resolve_commander(self, name):
+        """Map a journal name onto one saved id. Read-only aside from the name index."""
+        if not isinstance(name, str) or is_unknown_name(name):
+            return None
+        found = self.machine.resolve(name)
+        if found is not None:
+            return found
+        key = name_key(name)
+        conf = confusable_key(name)
+        exact = []
+        like = []
+        for cid, info in self.seen_data.items():
+            if not isinstance(info, dict):
+                continue
+            names = [info.get("name")]
+            aliases = info.get("aliases")
+            if isinstance(aliases, list):
+                names.extend(aliases)
+            for candidate in names:
+                if not isinstance(candidate, str) or is_unknown_name(candidate):
+                    continue
+                if name_key(candidate) == key:
+                    exact.append(str(cid))
+                elif confusable_key(candidate) == conf:
+                    like.append(str(cid))
+        chosen = None
+        if len(set(exact)) == 1:
+            chosen = exact[0]
+        elif not exact and len(set(like)) == 1:
+            chosen = like[0]
+        if chosen is None:
+            chosen = self._one_edit_match(name)
+        if chosen is not None:
+            self.machine.index_name(chosen, name)
+        return chosen
+
+    def announce_evidence(self, kind: str, name, cooldown: float | None = None) -> None:
+        """Announce from a journal line. Does not wait for CommanderHistory."""
+        try:
+            if not isinstance(name, str) or is_unknown_name(name):
+                return
+            if self.machine.pending and kind != "interdiction":
+                self.machine.hold_evidence(name, kind)
+                cid = self.resolve_commander(name)
+                if cid:
+                    self.machine.index_name(cid, name)
+                return
+            cid = self.resolve_commander(name)
+            if cid is None:
+                self.machine.hold_evidence(name, kind)
+                if self.machine.name_was_announced(name):
+                    return
+                self.machine.mark_name_announced(name)
+                self._emit_named(name, kind)
+                return
+            if cooldown:
+                self.machine.note_cooldown(cid, cooldown)
+            beep, reason = self.machine.confirm(cid, kind)
+            if beep:
+                self._emit_arrival(cid, reason)
+            else:
+                self._mark_present(cid)
+                self._beep_decision(cid, False, reason)
+        except Exception:
+            log.exception("Journal evidence could not be announced")
+
+    def _emit_named(self, name: str, reason: str) -> None:
+        """Beep for a journal name that has no history id yet. Does not write the seen list."""
+        self._beep_decision(name, True, reason)
+        info = {"commander_id": name, "name": name, "sound": "neutral"}
+        if self._sound_listener:
+            self._sound_listener([info])
+
+    def _promote_known_name(self, cmdr_id, name) -> bool:
+        """If journal evidence was waiting on this name, announce that id now."""
+        try:
+            result = self.machine.bind_name(cmdr_id, name)
+        except Exception:
+            return False
+        if not result:
+            return False
+        beep, reason = result
+        if beep:
+            self._emit_arrival(str(cmdr_id), reason)
+        else:
+            self._mark_present(cmdr_id)
+            self._beep_decision(cmdr_id, False, reason)
+        return True
 
     def is_shown_present(self, cmdr_id) -> bool:
         """Now-group / overlay display only — independent of beep announce decisions.
@@ -2050,6 +2249,10 @@ class CommanderHistoryManager:
     
     
     def aggregated_commanders(self):
+        with self._agg_lock:
+            self._aggregated_commanders()
+
+    def _aggregated_commanders(self):
         if location.system is None:
             # Wait for the game's StartUp. Arrivals read before it are wiped by the reset.
             return
@@ -2109,6 +2312,26 @@ class CommanderHistoryManager:
             is_wing = "WingMember" in interactions
     
             info: CommanderEntry = self._sighting_info(cmdr_id, existing, ts)
+            self.machine.index_name(cmdr_id, info.get("name") if isinstance(info.get("name"), str) else "")
+            if isinstance(existing, dict):
+                self.machine.index_name(cmdr_id, existing.get("name") if isinstance(existing.get("name"), str) else "")
+
+            if self.machine.pending and not killed_now:
+                self.machine.stage(cmdr_id)
+                self.machine.index_name(cmdr_id, info.get("name") if isinstance(info.get("name"), str) else "")
+                self._beep_decision(cmdr_id, False, "transition_staged")
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                self.last_interactions[cmdr_id] = current_flags
+                changed_entries.append(info)
+                continue
+
+            if self._promote_known_name(cmdr_id, info.get("name")):
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                self.last_interactions[cmdr_id] = current_flags
+                changed_entries.append(info)
+                continue
 
             if killed_now and is_unknown_name(info.get("name")):
                 killed_unknown_ids.append(cmdr_id)
@@ -2117,6 +2340,8 @@ class CommanderHistoryManager:
  
             if self._is_relist_silenced(cmdr_id, now_ts):
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
+                if self.machine.suppresses(cmdr_id):
+                    location.forget(cmdr_id)
                 self._beep_decision(cmdr_id, False, "relist_silence")
                 self._remember_sighting(info, existing)
                 self.seen_data[cmdr_id] = info
@@ -2172,6 +2397,20 @@ class CommanderHistoryManager:
                     "Kill reset for %s; next sighting will be announced",
                     info.get("name") or cmdr_id,
                 )
+                continue
+
+            if killed_now:
+                # A kill row is not an arrival, even when they were already off the list.
+                self.machine.note_killed(cmdr_id)
+                self._beep_decision(cmdr_id, False, "kill")
+                location.forget(cmdr_id)
+                rec = self._gone.setdefault(cmdr_id, {})
+                rec["departed"] = True
+                rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
+                self.last_interactions[cmdr_id] = current_flags
+                self._remember_sighting(info, existing)
+                self.seen_data[cmdr_id] = info
+                changed_entries.append(info)
                 continue
 
             if jump_recent and cmdr_id in location.jump_backup:
@@ -2584,6 +2823,16 @@ class CommanderHistoryManager:
                 ", ".join(info.get("name", "unknown") for info in infos),
             )
 
+    def note_player_targets(self, entry) -> None:
+        """Announce each targeted player commander on this journal line."""
+        try:
+            from commander_names import journal_player_names
+            names = [name for kind, name in journal_player_names(entry) if kind == "scan" and name]
+        except Exception:
+            return
+        for name in names:
+            self.announce_evidence("target", name)
+
     def note_kill(self, victim) -> None:
         """A PvP kill by you removes the victim from the list at once.
 
@@ -2593,11 +2842,12 @@ class CommanderHistoryManager:
         if not isinstance(victim, str) or not victim.strip():
             return
         key = name_key(victim)
+        resolved = self.resolve_commander(victim)
         now_ts = time.time()
         for cid, info in list(self.seen_data.items()):
             if not isinstance(info, dict) or not isinstance(info.get("name"), str):
                 continue
-            if not row_has_name(info, key):
+            if not row_has_name(info, key) and str(cid) != resolved:
                 continue
             rec = self._gone.setdefault(cid, {})
             rec["departed"] = True
@@ -2608,6 +2858,9 @@ class CommanderHistoryManager:
                 location.kill_departed.add(cid)
                 location.forget(cid)
                 rec["kill_removed"] = True
+        if resolved:
+            self.machine.index_name(resolved, victim)
+            self.machine.note_killed(resolved)
         log.info("Kill recorded for %s", victim)
 
     def note_escape(self, name) -> None:
@@ -2780,6 +3033,11 @@ class CommanderHistoryManager:
         # instance. Record them now so a later Met epoch is not a new arrival.
         if target and location.state != 1:
             self._establish_presence_by_name(target)
+        sc_ids = set(self.machine.announced) | set(dropped) | set(location.leave_snapshot)
+        self._emit_fresh(self.machine.commit(sc_ids))
+        if target and location.state != 1:
+            seconds = getattr(location, "interdiction_cooldown", None) or INTERDICTION_SUCCESS_COOLDOWN
+            self.announce_evidence("interdiction", target, cooldown=seconds)
         # The drop-out has been handled. The leave snapshot still silences
         # people you left behind; everyone else is an ordinary update.
         location.instance_reset_pending = False
@@ -2943,7 +3201,7 @@ class CommanderHistoryManager:
     def worker_loop(self):
         while not self.worker_stop_event.is_set():
             try:
-                if self.worker_stop_event.wait(0.15):
+                if self.worker_stop_event.wait(HISTORY_POLL_SECONDS):
                     break
                 self._process_departures()
                 self.aggregated_commanders()

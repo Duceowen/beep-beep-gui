@@ -942,24 +942,27 @@ class WingJoinSilence(unittest.TestCase):
 
 
 class OperationsLobbyReturn(unittest.TestCase):
-    """Operations lobby looks like ShutDown; return re-lists must stay quiet via load_batch."""
+    """A menu, shutdown, or system change starts a new instance.
 
-    def test_shutdown_opens_load_batch_like_menu(self):
+    1.1.5 kept the next history list quiet. 1.1.6 announces that list: a relog
+    is everyone new. A same-session EDMC restart still uses the quiet window.
+    """
+
+    def test_shutdown_announces_the_return_list(self):
         h = fresh_history()
         add_row(h, "1", "EddiesMinion")
         location.system, location.state = "Col 285 Sector YU-F c11-1", 0
         location.add_instance("1", state=0, system=location.system)
         location.instance["1"]["here"] = True
-        # None timestamp: full load_batch window (journal lag would eat a stale ts).
         h.clear_presence(None)
         self.assertFalse(present("1"))
-        self.assertGreater(h._batch_until, time.monotonic())
+        self.assertEqual(h._batch_until, 0.0)
         feed(h, ["1"], datetime.datetime(2026, 11, 6, 21, 22, 40))
-        self.assertEqual(h.sent, [])
+        self.assertEqual(h.sent, [["1"]])
         self.assertTrue(present("1"))
 
-    def test_location_system_change_after_death_clears_stale_and_batches(self):
-        """Died -> MainMenu re-lists old system -> Location to detention must not keep them here with beeps."""
+    def test_location_system_change_announces_the_new_instance(self):
+        """A Location into another system is a new instance, so the next list beeps."""
         h = fresh_history()
         load_mod.history_inst = h
         add_row(h, "244965", "Sajtkremporkolt")
@@ -967,7 +970,6 @@ class OperationsLobbyReturn(unittest.TestCase):
         location.add_instance("244965", state=0, system="Sorbago")
         location.instance["244965"]["here"] = True
         h._batch_until = 0
-        # Location teleport to detention (fresh ts so load_batch is not eaten by lag).
         now_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         entry = {
             "timestamp": now_ts,
@@ -979,9 +981,9 @@ class OperationsLobbyReturn(unittest.TestCase):
         )
         self.assertEqual(location.system, "Col 285 Sector YU-F c11-1")
         self.assertFalse(present("244965"))
-        self.assertGreater(h._batch_until, time.monotonic())
+        self.assertEqual(h._batch_until, 0.0)
         feed(h, ["244965"], datetime.datetime(2026, 11, 6, 21, 22, 5))
-        self.assertEqual(h.sent, [])
+        self.assertEqual(h.sent, [["244965"]])
 
 
 class ResurrectEventName(unittest.TestCase):

@@ -33,6 +33,7 @@ _JOURNAL_STRINGS = {
     "LoadGame": ("Commander", "StarSystem"),
     "StartUp": ("StarSystem",),
     "Died": ("KillerName",),
+    "PVPKill": ("Victim", "Victim_Localised"),
     "Resurrect": ("Option",),
     "Resurrected": ("Option",),
     "Shutdown": (),

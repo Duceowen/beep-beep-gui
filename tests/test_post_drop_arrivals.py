@@ -1,9 +1,9 @@
 """False new-arrival beeps from 7 Nov 2026 (times in the journals are UTC).
 
-Samar!tan pulled the commander out of supercruise and was already targeted.
-Sabbath91 was targeted in supercruise, then listed again with wingmates after
-each drop, and was not in the new instance. SIXART. was targeted in the
-instance right after a short supercruise hop, then beeped when history caught up.
+Samar!tan pulled the commander out of supercruise. The drop announces him once.
+Sabbath91 was targeted in supercruise, so that lock is the beep; the history
+list after the drop is the station he left. SIXART. is announced on the lock
+in the new instance, not when history catches up later.
 
 A commander who was not already with you must still beep after the drop.
 """
@@ -66,7 +66,10 @@ class FalseNewArrivals(unittest.TestCase):
 
         play(h, "Interdicted", Submitted=False, IsPlayer=True, Interdictor="Samar!tan",
              CombatRank=8, timestamp="2026-11-07T07:57:04Z")
+        h.sent.clear()
         play(h, "SupercruiseExit", StarSystem="Sorbago", timestamp="2026-11-07T07:57:05Z")
+        # The drop is the announcement. Later locks and history refreshes are the same visit.
+        self.assertEqual(h.sent, [["1795908"]])
         self.assertTrue(present("1795908"))
 
         h.sent.clear()
@@ -110,7 +113,9 @@ class FalseNewArrivals(unittest.TestCase):
              PilotName="$cmdr_decorate:#name=Sabbath91;",
              PilotName_Localised="CMDR Sabbath91",
              timestamp="2026-11-07T22:30:54Z")
-        self.assertFalse(present("1186115"))
+        # A lock in this supercruise instance is the beep. The drop is a new instance.
+        self.assertEqual(beeped(h), ["1186115"])
+        self.assertTrue(present("1186115"))
 
         play(h, "SupercruiseExit", StarSystem=system, timestamp="2026-11-07T22:31:52Z")
         h.sent.clear()
@@ -144,6 +149,8 @@ class FalseNewArrivals(unittest.TestCase):
              PilotName="$cmdr_decorate:#name=Sabbath91;",
              PilotName_Localised="CMDR Sabbath91",
              timestamp="2026-11-07T22:30:54Z")
+        self.assertEqual(beeped(h), ["1186115"])
+        h.sent.clear()
         play(h, "SupercruiseExit", StarSystem=system, timestamp="2026-11-07T22:31:52Z")
         feed(h, ["1186115"], datetime.datetime(2026, 11, 7, 22, 31, 59))
         self.assertEqual(h.sent, [])
@@ -177,14 +184,20 @@ class FalseNewArrivals(unittest.TestCase):
         play(h, "SupercruiseExit", StarSystem=system, timestamp="2026-11-07T22:50:32Z")
 
         h.sent.clear()
-        for stamp in ("2026-11-07T22:50:36Z", "2026-11-07T22:50:53Z", "2026-11-07T22:50:55Z"):
+        play(h, "ShipTargeted", TargetLocked=True, ScanStage=3,
+             PilotName="$cmdr_decorate:#name=SIXART.;",
+             PilotName_Localised="CMDR SIXART.",
+             timestamp="2026-11-07T22:50:36Z")
+        # The lock is the announcement. Later locks and the history row are the same visit.
+        self.assertEqual(beeped(h), ["8541963"])
+        self.assertTrue(present("8541963"))
+        for stamp in ("2026-11-07T22:50:53Z", "2026-11-07T22:50:55Z"):
             play(h, "ShipTargeted", TargetLocked=True, ScanStage=3,
                  PilotName="$cmdr_decorate:#name=SIXART.;",
                  PilotName_Localised="CMDR SIXART.",
                  timestamp=stamp)
-        self.assertTrue(present("8541963"))
         feed(h, ["8541963"], datetime.datetime(2026, 11, 7, 22, 52, 6))
-        self.assertEqual(h.sent, [])
+        self.assertEqual(beeped(h), ["8541963"])
         self.assertTrue(present("8541963"))
 
     def test_genuine_arrival_after_drop_still_beeps(self):

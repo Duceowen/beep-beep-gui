@@ -32,6 +32,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
 
+## 1.1.6
+- Each new instance (a drop, a glide, low-wake into supercruise, a jump, respawn, or a relog) starts clean. Someone is announced once in that instance. A later history refresh does not beep them again. A relog or the main menu announces the people in the new instance. Restarting EDMC in the same game session stays quiet
+- A ship you target, a local chat line, or an interdiction announces that commander on that journal line. Beep Beep does not wait for the history file, and it does not add a wait in front of a real arrival. A lock while you are in supercruise is this instance only. People left behind at a station are not announced just because leaving refreshed their rows
+- A kill does not beep the victim. A name with different capitals, o and 0, or one extra or swapped letter (COILMILLOWOLF and Colmillowolf) still matches the same commander when only one saved commander is that close
+
 ## 1.1.5
 - Options has a switch, Record session data for debugging. It is on until you turn it off. Each time EDMC starts, a new file is written in the recordings folder. Beeps play the same way as before
 - The file lists each history update the game wrote, with who was new, whose time changed, and who disappeared. It also lists your jumps, drops, targets, wing changes, and local or private chat names. The words of a chat message are not saved

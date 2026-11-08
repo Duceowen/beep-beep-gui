@@ -54,7 +54,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         event == "Music" and entry.get("MusicTrack") == "MainMenu"
     ):
         # Main menu, load, quit, or Operations lobby (EDMC often sees that as ShutDown):
-        # clear presence and open load_batch so return re-lists stay quiet.
+        # the next history list is a new instance. A same-session EDMC restart stays quiet.
         history_inst.clear_presence(entry.get("timestamp"))
     if event in ("StartJump", "CarrierJump", "Shutdown", "ShutDown"):
         # Connection announcements belong to the system you are leaving.
@@ -99,6 +99,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     elif event == "StartJump":
         location.set(1, entry.get("StarSystem", system))
         location.jump()
+        history_inst.note_transition_pending()
         
     elif event == "FSDJump":
         history_inst.trigger()
@@ -130,27 +131,42 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     
     elif event == "Interdiction":
         # Only a successful interdiction keeps its target through the drop-in.
-        location.interdiction(entry.get("Interdicted") if entry.get("Success") is not False else None)
         if entry.get("Success") is False and entry.get("IsPlayer") is True:
             history_inst.note_escape(entry.get("Interdicted"))
+        elif entry.get("IsPlayer") is True:
+            location.interdiction(entry.get("Interdicted"))
+            # Outgoing Success does not say whether they submitted.
+            location.interdiction_cooldown = 60.0
+        else:
+            location.interdiction(entry.get("Interdicted") if entry.get("Success") is not False else None)
 
     elif event == "Interdicted":
         # The other commander pulled you out of supercruise. They drop in with you.
         # Escaping is EscapeInterdiction, which does not land you in their instance.
         if entry.get("IsPlayer") is True:
             location.interdiction(entry.get("Interdictor"))
+            location.interdiction_cooldown = 10.0 if entry.get("Submitted") is True else 60.0
 
     elif event == "ShipTargeted":
-        # A locked player ship in normal space is already in this instance.
-        # A lock while you are still in supercruise is only a contact out there.
+        # A locked player ship is in this instance, in normal space or supercruise.
+        # Announce on this line. Do not wait for CommanderHistory.
         history_inst.note_ship_present(entry)
+        history_inst.note_player_targets(entry)
+
+    elif event == "ReceiveText":
+        channel = str(entry.get("Channel") or "").strip().lower()
+        if channel == "local":
+            who = entry.get("From_Localised") or entry.get("From")
+            history_inst.announce_evidence("local_chat", who)
             
     elif event == "PVPKill":
         victim = entry.get("Victim")        
         location.pvp_kill(victim)
         history_inst.record_kill(victim)
         history_inst.note_kill(victim)
-        
+
+    # A history file that changed before this line is applied now, not on the next poll.
+    history_inst.poll_history_now()
 
 def plugin_prefs(parent, cmdr, is_beta):
     frame_container = nb.Frame(parent)
