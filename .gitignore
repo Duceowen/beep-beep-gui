@@ -13,3 +13,6 @@ kills_backfilled.txt
 # Troubleshooting marks (local only)
 beep_marks.jsonl
 
+# Session recordings for debugging. Never ship these.
+recordings/
+

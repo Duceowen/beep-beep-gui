@@ -21,6 +21,7 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 - Seen Commanders window opacity, from the Options menu
 - Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
 - Configurable alert settings
+- Session recording for debugging, on until you turn it off in Options. Chat text is not saved. Beeps are unchanged
 
 ## Notes
 - Only tested with the latest version of EDMarketConnector
@@ -30,6 +31,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.5
+- Options has a switch, Record session data for debugging. It is on until you turn it off. Each time EDMC starts, a new file is written in the recordings folder. Beeps play the same way as before
+- The file lists each history update the game wrote, with who was new, whose time changed, and who disappeared. It also lists your jumps, drops, targets, wing changes, and local or private chat names. The words of a chat message are not saved
+- Each beep, each time a beep is skipped, a change in who is here, and each mark you make on a commander is written down too. Open recordings folder is next to the switch. The folder stops at about 50 MB. The oldest session files are removed first
 
 ## 1.1.4
 - A commander who was already with you is no longer beeped as a new arrival when the game refreshes their record after you drop out of supercruise. That includes someone who pulled you out of supercruise, and someone you had already targeted in the instance you dropped into

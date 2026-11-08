@@ -2791,6 +2791,22 @@ class SeenCommandersGUI:
         else:
             subprocess.Popen(["xdg-open", folder])
 
+    def open_recordings_folder(self):
+        import subprocess
+        import platform
+        try:
+            folder = os.path.join(history_inst.plugin_dir, "recordings")
+            os.makedirs(folder, exist_ok=True)
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(folder)
+            elif system == "Darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception:
+            log.exception("Could not open the recordings folder")
+
     def open_backups_folder(self):
         import subprocess
         import platform
@@ -3641,6 +3657,20 @@ class SeenCommandersGUI:
         ], gap=(0, 4))
         row = self.add_hint(frame, row, "Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral.")
         row = self.add_hint(frame, row, "Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names.")
+
+        row = self.add_section(frame, row, "Debugging")
+        row = self.add_checkbox(
+            frame, row, "Record session data for debugging",
+            tk.BooleanVar(value=bool(config.get_config("record_session", True))),
+            attr="record_session",
+        )
+        row = self.add_hint(
+            frame, row,
+            "On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved.",
+        )
+        row = self._button_row(frame, row, [
+            ("Open recordings folder", self.open_recordings_folder),
+        ])
 
         help_state = {"open": False}
         help_frame = tk.Frame(frame)

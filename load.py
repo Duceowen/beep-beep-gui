@@ -33,6 +33,10 @@ def plugin_app(parent):
 
 
 def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry: dict, state: dict) -> None:
+    try:
+        history_inst.recorder.record_journal(entry)
+    except Exception:
+        pass
     event = entry.get("event")
     if isinstance(event, str) and event:
         history_inst.note_last_journal(event, entry.get("timestamp"))

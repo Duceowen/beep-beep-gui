@@ -10,6 +10,7 @@ import unicodedata
 from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
+from session_recorder import SessionRecorder
 
 class Location:
     def __init__(self):
@@ -936,6 +937,8 @@ class CommanderHistoryManager:
         self._last_journal_ts: str | None = None
         self._marks_path = os.path.join(self.plugin_dir, _BEEP_MARKS_NAME)
         self._marks_lock = threading.Lock()
+        # Reads plugin_dir at write time, so a test can point the folder elsewhere.
+        self.recorder = SessionRecorder(lambda: self.plugin_dir)
 
     def set_session_start(
         self,
@@ -975,6 +978,13 @@ class CommanderHistoryManager:
             log.info("Presence %s: %s (id %s)", "added" if cid in present else "removed", name, cid)
         self._presence_saved = present
         self._instance_dirty = True
+        try:
+            self.recorder.record("presence", {
+                "added": [self._named_id(cid) for cid in sorted(present - previous)],
+                "removed": [self._named_id(cid) for cid in sorted(previous - present)],
+            })
+        except Exception:
+            pass
 
     def _is_relist_silenced(self, cmdr_id: str, now_ts: float) -> bool:
         """True when an update is a re-list of people you have already left behind, not an arrival.
@@ -1060,6 +1070,64 @@ class CommanderHistoryManager:
         info = self.seen_data.get(str(cmdr_id))
         return str(info.get("name", cmdr_id)) if isinstance(info, dict) else str(cmdr_id)
 
+    def _known_name(self, cmdr_id):
+        """Saved display name, or None. Does not create or edit a row."""
+        info = self.seen_data.get(str(cmdr_id))
+        if not isinstance(info, dict):
+            return None
+        name = info.get("name")
+        if not isinstance(name, str) or is_unknown_name(name):
+            return None
+        return name
+
+    def _named_id(self, cmdr_id) -> dict:
+        item = {"id": str(cmdr_id)}
+        name = self._known_name(cmdr_id)
+        if name:
+            item["name"] = name
+        return item
+
+    def _history_rows(self, data) -> list:
+        """CommanderHistory rows for the recorder. Read-only."""
+        rows = []
+        entries = data.get("Interactions") if isinstance(data, dict) else None
+        if not isinstance(entries, list):
+            return rows
+        for entry in entries:
+            if not isinstance(entry, dict) or entry.get("CommanderID") is None:
+                continue
+            flags = entry.get("Interactions")
+            if not isinstance(flags, list):
+                flags = []
+            epoch = entry.get("Epoch")
+            if isinstance(epoch, bool) or not isinstance(epoch, (int, float)):
+                epoch = None
+            row = {
+                "id": str(entry["CommanderID"]),
+                "epoch": epoch,
+                "interactions": [flag for flag in flags if isinstance(flag, str)],
+            }
+            name = self._known_name(row["id"])
+            if name:
+                row["name"] = name
+            rows.append(row)
+        return rows
+
+    def _history_mtime_value(self):
+        ts = self.last_modified_timestamp
+        try:
+            if ts is None or ts == datetime.datetime.min:
+                return None
+            return round(ts.timestamp(), 3)
+        except (OverflowError, OSError, ValueError, AttributeError):
+            return None
+
+    def _record_history_snapshot(self, data) -> None:
+        try:
+            self.recorder.record_history(self._history_rows(data), self._history_mtime_value())
+        except Exception:
+            pass
+
     def note_last_journal(self, event, timestamp=None) -> None:
         """Remember the latest journal event name for troubleshooting snapshots."""
         if isinstance(event, str) and event:
@@ -1075,6 +1143,23 @@ class CommanderHistoryManager:
             self._name_for(cmdr_id),
             cmdr_id,
         )
+        try:
+            fields = {
+                "beep": bool(beep),
+                "reason": reason,
+                "id": str(cmdr_id),
+            }
+            name = self._known_name(cmdr_id)
+            if name:
+                fields["name"] = name
+            if beep:
+                info = self.seen_data.get(str(cmdr_id))
+                sound = info.get("sound") if isinstance(info, dict) else None
+                if isinstance(sound, str) and sound:
+                    fields["sound"] = sound
+            self.recorder.record("decision", fields)
+        except Exception:
+            pass
         return beep
 
     def _wing_join_name_silent(self, name) -> bool:
@@ -1196,6 +1281,14 @@ class CommanderHistoryManager:
                     handle.write(payload)
         except OSError:
             log.exception("Failed to append beep_marks.jsonl")
+        try:
+            self.recorder.record("mark", {
+                "mark": kind,
+                "id": str(cmdr_id),
+                "name": snap.get("cmdr"),
+            })
+        except Exception:
+            pass
         return snap
 
     def _forget_quiet_left(self) -> None:
@@ -1927,6 +2020,7 @@ class CommanderHistoryManager:
     def aggregated_commanders_load(self):
         data = self.aggregate_most_recent_commanders(True)
         if data:
+            self._record_history_snapshot(data)
             entries = data.get("Interactions", [])
             frontier_epoch = datetime.datetime(1601, 1, 1)
         
@@ -1963,6 +2057,7 @@ class CommanderHistoryManager:
     
         if not data:
             return
+        self._record_history_snapshot(data)
     
         entries = data.get("Interactions", [])
     
@@ -2840,6 +2935,10 @@ class CommanderHistoryManager:
             log.info("Beepbeep worker stopped.")
         self.flush_seen_commanders(force=True)
         self.flush_instance_seen(force=True)
+        try:
+            self.recorder.close()
+        except Exception:
+            pass
 
     def worker_loop(self):
         while not self.worker_stop_event.is_set():
