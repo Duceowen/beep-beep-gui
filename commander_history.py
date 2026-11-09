@@ -289,6 +289,11 @@ _QUIET_DISPLAY_SECONDS = 60.0
 _REARM_ABSENCE_SECONDS = 60.0
 # A completed absence is credited only around the history row that reports the return.
 _ABSENCE_CREDIT_SECONDS = 120.0
+# A leave-snapshot commander whose Met epoch jumps this far is a return, not a
+# re-list. The game can keep the row listed while the commander leaves and comes
+# back, so the absence tracker never sees a gap. 15 minutes keeps the normal
+# 5-10 minute history refresh quiet; the observed missed return was 32 minutes.
+_RETURN_MET_GAP_SECONDS = 900.0
 _LEAVE_MEMORY_SECONDS = 600.0
 _WING_JOIN_SILENCE_SECONDS = 20.0
 _INTERDICTION_WINDOW_SECONDS = 60.0
@@ -950,6 +955,10 @@ class CommanderHistoryManager:
         self._announced_at: dict[str, float] = {}
         # cid -> last signal (monotonic), or None: in this visit but not seen recently.
         self._visit: dict[str, float | None] = {}
+        # Last Met time this session actually processed for each commander.
+        # Stored rows may carry an old last_seen, so a gap is only meaningful
+        # when both ends were seen by this process.
+        self._met_seen: dict[str, datetime.datetime] = {}
         self._rearm_pending: set[str] = set()
         self._history_listed: set[str] | None = None
         self._listed_session: set[str] = set()
@@ -1053,6 +1062,37 @@ class CommanderHistoryManager:
                 elif location.last_drop_ts is not None and now_ts - location.last_drop_ts < _KILL_DROP_GUARD_SECONDS:
                     return True
         return False
+
+    def _long_relist_return(
+        self,
+        cmdr_id: str,
+        ts: datetime.datetime,
+        previous_met: datetime.datetime | None,
+        inst,
+    ) -> bool:
+        """A suppressed contact whose Met epoch jumped a long way is back, not a re-list.
+
+        CommanderHistory can keep a row listed while the commander leaves and
+        returns. The row never disappears, so _track_history_absence cannot see
+        the trip. A large Met jump is the only remaining signal. Only treat it
+        as a return when both Met times were seen by this process and the
+        commander is not currently in the instance; a present contact's Met
+        refresh is not an arrival, and a stored row's old last_seen is not
+        evidence of a gap.
+        """
+        if not isinstance(previous_met, datetime.datetime):
+            return False
+        if isinstance(inst, dict) and inst.get("here"):
+            return False
+        if cmdr_id not in location.leave_snapshot and not self.machine.suppresses(cmdr_id):
+            return False
+        gap = (ts - previous_met).total_seconds()
+        if gap < _RETURN_MET_GAP_SECONDS:
+            return False
+        location.leave_snapshot.discard(cmdr_id)
+        self._rearm_visit(cmdr_id)
+        return True
+
     def _decide_new_arrival(self, cmdr_id: str, in_batch: bool, name=None) -> bool:
         """The one decision for a commander who is new to the instance: beep or stay quiet.
 
@@ -2621,6 +2661,8 @@ class CommanderHistoryManager:
             existing, skip = self._row_for_sighting(cmdr_id, ts)
             if skip:
                 continue
+            previous_met = self._met_seen.get(cmdr_id)
+            self._met_seen[cmdr_id] = ts
 
             # Read the absence credit before _touch resets the visit clock.
             # A completed absence is a new visit. Continuous presence is not.
@@ -2663,7 +2705,14 @@ class CommanderHistoryManager:
             if is_wing and "WingMember" not in previous_flags and is_unknown_name(info.get("name")):
                 new_wing_unknown_ids.append(cmdr_id)
  
-            if self._is_relist_silenced(cmdr_id, now_ts):
+            inst = location.get_instance().get(cmdr_id)
+            if self._long_relist_return(cmdr_id, ts, previous_met, inst):
+                log.info(
+                    "Long-gap re-list of %s (id %s); announcing the return",
+                    info.get("name") or cmdr_id,
+                    cmdr_id,
+                )
+            elif self._is_relist_silenced(cmdr_id, now_ts):
                 # Supercruise re-lists the commanders you just left. They are not new arrivals.
                 if self.machine.suppresses(cmdr_id):
                     location.forget(cmdr_id)
@@ -2673,7 +2722,6 @@ class CommanderHistoryManager:
                 self.last_interactions[cmdr_id] = current_flags
                 changed_entries.append(info)
                 continue
-            inst = location.get_instance().get(cmdr_id)
     
             beep_this_commander = True            
 
@@ -3294,6 +3342,11 @@ class CommanderHistoryManager:
 
         In supercruise you are outside the instance, so the list is only the silence list
         for the re-list, and nobody is marked present until you drop back in."""
+        if in_supercruise:
+            # The journal says you are in supercruise, even if the saved instance
+            # list cannot be restored. The synthesized StartUp must not put you back
+            # in normal space, or the next listing is read as a drop-in.
+            self._resume_supercruise = True
         if self._session_start is None:
             return
         try:

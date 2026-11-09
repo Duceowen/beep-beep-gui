@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.1](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.1/beep-beep-gui-1.1.1.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.12](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.12/beep-beep-gui-1.1.12.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -21,15 +21,72 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 - Seen Commanders window opacity, from the Options menu
 - Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
 - Configurable alert settings
+- Session recording for debugging, on until you turn it off in Options. Chat text is not saved. Beeps are unchanged
 
 ## Notes
 - Only tested with the latest version of EDMarketConnector
 - Includes default sounds; you can add your own `.wav` or `.mp3` files in the `sounds` folder
 - Windows volume control uses the included DLL. Linux volume is applied to the sound before playback. macOS uses the system player
+- Arrival sounds are only as fast as the game's contact list. Elite Dangerous usually writes a new commander to `CommanderHistory` about 5-6 seconds after the contact appears, and Beep Beep sounds within milliseconds of that write. A beep that seems late is normally the game's write cadence, not a plugin timer. A ship lock, ship scan, local chat, or interdiction is journal evidence and is handled immediately
 - Does not require python to be installed.
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.12
+- A commander you left behind now beeps when they return after 15 minutes or more, even when the game keeps their history row listed the whole time. The Met time is the only signal in that case. A shorter re-list stays silent, and a commander still in your instance is not treated as a return
+- Restarting EDMC while you are in supercruise keeps the supercruise state, even when the saved instance list cannot be restored. Previously the next listing could be silenced as "listed as you entered supercruise"
+
+## 1.1.11
+- A return beeps only after CommanderHistory showed the commander absent for 60 seconds or more. Continuous presence never re-arms, so a refresh of someone still with you stays silent
+- A real load or menu return stays quiet for the first 12 seconds of history, counted from the journal time so EDMC's delivery delay is allowed for
+- Seen Commanders marks names shared by two or more saved rows with " ?". A scan that matches two or more people in your instance shows an overlay warning
+- A scan only refreshes a row when exactly one person in the instance carries that name
+- Right-click a row to remove it from the saved list, after confirmation
+- Sound cap: when several beeps arrive together, commanders not listed before the tick play first; dropped beeps are logged
+- The Now label reads "Last Seen"
+
+## 1.1.10
+- Arriving in a system by hyperspace announces the commanders staged during the jump as soon as the jump completes. A scan, local chat line, or interdiction still beeps immediately if the jump has not finished. A jump cannot stay staged for more than a few seconds
+- Dropping into a station is a separate instance. New contacts there are announced on that drop. Someone already announced in supercruise is not announced again by the station's history list
+- "Last Seen" still shows on Now after a quiet minute. The row keeps its normal color
+
+## 1.1.9
+- Clicking a row in Seen Commanders no longer leaves the bright selection bar on that row. The bar clears after a few seconds with no further click. It stays while the name editor is open, and while Shift or Control is held
+
+## 1.1.8
+- A scan, local chat line, or interdiction refreshes that commander's Now timer, including a name matched to an unnamed contact for this session. The Now row shows that journal name. It is not saved while the contact is still unnamed
+- After a minute with no new evidence, a commander still on Now is shown grey with "Last Seen … ago". They leave Now after the usual three minutes. A new sighting puts them back
+- Typing a name, or accepting a spelling change, starts that same timer. It no longer leaves the row on Now with no clock
+
+## 1.1.7
+- Scanning or talking to someone who was already announced as an unnamed contact does not beep a second time. A name that does not fit those unnamed contacts still beeps. A guessed name is not saved while more than one unnamed contact is here
+
+## 1.1.6
+- Each new instance (a drop, a glide, low-wake into supercruise, a jump, respawn, or a relog) starts clean. Someone is announced once in that instance. A later history refresh does not beep them again. A relog or the main menu announces the people in the new instance. Restarting EDMC in the same game session stays quiet
+- A ship you target, a local chat line, or an interdiction announces that commander on that journal line. Beep Beep does not wait for the history file, and it does not add a wait in front of a real arrival. A lock while you are in supercruise is this instance only. People left behind at a station are not announced just because leaving refreshed their rows
+- A kill does not beep the victim. A name with different capitals, o and 0, or one extra or swapped letter (COILMILLOWOLF and Colmillowolf) still matches the same commander when only one saved commander is that close
+
+## 1.1.5
+- Options has a switch, Record session data for debugging. It is on until you turn it off. Each time EDMC starts, a new file is written in the recordings folder. Beeps play the same way as before
+- The file lists each history update the game wrote, with who was new, whose time changed, and who disappeared. It also lists your jumps, drops, targets, wing changes, and local or private chat names. The words of a chat message are not saved
+- Each beep, each time a beep is skipped, a change in who is here, and each mark you make on a commander is written down too. Open recordings folder is next to the switch. The folder stops at about 50 MB. The oldest session files are removed first
+
+## 1.1.4
+- A commander who was already with you is no longer beeped as a new arrival when the game refreshes their record after you drop out of supercruise. That includes someone who pulled you out of supercruise, and someone you had already targeted in the instance you dropped into
+- Someone you left behind stays quiet when the game lists them again from recent contacts after you drop. A commander who was not already with you still beeps when they arrive after the drop
+- Targeting a ship while you are in supercruise does not count as that commander being in the instance you drop into
+
+## 1.1.3
+- After you confirm an import, Seen Commanders fills in straight away with the names you already had and the names just added. Sorting by Name or Sound no longer leaves that window blank until EDMC is restarted. Cancel leaves the list as it was
+
+## 1.1.2
+- Importing commander names checks the file before anything is written. A file over 5 MB or 20,000 entries is refused. A file nested too deeply shows an error instead of freezing
+- Import shows a preview of new names, changed names, and skipped or invalid rows. The list is written only after you confirm. Cancel writes nothing, and no backup is made
+- A shared file can add names only. Times in the file are ignored, so a future last-seen time cannot hide a commander. Sounds, kills and seen counts are not copied
+- Commander ids must be numbers. Names must be 1 to 64 characters, with no hidden control or bidirectional characters. Bad rows are counted and skipped. Good rows are kept
+- The backup made just before an import is labeled "Before import" in the restore list
+- Restoring a backup, or loading seen_commanders.json at startup, checks each row before replacing the list in memory. A corrupt file leaves the current list in place and is recorded in the log
 
 ## 1.1.1
 - Right-click a row in Seen Commanders to mark a missed beep, an extra beep, or a related issue (shown as Now but not here, beeped early or late, interdiction, killed, or wrong name). The mark is appended to beep_marks.jsonl in the plugin folder and written to the debug log. Each announce or skip is also logged as a decision line
@@ -227,6 +284,8 @@ Modern Overlay for alerts. Exclusive fullscreen always covers normal windows.
 ## How it works
 By reading a file inside the Frontier Developments folder, we can detect events when a Commander appears in or leaves our instance.
 The main issue is that there is no reliable way to distinguish these events using the CommanderHistory file alone.
+
+The game updates CommanderHistory on its own schedule: a commander who just appeared is usually written about 5-6 seconds later. Beep Beep watches the file every 50 ms and sounds within milliseconds of the write, so that 5-6 second gap is the game's cadence, not a plugin timer. A ship lock, ship scan, local chat, or interdiction is journal evidence and is handled immediately.
 
 To work around this, an instance tracker is created which keeps track of who has joined and who has left using edge detection.
 Additionally, by using EDMC journal events, we can hook into other events such as wing activity, giving us the ability to mute wing-related notifications.

@@ -281,6 +281,84 @@ class LongSupercruiseRelist(unittest.TestCase):
         feed(h, ["7"], datetime.datetime(2026, 11, 3, 1, 29))
         self.assertEqual(h.sent, [])
 
+    def test_long_met_gap_on_left_behind_commander_beeps_once(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "794593", "Lackedlightning", last_seen="2026-11-09T04:24:17")
+        location.add_instance("794593", state=0, system="Sol")
+        location.instance["794593"]["here"] = True
+        feed(h, ["794593"], datetime.datetime(2026, 11, 9, 4, 24, 18))
+        h.sent.clear()
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        # The row stayed listed. The next Met epoch is 32 minutes later.
+        feed(h, ["794593"], datetime.datetime(2026, 11, 9, 4, 56, 47))
+        self.assertEqual(h.sent, [["794593"]])
+        h.sent.clear()
+        # Later refreshes of the returned commander stay silent.
+        feed(h, ["794593"], datetime.datetime(2026, 11, 9, 4, 57, 36))
+        feed(h, ["794593"], datetime.datetime(2026, 11, 9, 5, 3, 38))
+        self.assertEqual(h.sent, [])
+        self.assertTrue(present("794593"))
+
+    def test_ten_minute_gap_on_left_behind_commander_is_silent(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "9", "BriefReturn", last_seen="2026-11-09T04:24:17")
+        location.add_instance("9", state=0, system="Sol")
+        location.instance["9"]["here"] = True
+        feed(h, ["9"], datetime.datetime(2026, 11, 9, 4, 24, 18))
+        h.sent.clear()
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        # Ten minutes is inside the normal history refresh band, so stay quiet.
+        feed(h, ["9"], datetime.datetime(2026, 11, 9, 4, 34, 18))
+        self.assertEqual(h.sent, [])
+
+    def test_long_met_gap_while_still_present_is_silent(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "7", "DockAFK", last_seen="2026-11-09T04:24:17")
+        location.add_instance("7", state=0, system="Sol")
+        location.instance["7"]["here"] = True
+        feed(h, ["7"], datetime.datetime(2026, 11, 9, 4, 24, 18))
+        h.sent.clear()
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        # The row is re-listed while they are still in the instance.
+        location.add_instance("7", state=1, system="Sol")
+        location.instance["7"]["here"] = True
+        feed(h, ["7"], datetime.datetime(2026, 11, 9, 4, 56, 47))
+        self.assertEqual(h.sent, [])
+
+
+class StartupInSupercruise(unittest.TestCase):
+    """EDMC restarted while the journal says you are in supercruise, but the saved
+    instance list cannot be restored. The synthesized StartUp must resume supercruise."""
+
+    def test_journal_supercruise_resumes_even_without_saved_list(self):
+        h = fresh_history()
+        h.restore_instance_seen("Deciat", True)
+        self.assertTrue(h.take_resume_supercruise())
+
+    def test_commander_jumping_into_supercruise_beeps(self):
+        h = fresh_history()
+        location.system, location.state = "Deciat", 1
+        add_row(h, "12162006", "Odyssey Cyprust")
+        feed(h, ["12162006"], datetime.datetime(2026, 11, 9, 5, 39, 3))
+        self.assertEqual(h.sent, [["12162006"]])
+
+    def test_normal_space_startup_does_not_resume_supercruise(self):
+        h = fresh_history()
+        h.restore_instance_seen("Deciat", False)
+        self.assertFalse(h.take_resume_supercruise())
+
 
 class LoadWindowWithDeliveryLag(unittest.TestCase):
     """Real: LoadGame at 23:28:37 (journal), EDMC delivered it at 23:28:44.7, and a new
