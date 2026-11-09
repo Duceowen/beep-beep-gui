@@ -855,19 +855,34 @@ class BeepBeep:
             return
     
         possible_sounds: list[str] = []
+        possible_names: list[str] = []
     
+        touched_saved = False
         for entry in info:
             cmdr_id = entry["commander_id"]
-            existing = history_inst.seen_data.get(cmdr_id, {})
-            selected = existing.get("sound", sound_inst.neutral)
+            existing = history_inst.seen_data.get(cmdr_id)
+            if isinstance(existing, dict):
+                selected = existing.get("sound", sound_inst.neutral)
+                history_inst.seen_data[cmdr_id] = existing
+                touched_saved = True
+            else:
+                # Journal evidence can beep before a history row exists.
+                # Do not invent a seen_commanders row for that.
+                selected = entry.get("sound") or sound_inst.neutral
             if selected in ("none.wav", "none"):
                 continue
-    
             possible_sounds.append(selected)
-            history_inst.seen_data[cmdr_id] = existing
+            possible_names.append(str(entry.get("name") or cmdr_id))
     
         if possible_sounds:
-            history_inst.save_seen_commanders()
+            if touched_saved:
+                history_inst.save_seen_commanders()
+            if len(possible_sounds) > self.sounds:
+                log.info(
+                    "Sound cap %d: not played for %s",
+                    self.sounds,
+                    ", ".join(possible_names[self.sounds:]),
+                )
             self._schedule_sounds(possible_sounds)
         
     def _schedule_sounds(self, sounds: list[str]):

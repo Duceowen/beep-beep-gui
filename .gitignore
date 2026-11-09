@@ -9,3 +9,11 @@ instance_seen.json
 kill_tally.json
 kill_tally_v2.txt
 kills_backfilled.txt
+
+# Local runtime data
+beep_marks.jsonl
+instance_presence.json
+recordings/
+*.bak-*
+*.tmp
+

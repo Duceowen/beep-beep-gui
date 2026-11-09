@@ -151,14 +151,14 @@ class Supercruise(unittest.TestCase):
         self.h.drop_supercruise_arrivals()
         self.assertFalse(present("3"))
 
-    def test_drop_in_announces_people_listed_in_the_new_instance(self):
+    def test_drop_in_keeps_people_left_behind_silent(self):
         location.state = 1
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 3, 1, 28))
         self.assertEqual(self.h.sent, [])
         location.set(0, "Sol", "SupercruiseExit")
         self.h.drop_supercruise_arrivals()
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 3, 1, 29))
-        self.assertEqual(sorted(sum(self.h.sent, [])), ["1", "2"])
+        self.assertEqual(self.h.sent, [])
 
     def test_removal_at_supercruise_entry_is_not_a_departure(self):
         self.assertIsNone(left_at(self.h, "1"))
@@ -282,6 +282,51 @@ class LongSupercruiseRelist(unittest.TestCase):
         self.assertEqual(h.sent, [])
 
 
+class LoadWindowWithDeliveryLag(unittest.TestCase):
+    """Real: LoadGame at 23:28:37 (journal), EDMC delivered it at 23:28:44.7, and a new
+    commander was heard at 23:28:50.9 (about 14 s after the load) and was not announced."""
+
+    def test_arrival_about_14s_after_load_is_announced(self):
+        from unittest import mock
+        h = fresh_history(session=datetime.datetime(2026, 11, 3, 17, 35, 56))
+        location.system, location.state = "Crucis Sector EQ-Y b4", 0
+        add_row(h, "77", "Newcomer")
+        h.aggregate_most_recent_commanders = lambda first_run=False: {"Interactions": [
+            {"CommanderID": 77, "Interactions": ["Met"],
+             "Epoch": epoch(datetime.datetime(2026, 11, 3, 23, 28, 50))}]}
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        loadgame = (now - datetime.timedelta(seconds=7.7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with mock.patch.object(ch.time, "monotonic", return_value=1000.0):
+            h.clear_presence(loadgame)
+        # the worker tick about 6.2 s after delivery, which is about 14 s after the load
+        with mock.patch.object(ch.time, "monotonic", return_value=1006.2):
+            h.aggregated_commanders()
+        self.assertEqual(h.sent, [["77"]])
+
+
+class DeathAfterKillInInstance(unittest.TestCase):
+    """Real: Nostromo was in your instance, you killed them, then you died. The re-list
+    after the death must not announce them as a new arrival in the instance you respawn in."""
+
+    def test_killed_commander_relisted_after_your_death_is_silent(self):
+        h = fresh_history()
+        location.system, location.state = "Shinrarta Dezhra", 0
+        add_row(h, "9", "USCSS-Nostromo")
+        location.add_instance("9", state=0, system="Shinrarta Dezhra")
+        location.instance["9"]["here"] = True
+        h._visit["9"] = None
+        h.note_kill("USCSS-Nostromo")
+        self.assertFalse(present("9"))
+        h._gone["9"].pop("suppress_until", None)  # test the death rule, not the kill window
+        location.set(0, "Shinrarta Dezhra", "Died")
+        location.leave_instance(record_departures=False, after_death=True)
+        h.forget_instance()
+        h.note_instance_reset()
+        h.sent.clear()
+        feed(h, ["9"], datetime.datetime(2026, 11, 3, 23, 59, 37))
+        self.assertEqual(h.sent, [])
+
+
 class InterdictionUnknownTarget(unittest.TestCase):
     def test_unresolved_target_is_kept_when_rows_are_unknown(self):
         h = fresh_history()
@@ -325,7 +370,7 @@ class RestartInSupercruise(unittest.TestCase):
         self.assertEqual(location.state, 1)
         self.assertEqual(set(location.leave_snapshot), {"101", "102"})
 
-    def test_restart_in_supercruise_relist_is_silent_and_drop_in_announces(self):
+    def test_restart_in_supercruise_relist_stays_silent_at_drop_in(self):
         h = self.restore(self.saved_visit(["101", "102"]), in_supercruise=True)
         h.sent = []
         h._sound_listener = lambda infos: h.sent.append([i["commander_id"] for i in infos])
@@ -339,7 +384,7 @@ class RestartInSupercruise(unittest.TestCase):
         location.set(0, "Sol", "SupercruiseExit")
         h.drop_supercruise_arrivals()
         feed(h, ["101", "102"], datetime.datetime(2026, 11, 3, 1, 2))
-        self.assertEqual(sorted(sum(h.sent, [])), ["101", "102"])
+        self.assertEqual(h.sent, [])
 
     def test_restart_in_normal_space_marks_recent_present(self):
         self.restore(self.saved_visit(["101"]), in_supercruise=False)
@@ -541,20 +586,23 @@ class QuietTimeoutReturn(unittest.TestCase):
 
     def test_return_after_quiet_timeout_stays_silent(self):
         self.h._expire_quiet_presence()
-        self.assertFalse(present("801"))
+        self.assertTrue(present("801"))  # the quiet timeout only fades Now; presence stays
         feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 10, 23))
         self.assertEqual(self.h.sent, [])  # silent; the game still lists them, so Now may show
 
     def test_jump_lets_a_quiet_commander_announce_again(self):
         self.h._expire_quiet_presence()
         self.h.note_jump("2026-11-03T05:20:00Z")
+        # A real FSD jump changes the system, which empties the instance.
+        location.instance.clear()
+        location.system = "Kivah"
         feed(self.h, ["801"], datetime.datetime(2026, 11, 3, 5, 21, 0))
         self.assertEqual(self.h.sent, [["801"]])
 
     def test_death_lets_a_quiet_commander_announce_again(self):
         self.h._expire_quiet_presence()
         self.h.forget_instance()
-        self.assertNotIn("quiet_left", self.h._gone["801"])
+        self.assertNotIn("quiet_left", self.h._gone.get("801", {}))
 
 class RelistRule(unittest.TestCase):
     def setUp(self):
@@ -579,6 +627,7 @@ class RelistRule(unittest.TestCase):
 
     def test_drop_grace_silences_then_releases(self):
         location.state = 0
+        location.leave_snapshot = set()
         location.supercruise_dropped = {"11": self.now}
         self.assertTrue(self.h._is_relist_silenced("11", self.now + 5))
         self.assertFalse(self.h._is_relist_silenced("11", self.now + 60))
@@ -610,7 +659,6 @@ class QuietReturnAfterSupercruise(unittest.TestCase):
         h._visit["1001"] = time.monotonic() - 10_000
         h._presence_saved = {"1001"}
         h._expire_quiet_presence()
-        self.assertTrue(h._gone["1001"].get("quiet_left"))
         location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
         location.leave_instance()
         h.remember_leave_snapshot()
@@ -633,8 +681,9 @@ class QuietReturnAfterHyperspace(unittest.TestCase):
         h._visit["1101"] = time.monotonic() - 10_000
         h._presence_saved = {"1101"}
         h._expire_quiet_presence()
-        self.assertTrue(h._gone["1101"].get("quiet_left"))
         h.note_jump("2026-11-03T06:10:00Z")
+        # A real FSD jump changes the system, which empties the instance.
+        location.instance.clear()
         location.system = "Kivah"
         feed(h, ["1101"], datetime.datetime(2026, 11, 3, 6, 10, 30))
         self.assertEqual(h.sent, [["1101"]])

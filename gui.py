@@ -4,12 +4,13 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 import tkinter.font as tkFont
 from beep_beep_config import config
-from commander_history import history_inst, add_alias
+from commander_history import backup_list_kind, describe_import_plan, history_inst, import_plan_lines, add_alias
 from beep_beep import beep_inst, sound_inst
 import clickthrough
+from logutil import log
 
 try:
     import theme as edmc_theme
@@ -21,6 +22,8 @@ _WIN_DATETIME_FMT = None
 
 MIN_COL_WIDTH = 50
 TOPMOST_REASSERT_MS = 1000
+# A click's selection bar clears itself. It is not the Now highlight.
+SELECTION_CLEAR_MS = 5000
 SEEN_COLUMNS = ("name", "sound", "seen_count", "kills", "last_seen")
 COLUMN_LABELS = (
     ("name", "Name"),
@@ -32,6 +35,46 @@ COLUMN_LABELS = (
 COLUMN_BUFFER = 24
 DIVIDER_HIT = 8
 DIVIDER_LINE = 1
+
+
+def _hex_channels(color):
+    text = str(color or "").strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return None
+    try:
+        return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+
+
+def _mix_hex(start, end, amount):
+    left = _hex_channels(start)
+    right = _hex_channels(end)
+    if left is None or right is None:
+        return None
+    mixed = []
+    for a, b in zip(left, right):
+        mixed.append(int(round(a + (b - a) * amount)))
+    return "#%02x%02x%02x" % tuple(mixed)
+
+
+def selection_colors(background, foreground):
+    """Bar and text for a clicked row.
+
+    The list text uses the theme accent. Painting the selection with that
+    same accent makes a click look like the row is present.
+    """
+    text = foreground or "#f2f2f2"
+    bg = background or "#1c1c1c"
+    channels = _hex_channels(bg)
+    if channels is None:
+        return "#3a3a3a", text
+    luminance = (0.299 * channels[0] + 0.587 * channels[1] + 0.114 * channels[2]) / 255
+    toward = "#000000" if luminance > 0.6 else "#ffffff"
+    bar = _mix_hex(bg, toward, 0.22) or "#3a3a3a"
+    return bar, text
 
 
 def layout_seen_columns(available, visible, fixed, mins):
@@ -155,16 +198,25 @@ def _win_datetime_format():
     return _WIN_DATETIME_FMT
 
 
+def _tk_default(widget, option):
+    """Tk's own default for one option. Only used until EDMC supplies its palette."""
+    probe = tk.Label(widget)
+    try:
+        return probe.cget(option)
+    finally:
+        probe.destroy()
+
+
 class ThemedScrollbar(tk.Canvas):
-    def __init__(self, master, command=None, background="grey4", foreground="#13ec39",
-                 activebackground="#13ec39", width=14, **kw):
+    # No colours are chosen here. apply_theme() sets them from EDMC's palette.
+    def __init__(self, master, command=None, width=14, **kw):
         kw.setdefault("highlightthickness", 0)
         kw.setdefault("bd", 0)
-        super().__init__(master, width=width, background=background, **kw)
+        super().__init__(master, width=width, **kw)
         self.command = command
-        self._trough = background
-        self._thumb = foreground
-        self._thumb_active = activebackground
+        self._trough = None
+        self._thumb = None
+        self._thumb_active = None
         self._first = 0.0
         self._last = 1.0
         self._drag = False
@@ -216,7 +268,7 @@ class ThemedScrollbar(tk.Canvas):
             bottom = min(h, top + 8)
         self._top = top
         self._bottom = bottom
-        color = self._thumb_active if self._drag else self._thumb
+        color = (self._thumb_active if self._drag else self._thumb) or _tk_default(self, "foreground")
         self.create_rectangle(2, top + 1, w - 2, bottom - 1, fill=color, outline="", tags="thumb")
 
     def _on_press(self, event):
@@ -305,7 +357,13 @@ class SeenCommandersGUI:
         self.resize_after_id = None
         self.row_offset = 0
         self.sort_field = "last_seen"
-        self.sort_asc = False       
+        self.sort_asc = False
+        # The history worker must not touch the tree. Updates wait here until
+        # the main thread draws them. _list_reloading is true while import or
+        # restore throws the old rows away and builds the new ones.
+        self._gui_lock = threading.Lock()
+        self._gui_pending = []
+        self._list_reloading = False
         self.refresh_interval = 5000
         self.presence_poll_ms = 250        
         self.beep_inst = None
@@ -325,8 +383,13 @@ class SeenCommandersGUI:
         
     def display_last_seen(self, cmdr_id, info: dict) -> str:
         """Show Now for commanders in your instance, otherwise the last encounter time."""
-        if history_inst.is_shown_present(cmdr_id):
-            return "Now"
+        label = None
+        try:
+            label = history_inst.now_label(cmdr_id)
+        except Exception:
+            label = "Now" if history_inst.is_shown_present(cmdr_id) else None
+        if label:
+            return label
         return self.format_last_seen(info.get("last_seen"))
 
     def format_last_seen(self, ts_iso: str) -> str:
@@ -405,6 +468,7 @@ class SeenCommandersGUI:
         self.topmost_var = tk.BooleanVar(value=bool(config.get_config("stay_on_top", False)))
 
         if self.window and self.window.winfo_exists():
+            self._window_open = True
             self.window.lift()
             self.build_ui(self.window)
             self._apply_topmost()
@@ -443,13 +507,14 @@ class SeenCommandersGUI:
         self.window.grid_columnconfigure(2, weight=1)
         
         
+        self._window_open = True
         self.build_ui(self.window)
         self.make_tree_editable()
         self.start_auto_refresh()
         self.attach_resize_listener()
         
         
-        self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits)
+        self.tree.bind("<ButtonRelease-1>", self._enforce_column_limits, add="+")
         self.window.after(50, self._enforce_column_limits)
 
         self._apply_topmost()
@@ -1309,6 +1374,15 @@ class SeenCommandersGUI:
         self.window.bind("<Configure>", on_resize)
         
         def on_window_close():
+            self._window_open = False
+            self._cancel_selection_clear()
+            layout_job = getattr(self, "_header_layout_job", None)
+            if layout_job:
+                try:
+                    self.window.after_cancel(layout_job)
+                except Exception:
+                    pass
+                self._header_layout_job = None
             job = getattr(self.window, "_beep_topmost_job", None)
             if job:
                 try:
@@ -1368,6 +1442,118 @@ class SeenCommandersGUI:
     def make_tree_editable(self):
         self.tree.bind("<Double-1>", self.on_tree_double_click_popup)
         self.tree.bind("<Return>", self.on_tree_enter_pressed)
+        # No prior row context menu — headers use Button-3 for columns only.
+        self.tree.bind("<Button-3>", self._popup_beep_mark_menu)
+        self.tree.bind("<Control-Button-1>", self._popup_beep_mark_menu)
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_selection, add="+")
+        self.tree.bind("<ButtonPress-1>", self._on_selection_press, add="+")
+        self.tree.bind("<ButtonRelease-1>", self._on_selection_release, add="+")
+        self.tree.bind("<KeyPress>", self._on_selection_key, add="+")
+        self.tree.bind("<KeyRelease>", self._on_selection_key, add="+")
+
+    def _edit_popup_open(self) -> bool:
+        popup = getattr(self, "_edit_popup", None)
+        if popup is None:
+            return False
+        try:
+            return bool(popup.winfo_exists())
+        except Exception:
+            return False
+
+    def _selection_busy(self) -> bool:
+        """True while an edit, a modifier, or a click gesture should keep the bar."""
+        if self._edit_popup_open():
+            return True
+        if getattr(self, "_selection_keys", None):
+            return True
+        if getattr(self, "_selection_gesture", False):
+            return True
+        return False
+
+    def _cancel_selection_clear(self) -> None:
+        job = getattr(self, "_selection_clear_job", None)
+        self._selection_clear_job = None
+        window = getattr(self, "window", None)
+        if not job or window is None:
+            return
+        try:
+            window.after_cancel(job)
+        except Exception:
+            pass
+
+    def _arm_selection_clear(self) -> None:
+        """Start the clear delay over. Each new click calls this again."""
+        self._cancel_selection_clear()
+        if self._selection_busy():
+            return
+        window = getattr(self, "window", None)
+        tree = getattr(self, "tree", None)
+        if window is None or tree is None:
+            return
+        try:
+            if not tree.selection():
+                return
+            self._selection_clear_job = window.after(SELECTION_CLEAR_MS, self._clear_tree_selection)
+        except Exception:
+            self._selection_clear_job = None
+
+    def _clear_tree_selection(self) -> None:
+        self._selection_clear_job = None
+        if self._selection_busy():
+            self._arm_selection_clear()
+            return
+        tree = getattr(self, "tree", None)
+        if tree is None:
+            return
+        self._clearing_selection = True
+        try:
+            selected = tree.selection()
+            if selected:
+                tree.selection_remove(selected)
+        except Exception:
+            pass
+        finally:
+            self._clearing_selection = False
+
+    def _on_tree_selection(self, _event=None):
+        if getattr(self, "_clearing_selection", False):
+            return
+        if self._selection_busy():
+            self._cancel_selection_clear()
+            return
+        self._arm_selection_clear()
+
+    def _on_selection_press(self, event):
+        state = getattr(event, "state", 0) or 0
+        # Shift or Control: the selection gesture is still going.
+        if state & 0x1 or state & 0x4:
+            self._selection_gesture = True
+            self._cancel_selection_clear()
+
+    def _on_selection_release(self, event=None):
+        self._selection_gesture = False
+        state = getattr(event, "state", 0) or 0
+        if state & 0x1 or state & 0x4:
+            self._cancel_selection_clear()
+            return
+        if not self._selection_busy():
+            self._arm_selection_clear()
+
+    def _on_selection_key(self, event):
+        if event.keysym not in ("Shift_L", "Shift_R", "Control_L", "Control_R"):
+            return
+        held = getattr(self, "_selection_keys", None)
+        if held is None:
+            held = set()
+            self._selection_keys = held
+        kind = str(getattr(event, "type", ""))
+        if "Release" in kind:
+            held.discard(event.keysym)
+            if not self._selection_busy():
+                self._arm_selection_clear()
+        else:
+            held.add(event.keysym)
+            self._cancel_selection_clear()
 
     def on_tree_enter_pressed(self, _event):
         if self._options_are_open():
@@ -1401,7 +1587,232 @@ class SeenCommandersGUI:
     
         self.on_tree_double_click_popup(e)        
     
+
+    _BEEP_MARK_ITEMS = (
+        ("not_here", "Not here (shown as Now)"),
+        ("no_beep", "No beep (missed)"),
+        ("extra_beep", "Extra beep (unexpected)"),
+        ("beeped_early", "Beeped early"),
+        ("beeped_late", "Beeped late"),
+        ("interdiction", "Interdiction"),
+        ("killed", "Killed"),
+        ("wrong_name", "Wrong name"),
+    )
+
+    def _tree_cmdr_at_event(self, event):
+        """Commander id under the pointer, or the current selection."""
+        row_id = None
+        try:
+            row_id = self.tree.identify_row(getattr(event, "y", 0))
+        except Exception:
+            row_id = None
+        if not row_id:
+            selection = self.tree.selection()
+            row_id = selection[0] if selection else None
+        if not row_id:
+            return None
+        return next((k for k, v in self.tree_items.items() if v == row_id), None)
+
+    def _popup_beep_mark_menu(self, event):
+        """Right-click a Seen Commanders row to log a troubleshooting mark."""
+        if self._options_are_open():
+            return
+        cmdr_id = self._tree_cmdr_at_event(event)
+        if not cmdr_id:
+            return "break"
+        try:
+            self.tree.selection_set(self.tree_items[cmdr_id])
+        except Exception:
+            pass
+        self._close_beep_mark_menu()
+        palette = self._edmc_palette()
+        popup = tk.Toplevel(self.window)
+        popup.withdraw()
+        popup.overrideredirect(True)
+        try:
+            popup.attributes("-topmost", True)
+        except Exception:
+            pass
+        bg = palette.get("background") or _tk_default(popup, "background")
+        fg = palette.get("foreground") or _tk_default(popup, "foreground")
+        active_bg = palette.get("activebackground") or bg
+        active_fg = palette.get("activeforeground") or fg
+        popup.configure(background=fg)
+        inner = tk.Frame(popup, background=bg, highlightthickness=0, bd=0)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        title = tk.Label(
+            inner,
+            text="Report beep issue",
+            anchor="w",
+            background=bg,
+            foreground=fg,
+            padx=8,
+            pady=4,
+        )
+        title.pack(fill="x")
+        for kind, label in self._BEEP_MARK_ITEMS:
+            row = tk.Label(
+                inner,
+                text=label,
+                anchor="w",
+                background=bg,
+                foreground=fg,
+                padx=10,
+                pady=3,
+                cursor="hand2",
+            )
+            row.pack(fill="x")
+
+            def enter(_e, w=row, ab=active_bg, af=active_fg):
+                w.configure(background=ab, foreground=af)
+
+            def leave(_e, w=row, b=bg, f=fg):
+                w.configure(background=b, foreground=f)
+
+            def click(_e, k=kind, lab=label, cid=cmdr_id):
+                self._close_beep_mark_menu()
+                self._mark_beep_issue(k, lab, cid)
+
+            row.bind("<Enter>", enter)
+            row.bind("<Leave>", leave)
+            row.bind("<Button-1>", click)
+        remove_row = tk.Label(
+            inner,
+            text="Remove from list...",
+            anchor="w",
+            background=bg,
+            foreground=fg,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+        )
+        remove_row.pack(fill="x")
+
+        def remove_enter(_e, w=remove_row, ab=active_bg, af=active_fg):
+            w.configure(background=ab, foreground=af)
+
+        def remove_leave(_e, w=remove_row, b=bg, f=fg):
+            w.configure(background=b, foreground=f)
+
+        def remove_click(_e, cid=cmdr_id):
+            self._close_beep_mark_menu()
+            self._confirm_remove_commander(cid)
+
+        remove_row.bind("<Enter>", remove_enter)
+        remove_row.bind("<Leave>", remove_leave)
+        remove_row.bind("<Button-1>", remove_click)
+        self._beep_mark_menu = popup
+        x, y = self._pointer_root(event)
+        x, y = self._move_popup(popup, x, y)
+        popup.deiconify()
+        popup.lift()
+        if not getattr(self, "_beep_mark_menu_bound", False):
+            self.window.bind_all("<Button-1>", self._dismiss_beep_mark_menu, add="+")
+            self._beep_mark_menu_bound = True
+        popup.bind("<Escape>", lambda _e: self._close_beep_mark_menu())
+        try:
+            popup.focus_set()
+        except Exception:
+            pass
+        self._move_popup(popup, x, y)
+        return "break"
+
+    def _confirm_remove_commander(self, cmdr_id):
+        cmdr_id = str(cmdr_id)
+        info = history_inst.seen_data.get(cmdr_id)
+        name = info.get("name", cmdr_id) if isinstance(info, dict) else cmdr_id
+        answer = messagebox.askyesno(
+            "Remove commander",
+            "Remove %s (id %s) from the seen list?\n\n"
+            "Only a backup restore brings it back. If the game still lists this commander, "
+            "they will reappear as a new row when next seen." % (name, cmdr_id),
+            parent=self.window,
+        )
+        if not answer:
+            return
+        try:
+            history_inst.remove_commander(cmdr_id)
+        except Exception as err:
+            messagebox.showerror("Remove commander", "Could not remove: %s" % err, parent=self.window)
+            return
+        self._remove_tree_row(cmdr_id)
+
+    def _remove_tree_row(self, cmdr_id):
+        item = self.tree_items.pop(cmdr_id, None)
+        if item:
+            try:
+                self.tree.delete(item)
+            except Exception:
+                pass
+        for store in (self.name_vars, self.sound_vars, self.last_seen_vars, self.seen_count_vars, self.kills_vars):
+            store.pop(cmdr_id, None)
+
+    def _dismiss_beep_mark_menu(self, event):
+        menu = getattr(self, "_beep_mark_menu", None)
+        if not menu:
+            return
+        try:
+            if event.widget == menu or str(event.widget).startswith(str(menu)):
+                return
+        except Exception:
+            pass
+        self._close_beep_mark_menu()
+
+    def _close_beep_mark_menu(self):
+        menu = getattr(self, "_beep_mark_menu", None)
+        self._beep_mark_menu = None
+        if not menu:
+            return
+        try:
+            menu.destroy()
+        except Exception:
+            pass
+
+    def _mark_beep_issue(self, kind, label, cmdr_id):
+        try:
+            history_inst.record_beep_mark(kind, cmdr_id)
+        except Exception:
+            log.exception("Failed to record beep mark for %s", cmdr_id)
+            self._flash_mark_feedback("Mark failed")
+            return
+        self._flash_mark_feedback("Marked: %s" % label)
+
+    def _flash_mark_feedback(self, text):
+        """Brief on-window confirmation; does not add a permanent UI control."""
+        win = getattr(self, "window", None)
+        if not win or not win.winfo_exists():
+            return
+        job = getattr(self, "_mark_feedback_job", None)
+        if job:
+            try:
+                win.after_cancel(job)
+            except Exception:
+                pass
+        tip = getattr(self, "_mark_feedback", None)
+        if tip is not None:
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+        palette = self._edmc_palette()
+        bg = palette.get("background") or _tk_default(win, "background")
+        fg = palette.get("foreground") or _tk_default(win, "foreground")
+        tip = tk.Label(win, text=text, background=bg, foreground=fg, padx=8, pady=4, relief="solid", bd=1)
+        tip.place(relx=0.5, rely=0.02, anchor="n")
+        self._mark_feedback = tip
+
+        def hide():
+            self._mark_feedback_job = None
+            self._mark_feedback = None
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+
+        self._mark_feedback_job = win.after(1800, hide)
+
     def on_tree_double_click_popup(self, event):
+
         if self._options_are_open():
             return
         row_id = self.tree.identify_row(event.y)
@@ -1425,8 +1836,10 @@ class SeenCommandersGUI:
                 return
             if getattr(self, "_edit_popup", None) is editor:
                 self._edit_popup = None
+            self._arm_selection_clear()
 
         popup.bind("<Destroy>", forget_edit)
+        self._cancel_selection_clear()
     
     
         tk.Label(popup, text="Name:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -1468,9 +1881,11 @@ class SeenCommandersGUI:
             add_alias(history_inst.seen_data[cmdr_id], history_inst.seen_data[cmdr_id].get("name"), new_name)
             history_inst.seen_data[cmdr_id]["name"] = new_name
             history_inst.seen_data[cmdr_id]["sound"] = new_sound
-            
+            history_inst.note_manual_name(cmdr_id)
+
             self.tree.set(row_id, "name", new_name)
             self.tree.set(row_id, "sound", new_sound.capitalize())
+            self.tree.set(row_id, "last_seen", self.display_last_seen(cmdr_id, history_inst.seen_data[cmdr_id]))
         
             history_inst.save_seen_commanders()
         
@@ -1577,7 +1992,9 @@ class SeenCommandersGUI:
 
             self.tree.bind("<Configure>", self._on_tree_configure, add="+")
             self.header_frame.bind("<Configure>", self._on_header_configure, add="+")
-            self.header_frame.after_idle(self._layout_tree_header)
+            # Schedule on the window. An idle callback on the header itself
+            # still fires after that header is destroyed and reports an error.
+            self._header_layout_job = parent.after_idle(self._layout_tree_header)
     
             self.widgets.clear()
             self.sound_vars.clear()
@@ -1587,10 +2004,12 @@ class SeenCommandersGUI:
             self.kills_vars.clear()
             self.tree_items = {}
 
-        if history_inst.seen_data:
-            new_ids = [cmdr_id for cmdr_id in history_inst.seen_data if cmdr_id not in self.tree_items]
-            if new_ids:
-                self.add_rows(new_ids)
+        with history_inst._data_lock:
+            # Copy the ids first. The history worker can insert a row while
+            # this list is built, and that used to raise and leave the tree empty.
+            new_ids = [cmdr_id for cmdr_id in list(history_inst.seen_data) if cmdr_id not in self.tree_items]
+        if new_ids:
+            self.add_rows(new_ids)
     
         self.sort_rows(sort_field, sort_asc)
 
@@ -1746,18 +2165,17 @@ class SeenCommandersGUI:
             return
         background = palette.get("background")
         foreground = palette.get("foreground")
-        activebackground = palette.get("activebackground") or background
-        activeforeground = palette.get("activeforeground") or foreground
         try:
             parent.configure(background=background)
         except Exception:
             pass
+        selected_bg, selected_fg = selection_colors(background, foreground)
         style = ttk.Style(parent)
         style.configure("Beep.Treeview", background=background, fieldbackground=background, foreground=foreground)
         style.map(
             "Beep.Treeview",
-            background=[("selected", activebackground)],
-            foreground=[("selected", activeforeground)],
+            background=[("selected", selected_bg)],
+            foreground=[("selected", selected_fg)],
         )
         style.configure("Beep.Treeview.Heading", background=background, foreground=foreground)
         if getattr(self, "tree", None) and self.tree.winfo_exists():
@@ -1898,7 +2316,10 @@ class SeenCommandersGUI:
             except tk.TclError:
                 pass
         try:
-            window.after_idle(self._layout_tree_header)
+            job = getattr(self, "_header_layout_job", None)
+            if job:
+                window.after_cancel(job)
+            self._header_layout_job = window.after_idle(self._layout_tree_header)
         except Exception:
             pass
 
@@ -1938,6 +2359,22 @@ class SeenCommandersGUI:
         if isinstance(widget, ttk.Combobox):
             self._theme_combobox(widget, palette)
             return
+        if isinstance(widget, tk.Listbox):
+            opts = {}
+            if palette.get("background"):
+                opts["background"] = palette["background"]
+                opts["highlightbackground"] = palette["background"]
+            if palette.get("foreground"):
+                opts["foreground"] = palette["foreground"]
+            if palette.get("activebackground"):
+                opts["selectbackground"] = palette["activebackground"]
+            if palette.get("activeforeground"):
+                opts["selectforeground"] = palette["activeforeground"]
+            try:
+                widget.configure(**opts)
+            except Exception:
+                pass
+            return
         try:
             keys = widget.keys()
         except Exception:
@@ -1959,6 +2396,9 @@ class SeenCommandersGUI:
                 config_dict["activebackground"] = palette["activebackground"]
             if (is_scale or is_scrollbar) and "troughcolor" in keys:
                 config_dict["troughcolor"] = background
+            # Focus ring on the options scroll canvas takes the EDMC background, so it does not show.
+            if isinstance(widget, tk.Canvas) and "highlightcolor" in keys:
+                config_dict["highlightcolor"] = background
 
         if foreground:
             if (is_text or is_scale) and "foreground" in keys:
@@ -2064,6 +2504,15 @@ class SeenCommandersGUI:
 
     def apply_edmc_theme(self, popup):
         palette = self._edmc_palette()
+        if not getattr(self, "_palette_logged", False):
+            # TEMPORARY: confirms the palette keys EDMC supplies. Remove after checking the log.
+            self._palette_logged = True
+            current = getattr(getattr(edmc_theme, "theme", None), "current", None)
+            log.info(
+                "TEMP palette from EDMC: %s (EDMC theme keys: %s)",
+                palette,
+                sorted(current) if isinstance(current, dict) else current,
+            )
         if not palette.get("background") and not palette.get("foreground"):
             return
         for widget in self._walk_widgets(popup):
@@ -2119,107 +2568,205 @@ class SeenCommandersGUI:
     
         self.sort_rows(self.sort_field, self.sort_asc)
     
+    def _tree_alive(self):
+        tree = getattr(self, "tree", None)
+        if tree is None:
+            return False
+        try:
+            return bool(tree.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _row_text(self, info, key, default):
+        if not isinstance(info, dict):
+            return default
+        value = info.get(key, default)
+        if isinstance(value, str) and value:
+            return value
+        return default
+
+    def _sound_key(self, info):
+        """A sound name the row can store. A bad value must not abort the list."""
+        sound = info.get("sound") if isinstance(info, dict) else None
+        if not isinstance(sound, str) or not sound.strip():
+            fallback = getattr(sound_inst, "neutral", None)
+            sound = fallback if isinstance(fallback, str) and fallback else "neutral"
+        sound_key = sound.strip().lower()
+        files = getattr(sound_inst, "sound_files", None)
+        try:
+            if files is not None and sound_key not in files:
+                sound_key = "neutral"
+        except TypeError:
+            pass
+        return sound_key
+
+    def _commander_sort_value(self, cmdr_id, sort_field):
+        """Sort from the saved row, not from the on-screen text variables.
+
+        Rebuilding the list clears those variables before the rows exist.
+        Looking them up raised KeyError and left only the column headers.
+        """
+        info = history_inst.seen_data.get(cmdr_id)
+        if not isinstance(info, dict):
+            info = {}
+        if sort_field == "name":
+            return self._row_text(info, "name", "").lower()
+        if sort_field == "sound":
+            return self._sound_key(info)
+        if sort_field == "kills":
+            try:
+                return int(info.get("kills", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+        if sort_field == "seen_count":
+            try:
+                return int(info.get("seen_count", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+        if sort_field == "last_seen":
+            raw = info.get("last_seen", "")
+            try:
+                ts = datetime.fromisoformat(raw) if isinstance(raw, str) else None
+                if ts is None:
+                    raise ValueError
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                ts = datetime(1, 1, 1, tzinfo=timezone.utc)
+            try:
+                here = 1 if history_inst.is_shown_present(cmdr_id) else 0
+            except Exception:
+                here = 0
+            return (here, ts)
+        return str(cmdr_id)
+
+    def _ensure_row_vars(self, cmdr_id, info):
+        name = self._marked_name(cmdr_id, self._row_text(info, "name", "unknown"))
+        self.name_vars.setdefault(cmdr_id, tk.StringVar(value=name))
+        if cmdr_id not in self.sound_vars:
+            self.sound_vars[cmdr_id] = tk.StringVar(value=self._sound_key(info))
+        self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.display_last_seen(cmdr_id, info)))
+        seen = info.get("seen_count", 0) if isinstance(info, dict) else 0
+        kills = info.get("kills", 0) if isinstance(info, dict) else 0
+        try:
+            seen = int(seen or 0)
+        except (TypeError, ValueError):
+            seen = 0
+        try:
+            kills = int(kills or 0)
+        except (TypeError, ValueError):
+            kills = 0
+        self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(seen)))
+        self.kills_vars.setdefault(cmdr_id, tk.StringVar(value=str(kills)))
+
+    def _insert_tree_row(self, cmdr_id):
+        values = (
+            self.name_vars[cmdr_id].get(),
+            self.sound_vars[cmdr_id].get().capitalize(),
+            self.seen_count_vars[cmdr_id].get(),
+            self.kills_vars[cmdr_id].get(),
+            self.last_seen_vars[cmdr_id].get(),
+        )
+        item = self.tree.insert("", "end", values=values)
+        self.tree_items[cmdr_id] = item
+        self.widgets[cmdr_id] = {}
+        self._remember_cells(cmdr_id, values)
+        self._content_dirty = True
+
     def add_rows(self, cmdr_ids: list[str]):
         if not hasattr(self, "tree_items"):
             self.tree_items = {}
         if not hasattr(self, "widgets"):
             self.widgets = {}
-    
-        sort_field = getattr(self, "sort_field", "last_seen")
-        sort_asc = getattr(self, "sort_asc", False)
-    
-        def sort_key(cmdr_id):
-            if sort_field == "name":
-                return self.name_vars[cmdr_id].get().lower()
-            if sort_field == "sound":
-                return self.sound_vars[cmdr_id].get().lower()
-            if sort_field == "kills":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "seen_count":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "last_seen":
-                try:
-                    ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                except Exception:
-                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
-                # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
-            return cmdr_id
-    
-        all_ids = list(history_inst.seen_data.keys())
-        sorted_ids = sorted(all_ids, key=sort_key, reverse=not sort_asc)
-    
+        if not self._tree_alive():
+            return
+
         for cmdr_id in cmdr_ids:
-            info = history_inst.seen_data[cmdr_id]
-    
-            self.name_vars.setdefault(cmdr_id, tk.StringVar(value=info.get("name", "unknown")))
-            if cmdr_id not in self.sound_vars:
-
-                sound_key = info.get("sound", "neutral").lower()
-                if sound_key not in sound_inst.sound_files:
-                    sound_key = "neutral"
-                
-                self.sound_vars[cmdr_id] = tk.StringVar(value=sound_key)
-
-
-            self.last_seen_vars.setdefault(cmdr_id, tk.StringVar(value=self.display_last_seen(cmdr_id, info)))
-            self.seen_count_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("seen_count", 0))))
-            self.kills_vars.setdefault(cmdr_id, tk.StringVar(value=str(info.get("kills", 0))))
-    
-            index = 0
-            for sid in sorted_ids:
-                if sid == cmdr_id:
-                    break
-                if sid in self.tree_items:
-                    index += 1
-    
-            values = (
-                self.name_vars[cmdr_id].get(),
-                self.sound_vars[cmdr_id].get().capitalize(),
-                self.seen_count_vars[cmdr_id].get(),
-                self.kills_vars[cmdr_id].get(),
-                self.last_seen_vars[cmdr_id].get()
-            )
-            item = self.tree.insert("", index, values=values)
-            self.tree_items[cmdr_id] = item
-            self.widgets[cmdr_id] = {}
-            self._remember_cells(cmdr_id, values)
-            self._row_order = None
-            self._content_dirty = True
+            if cmdr_id in self.tree_items:
+                continue
+            info = history_inst.seen_data.get(cmdr_id)
+            if not isinstance(info, dict):
+                continue
+            self._ensure_row_vars(cmdr_id, info)
+            self._insert_tree_row(cmdr_id)
+        # sort_rows puts them in column order. It reads the saved rows, so it
+        # can run after the text variables were cleared and created again.
+        self._row_order = None
 
     def add_or_update_commander(self, data):
+        """Show sightings on the Tk thread. The history worker calls this too.
+
+        Do not touch the widgets from the worker. Even winfo_exists() raises
+        there, and a tree update during a reload used to hit a half-built list.
+        """
+        if threading.current_thread() is not threading.main_thread():
+            if not getattr(self, "_window_open", False):
+                return
+            with self._gui_lock:
+                self._gui_pending.append(data)
+            return
+        if getattr(self, "_list_reloading", False):
+            with self._gui_lock:
+                self._gui_pending.append(data)
+            return
+        window = getattr(self, "window", None)
+        try:
+            open_ = window is not None and window.winfo_exists()
+        except tk.TclError:
+            open_ = False
+        if not open_:
+            return
+        self._apply_commander_rows(data)
+
+    def _flush_gui_pending(self):
+        if getattr(self, "_list_reloading", False):
+            return
+        with self._gui_lock:
+            pending = self._gui_pending
+            self._gui_pending = []
+        for data in pending:
+            try:
+                self._apply_commander_rows(data)
+            except Exception:
+                log.exception("Failed to show a commander update")
+
+    def _apply_commander_rows(self, data):
         if not isinstance(data, list):
             data = [data]
-    
+
         new_cmdr_ids = []
-    
+        tree_alive = self._tree_alive() and self.window and self.window.winfo_exists()
+
         for info in data:
+            if not isinstance(info, dict) or "commander_id" not in info:
+                continue
             cmdr_id = info["commander_id"]
             cmdr_id_str = str(cmdr_id)
-    
-            self.name_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("name", "unknown"))
-            self.sound_vars.setdefault(cmdr_id_str, tk.StringVar()).set(info.get("sound", sound_inst.neutral).lower())
-            self.last_seen_vars.setdefault(cmdr_id_str, tk.StringVar()).set(self.display_last_seen(cmdr_id_str, info))
-            self.seen_count_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("seen_count", 0)))
-            self.kills_vars.setdefault(cmdr_id_str, tk.StringVar()).set(str(info.get("kills", 0)))
-    
+            self._ensure_row_vars(cmdr_id_str, info)
+            # A later sighting must replace the text, not keep the first value.
+            self.name_vars[cmdr_id_str].set(self._marked_name(cmdr_id_str, self._row_text(info, "name", "unknown")))
+            self.sound_vars[cmdr_id_str].set(self._sound_key(info))
+            self.last_seen_vars[cmdr_id_str].set(self.display_last_seen(cmdr_id_str, info))
+            try:
+                seen = int(info.get("seen_count", 0) or 0)
+            except (TypeError, ValueError):
+                seen = 0
+            try:
+                kills = int(info.get("kills", 0) or 0)
+            except (TypeError, ValueError):
+                kills = 0
+            self.seen_count_vars[cmdr_id_str].set(str(seen))
+            self.kills_vars[cmdr_id_str].set(str(kills))
+
             item_id = self.tree_items.get(cmdr_id_str)
-            if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
+            if tree_alive:
                 if item_id:
                     values = (
-                        info.get("name", "unknown"),
-                        info.get("sound", sound_inst.neutral).capitalize(),
-                        str(info.get("seen_count", 0)),
-                        str(info.get("kills", 0)),
-                        self.display_last_seen(cmdr_id_str, info),
+                        self.name_vars[cmdr_id_str].get(),
+                        self.sound_vars[cmdr_id_str].get().capitalize(),
+                        str(seen),
+                        str(kills),
+                        self.last_seen_vars[cmdr_id_str].get(),
                     )
                     prev = (getattr(self, "_cell_snapshot", {}) or {}).get(cmdr_id_str)
                     if prev != values:
@@ -2234,13 +2781,15 @@ class SeenCommandersGUI:
                             self._fitted_cheap = None
                 else:
                     new_cmdr_ids.append(cmdr_id_str)
-    
-        if new_cmdr_ids and self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
+
+        if new_cmdr_ids and tree_alive:
             self.add_rows(new_cmdr_ids)
-    
-        if self.window and self.window.winfo_exists() and hasattr(self, 'tree') and self.tree.winfo_exists():
-            sort_field = config.get_config("sort_field", "last_seen")
+
+        if tree_alive:
+            sort_field = config.get_config("sort_field", "last_seen") or self.sort_field
             sort_asc = config.get_config("sort_asc", False)
+            if sort_asc is None:
+                sort_asc = self.sort_asc
             self.sort_rows(sort_field, sort_asc)
        
     def _refresh_header_text(self, sort_field, sort_asc):
@@ -2262,33 +2811,13 @@ class SeenCommandersGUI:
         if not hasattr(self, "tree") or not self.window or not self.window.winfo_exists():
             return        
         
-        def sort_key(cmdr_id):
-            if sort_field == "name":
-                return self.name_vars[cmdr_id].get().lower()
-            if sort_field == "sound":
-                return self.sound_vars[cmdr_id].get().lower()
-            if sort_field == "kills":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("kills", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "seen_count":
-                try:
-                    return int(history_inst.seen_data[cmdr_id].get("seen_count", 0))
-                except (TypeError, ValueError):
-                    return 0
-            if sort_field == "last_seen":
-                try:
-                    ts = datetime.fromisoformat(history_inst.seen_data[cmdr_id].get("last_seen", ""))
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                except Exception:
-                    ts = datetime(1, 1, 1, tzinfo=timezone.utc)
-                # Commanders in your instance sort above everyone else, newest first.
-                return (1 if history_inst.is_shown_present(cmdr_id) else 0, ts)
-            return cmdr_id
-    
-        sorted_ids = sorted(history_inst.seen_data.keys(), key=sort_key, reverse=not sort_asc)
+        with history_inst._data_lock:
+            ids = list(history_inst.seen_data)
+        sorted_ids = sorted(
+            ids,
+            key=lambda cmdr_id: self._commander_sort_value(cmdr_id, sort_field),
+            reverse=not bool(sort_asc),
+        )
         order = [cmdr_id for cmdr_id in sorted_ids if self.tree_items.get(cmdr_id)]
         previous = getattr(self, "_row_order", None)
         if previous == order:
@@ -2321,6 +2850,67 @@ class SeenCommandersGUI:
             snapshot = {}
             self._cell_snapshot = snapshot
         snapshot[cmdr_id] = tuple(values)
+
+    def _marked_name(self, cmdr_id, name: str) -> str:
+        """Saved name, with ' ?' when another saved row uses the same name."""
+        try:
+            shared = history_inst.shared_name_ids()
+        except Exception:
+            return name
+        return name + " ?" if str(cmdr_id) in shared else name
+
+    def _shown_name(self, cmdr_id, info) -> str:
+        try:
+            provisional = history_inst.session_name(cmdr_id)
+        except Exception:
+            provisional = None
+        if provisional:
+            return provisional
+        return self._marked_name(cmdr_id, self._row_text(info, "name", "unknown"))
+
+    def _refresh_now_rows(self):
+        """Keep the Now / last-heard text current. Quiet rows stay the normal color."""
+        if not self._tree_alive():
+            return
+        try:
+            here = history_inst.instance_ids()
+        except Exception:
+            return
+        try:
+            shared = set(history_inst.shared_name_ids())
+        except Exception:
+            shared = None
+        if shared is not None and shared != getattr(self, "_last_shared_names", None):
+            self._last_shared_names = shared
+            for cmdr_id, item_id in list(self.tree_items.items()):
+                info = history_inst.seen_data.get(str(cmdr_id))
+                if not isinstance(info, dict):
+                    continue
+                marked = self._marked_name(str(cmdr_id), self._row_text(info, "name", "unknown"))
+                var = self.name_vars.get(str(cmdr_id))
+                if var is not None:
+                    var.set(marked)
+                try:
+                    if self.tree.set(item_id, "name") != marked:
+                        self.tree.set(item_id, "name", marked)
+                except Exception:
+                    continue
+        for cmdr_id in here:
+            item_id = self.tree_items.get(str(cmdr_id))
+            if not item_id:
+                continue
+            info = history_inst.seen_data.get(str(cmdr_id))
+            if not isinstance(info, dict):
+                info = {}
+            try:
+                label = self.display_last_seen(str(cmdr_id), info)
+                name = self._shown_name(str(cmdr_id), info)
+                if self.tree.set(item_id, "last_seen") != label:
+                    self.tree.set(item_id, "last_seen", label)
+                if self.tree.set(item_id, "name") != name:
+                    self.tree.set(item_id, "name", name)
+            except Exception:
+                continue
 
     def refresh_gui(self):
         if not self.tree or not self.tree.winfo_exists():
@@ -2378,10 +2968,13 @@ class SeenCommandersGUI:
             if not self.window or not self.window.winfo_exists():
                 return
 
+            # Sightings reported by the history worker are drawn here, on the Tk thread.
+            self._flush_gui_pending()
             # Presence changes (the Now group) show up on the short poll, so arrivals
             # appear right away. The full pass over every row stays on the slow timer.
             present = frozenset(cid for cid in history_inst.seen_data if history_inst.is_shown_present(cid))
             now = time.monotonic()
+            self._refresh_now_rows()
             if present != getattr(self, "_sorted_present", None) or now - getattr(self, "_last_full_refresh", 0.0) >= self.refresh_interval / 1000:
                 self._last_full_refresh = now
                 self.refresh_gui()
@@ -2466,6 +3059,35 @@ class SeenCommandersGUI:
         import subprocess
         import platform
         folder = os.path.join(self.plugin_dir, "sounds")
+        os.makedirs(folder, exist_ok=True)
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(folder)
+        elif system == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+
+    def open_recordings_folder(self):
+        import subprocess
+        import platform
+        try:
+            folder = os.path.join(history_inst.plugin_dir, "recordings")
+            os.makedirs(folder, exist_ok=True)
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(folder)
+            elif system == "Darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception:
+            log.exception("Could not open the recordings folder")
+
+    def open_backups_folder(self):
+        import subprocess
+        import platform
+        folder = history_inst.backup_dir
         os.makedirs(folder, exist_ok=True)
         system = platform.system()
         if system == "Windows":
@@ -2942,13 +3564,16 @@ class SeenCommandersGUI:
         label = tk.Label(holder, text=text)
         label.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
+        # Tk's own label colours until _theme_widget() applies EDMC's palette.
+        ink = _tk_default(label, "foreground")
+        paper = _tk_default(label, "background")
         box = canvas.create_rectangle(3, 3, size - 3, size - 3, width=2,
-                                      outline="#13ec39")
+                                      outline=ink, fill=paper)
         tick = canvas.create_line(
             size * 0.26, size * 0.52,
             size * 0.44, size * 0.72,
             size * 0.76, size * 0.28,
-            width=3, capstyle="round", joinstyle="round", fill="#13ec39",
+            width=3, capstyle="round", joinstyle="round", fill=ink,
         )
         canvas._beep_check_items = (box, tick)
 
@@ -3008,9 +3633,208 @@ class SeenCommandersGUI:
         frame.bind("<Configure>", update_wrap, add="+")
         return row + 1
 
+    def _backup_label(self, name):
+        path = os.path.join(history_inst.backup_dir, name)
+        try:
+            when = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            when = "unknown time"
+        return "%s    %s" % (when, backup_list_kind(name))
+
+    def reload_seen_list(self):
+        """Rebuild the Seen Commanders rows from memory. Used after a restore or import.
+
+        Runs on the Tk thread, after the import dialog has closed. The history
+        worker's updates are held until the new rows are in place, so they
+        cannot draw into a tree that is being replaced.
+        """
+        window = getattr(self, "window", None)
+        try:
+            if not window or not window.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        self._list_reloading = True
+        try:
+            job = getattr(self, "_header_layout_job", None)
+            if job:
+                try:
+                    window.after_cancel(job)
+                except Exception:
+                    pass
+            self._header_layout_job = None
+            for attr in ("scrollbar", "tree", "header_frame"):
+                widget = getattr(self, attr, None)
+                if widget is not None:
+                    try:
+                        widget.destroy()
+                    except Exception:
+                        pass
+                    setattr(self, attr, None)
+            self.tree_items = {}
+            self.widgets = {}
+            self._row_order = None
+            self.build_ui(window)
+        finally:
+            self._list_reloading = False
+        self._flush_gui_pending()
+
+    def backup_seen_now(self, parent):
+        path = history_inst.backup_seen_commanders_now("")
+        if path:
+            self._show_spelling_notice(parent, "Saved a backup:\n%s" % os.path.basename(path), "Backup saved")
+        else:
+            self._show_spelling_notice(parent, "The backup could not be written. See the EDMC log.", "Backup failed")
+
+    def open_restore_dialog(self, parent):
+        names = history_inst.list_backups()
+        if not names:
+            self._show_spelling_notice(parent, "There are no backups yet. Use Back up now first.", "Restore backup")
+            return
+
+        dialog = tk.Toplevel(parent)
+        dialog.title("Restore seen commanders")
+        dialog.transient(parent)
+
+        tk.Label(
+            dialog,
+            text="Pick a backup. Your current list is backed up first, so this can be undone.",
+            anchor="w", justify="left",
+        ).pack(fill="x", padx=12, pady=(12, 6))
+
+        holder = tk.Frame(dialog)
+        holder.pack(fill="both", expand=True, padx=12)
+        listbox = tk.Listbox(holder, height=12, width=58, exportselection=False)
+        bar = ThemedScrollbar(holder, command=listbox.yview)
+        listbox.configure(yscrollcommand=bar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        for name in names:
+            listbox.insert("end", self._backup_label(name))
+        listbox.selection_set(0)
+
+        status = tk.Label(dialog, text="", anchor="w", justify="left")
+        status.pack(fill="x", padx=12, pady=(6, 0))
+
+        def do_restore():
+            selected = listbox.curselection()
+            if not selected:
+                status.configure(text="Select a backup first.")
+                return
+            name = names[selected[0]]
+            try:
+                count = history_inst.restore_backup(name)
+            except (OSError, ValueError) as err:
+                status.configure(text="Restore failed: %s" % err)
+                return
+            dialog.destroy()
+            self.reload_seen_list()
+            self._show_spelling_notice(parent, "Restored %d commanders from %s." % (count, name), "Restore done")
+
+        buttons = tk.Frame(dialog)
+        buttons.pack(fill="x", padx=12, pady=12)
+        tk.Button(buttons, text="Restore", command=do_restore).pack(side="right")
+        tk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+        self.apply_edmc_theme(dialog)
+        self._raise_in_front(dialog, parent)
+
+    def import_seen_names(self, parent):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=parent,
+            title="Import commander names from another seen_commanders.json",
+            filetypes=[("Seen commanders list", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            plan = history_inst.plan_commander_import(path)
+        except (OSError, ValueError, RecursionError) as err:
+            self._show_spelling_notice(parent, "Import failed: %s" % err, "Import failed")
+            return
+        # The plan is only a preview. Cancel closes this dialog and writes nothing.
+        self._confirm_import_plan(parent, plan)
+
+    def _confirm_import_plan(self, parent, plan):
+        dialog = tk.Toplevel(parent)
+        dialog.title("Import commander names")
+        dialog.transient(parent)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        summary = describe_import_plan(plan)
+        summary += (
+            "\n\nTimes, kills and seen counts in the file are ignored."
+            "\nNothing is written until you choose Import. Cancel leaves your list untouched."
+        )
+        tk.Label(dialog, text=summary, anchor="w", justify="left").pack(fill="x", padx=12, pady=(12, 6))
+
+        lines = import_plan_lines(plan)
+        holder = tk.Frame(dialog)
+        holder.pack(fill="both", expand=True, padx=12)
+        listbox = tk.Listbox(holder, height=12, width=64, exportselection=False)
+        bar = ThemedScrollbar(holder, command=listbox.yview)
+        listbox.configure(yscrollcommand=bar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        if lines:
+            for line in lines:
+                listbox.insert("end", line)
+        else:
+            listbox.insert("end", "No names would be added or changed.")
+
+        status = tk.Label(dialog, text="", anchor="w", justify="left")
+        status.pack(fill="x", padx=12, pady=(6, 0))
+
+        def do_import():
+            try:
+                counts = history_inst.apply_commander_import(plan)
+            except (OSError, ValueError, RecursionError) as err:
+                status.configure(text="Import failed: %s" % err)
+                return
+            dialog.destroy()
+            self.reload_seen_list()
+            backup = counts.get("backup")
+            if backup:
+                backup_line = "Your list was backed up to %s." % os.path.basename(backup)
+            else:
+                backup_line = "Nothing changed, so no backup was made."
+            message = (
+                "Added %d commanders.\n"
+                "Filled in %d unknown names.\n"
+                "Kept %d names you already had.\n"
+                "Skipped %d entries with no name.\n"
+                "Rejected %d invalid rows.\n\n"
+                "%s"
+            ) % (
+                counts.get("added", 0),
+                counts.get("filled", 0),
+                counts.get("kept", 0),
+                counts.get("skipped", 0),
+                counts.get("invalid", 0),
+                backup_line,
+            )
+            self._show_spelling_notice(parent, message, "Import finished")
+
+        will_write = bool(plan.get("added") or plan.get("filled"))
+        buttons = tk.Frame(dialog)
+        buttons.pack(fill="x", padx=12, pady=12)
+        if will_write:
+            tk.Button(buttons, text="Import", command=do_import).pack(side="right")
+        tk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+        self.apply_edmc_theme(dialog)
+        self._raise_in_front(dialog, parent)
+
+    def _button_row(self, frame, row, buttons, gap=(2, 4)):
+        holder = tk.Frame(frame)
+        holder.grid(row=row, column=0, columnspan=2, padx=5, pady=gap, sticky="w")
+        for text, command in buttons:
+            tk.Button(holder, text=text, command=command).pack(side="left", padx=(0, 8))
+        return row + 1
+
     def options_menu(self, parent):
-        # Use parent directly
-        frame_container = parent  # the frame passed from plugin_prefs
+        frame_container = parent
         frame_container.grid_rowconfigure(0, weight=1)
         frame_container.grid_columnconfigure(0, weight=1)
 
@@ -3023,157 +3847,147 @@ class SeenCommandersGUI:
 
         frame = tk.Frame(canvas)
         frame.columnconfigure(1, weight=1)
-        canvas_window = canvas.create_window((0,0), window=frame, anchor="nw")
-    
+        canvas_window = canvas.create_window((0, 0), window=frame, anchor="nw")
+
         def on_canvas_configure(event):
             canvas.itemconfigure(canvas_window, width=event.width)
         canvas.bind("<Configure>", on_canvas_configure)
-    
+
         def on_frame_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
         frame.bind("<Configure>", on_frame_configure)
 
-
-
+        owner = frame.winfo_toplevel
         row = 0
 
         row = self.add_section(frame, row, "Sound")
         row = self.add_slider(
-            frame,
-            row,
-            "Alert Volume (%)",
+            frame, row, "Alert volume (%)",
             tk.IntVar(value=config.get_config("volume", 100)),
-            from_=0,
-            to=100,
-            attr="volume"
+            from_=0, to=100, attr="volume",
         )
         row = self.add_slider(
-            frame,
-            row,
-            "Multiple sounds",
+            frame, row, "Multiple sounds",
             tk.IntVar(value=config.get_config("sounds", 1)),
-            from_=1,
-            to=10,
-            attr="sounds"
+            from_=1, to=10, attr="sounds",
         )
         row = self.add_hint(frame, row, "Plays each commander 200 ms apart.")
+        row = self._button_row(frame, row, [
+            ("Open sounds folder", self.open_sounds_folder),
+            ("Play", lambda: beep_inst.play_sound(sound_inst.neutral)),
+            ("Reload sounds", sound_inst.reload),
+        ])
+        row = self.add_hint(frame, row, "WAV or MP3. A file with the same name in the sounds folder replaces a default.")
 
-        actions = tk.Frame(frame)
-        actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(2, 2), sticky="w")
-        tk.Button(
-            actions,
-            text="Open Sounds Folder",
-            command=self.open_sounds_folder
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            actions,
-            text="Play",
-            command=lambda: beep_inst.play_sound(sound_inst.neutral)
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            actions,
-            text="Reload Sounds",
-            command=sound_inst.reload
-        ).pack(side="left")
-        row += 1
-        row = self.add_hint(
-            frame,
-            row,
-            "WAV and MP3. A file in the sounds folder with the same name replaces the default.",
-        )
-
+        row = self.add_section(frame, row, "Alerts")
         row = self.add_checkbox(
-            frame,
-            row,
-            "Beep when a commander leaves",
+            frame, row, "Beep when a commander leaves",
             tk.BooleanVar(value=config.get_config("beep_on_leave", False)),
-            attr="beep_on_leave"
+            attr="beep_on_leave",
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Beep for wing members",
+            frame, row, "Beep for wing members",
             tk.BooleanVar(value=config.get_config("wing_notify", False)),
-            attr="wing_notify"
+            attr="wing_notify",
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Announce arrivals in Modern Overlay",
+            frame, row, "Announce arrivals in Modern Overlay",
             tk.BooleanVar(value=config.get_config("overlay_announce", False)),
-            attr="overlay_announce"
+            attr="overlay_announce",
         )
-        row = self.add_hint(frame, row, "Needs the EDMC Modern Overlay plugin.")
+        row = self.add_hint(frame, row, "EDMC Modern Overlay Required.")
+        row = self.add_checkbox(
+            frame, row, "Autofill on kill",
+            tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
+            attr="autofill_on_kill",
+        )
+        row = self.add_hint(frame, row, "A PvP kill names the one unknown commander from that visit.")
 
-        gap = tk.Frame(frame, height=14)
-        gap.grid_propagate(False)
-        gap.grid(row=row, column=0, columnspan=2, sticky="ew")
-        row += 1
+        row = self.add_section(frame, row, "Window")
         try:
             seen_opacity = int(config.get_config("seen_window_opacity", 100))
         except (TypeError, ValueError):
             seen_opacity = 100
         seen_opacity = max(10, min(100, seen_opacity))
         row = self.add_slider(
-            frame,
-            row,
-            "Window opacity (%)",
+            frame, row, "Opacity (%)",
             tk.IntVar(value=seen_opacity),
-            from_=10,
-            to=100,
-            attr="seen_window_opacity",
-            command=self.apply_seen_opacity
+            from_=10, to=100, attr="seen_window_opacity",
+            command=self.apply_seen_opacity,
         )
         row = self.add_checkbox(
-            frame,
-            row,
-            "Keep the window above the game",
+            frame, row, "Keep above the game",
             tk.BooleanVar(value=bool(config.get_config("stay_on_top", False))),
             attr="stay_on_top",
-            callback=self._on_topmost_toggle
-        )
-        row = self.add_hint(
-            frame,
-            row,
-            "Windowed and borderless. On Linux, a focused fullscreen game can still stay above this window.",
-        )
-        row = self.add_checkbox(
-            frame,
-            row,
-            "Autofill on Kill",
-            tk.BooleanVar(value=bool(config.get_config("autofill_on_kill", True))),
-            attr="autofill_on_kill"
-        )
-        row = self.add_hint(
-            frame,
-            row,
-            "A PvP kill names the one unknown commander from that visit. Turn this off to skip kills. Scans, wing adds, messages, and interdictions still name commanders.",
+            callback=self._on_topmost_toggle,
         )
 
-        spelling_actions = tk.Frame(frame)
-        spelling_actions.grid(row=row, column=0, columnspan=2, padx=5, pady=(6, 2), sticky="w")
-        tk.Button(
-            spelling_actions,
-            text="Open Seen Commanders Folder",
-            command=self.open_seen_commanders_folder,
-        ).pack(side="left", padx=(0, 8))
-        tk.Button(
-            spelling_actions,
-            text="Update spelling from journals",
-            command=lambda: self.confirm_spelling_update(frame.winfo_toplevel()),
-        ).pack(side="left")
-        row += 1
-        row = self.add_hint(
-            frame,
-            row,
-            "Experimental. Copy seen_commanders.json first. THE LAST CONFIRM SAVES CHECKED NAMES.",
+        row = self.add_section(frame, row, "Seen commanders")
+        row = self._button_row(frame, row, [
+            ("Open backups folder", self.open_backups_folder),
+            ("Back up now", lambda: self.backup_seen_now(owner())),
+            ("Restore backup...", lambda: self.open_restore_dialog(owner())),
+        ])
+        row = self._button_row(frame, row, [
+            ("Import names...", lambda: self.import_seen_names(owner())),
+            ("Update spelling", lambda: self.confirm_spelling_update(owner())),
+        ], gap=(0, 4))
+        row = self.add_hint(frame, row, "Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral.")
+        row = self.add_hint(frame, row, "Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names.")
+
+        row = self.add_section(frame, row, "Debugging")
+        row = self.add_checkbox(
+            frame, row, "Record session data for debugging",
+            tk.BooleanVar(value=bool(config.get_config("record_session", True))),
+            attr="record_session",
         )
         row = self.add_hint(
-            frame,
-            row,
-            "If EDMC Starts while you are already in a group, wait about 5 seconds in an EMPTY instance so alerts play when commanders arrive.",
-            gap=12,
+            frame, row,
+            "On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved.",
         )
+        row = self._button_row(frame, row, [
+            ("Open recordings folder", self.open_recordings_folder),
+        ])
+
+        help_state = {"open": False}
+        help_frame = tk.Frame(frame)
+        help_frame.columnconfigure(0, weight=1)
+        help_frame.grid(row=row + 1, column=0, columnspan=2, sticky="ew")
+        help_frame.grid_remove()
+
+        def toggle_help():
+            help_state["open"] = not help_state["open"]
+            if help_state["open"]:
+                help_frame.grid()
+                help_button.configure(text="Hide help")
+            else:
+                help_frame.grid_remove()
+                help_button.configure(text="Show help")
+
+        help_button = tk.Button(frame, text="Show help", command=toggle_help)
+        help_button.grid(row=row, column=0, columnspan=2, padx=5, pady=(14, 4), sticky="w")
+        row += 2
+
+        help_lines = [
+            "Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. "
+            "A file in the main sounds folder with the same name replaces a default (extension does not matter). "
+            "The newest file for each name is used.",
+            "Reload sounds picks up added or replaced files without restarting EDMC.",
+            "Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise.",
+            "Wing members: when off, no sounds play for wing members. This only affects wing alerts.",
+            "Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. "
+            "The name comes from Seen Commanders, so rename a commander there to change it.",
+            "Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window.",
+            "Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. "
+            "Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this.",
+            "Import: reads another player's seen_commanders.json and shows a preview first. "
+            "Only commanders with a real name are added. Times, kills and seen counts are not copied, "
+            "and names you already have are kept. Cancel writes nothing.",
+            "Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore.",
+        ]
+        help_row = 0
+        for text in help_lines:
+            help_row = self.add_hint(help_frame, help_row, text)
 
         def _on_mousewheel(event):
             num = getattr(event, "num", None)
@@ -3197,3 +4011,4 @@ class SeenCommandersGUI:
     
     
 gui_inst = SeenCommandersGUI()
+

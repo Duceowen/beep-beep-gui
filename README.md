@@ -4,10 +4,10 @@
 
 ## Download
 
-**[Download the latest release](https://github.com/Duceowen/beep-beep-gui/releases/latest)** (zip)
+**[Download BeepBeep 1.1.1](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.1/beep-beep-gui-1.1.1.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
-1. Download the zip from the latest release and unzip it
+1. Download the zip and unzip it
 2. Copy the `beep-beep-gui` folder into your **EDMarketConnector `plugins` directory**
 3. Launch EDMarketConnector
 
@@ -30,6 +30,27 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.1
+- Right-click a row in Seen Commanders to mark a missed beep, an extra beep, or a related issue (shown as Now but not here, beeped early or late, interdiction, killed, or wrong name). The mark is appended to beep_marks.jsonl in the plugin folder and written to the debug log. Each announce or skip is also logged as a decision line
+- Supercruise missed beeps caused by a stale leave snapshot are fixed. Commanders not heard in the last 10 minutes are dropped from that silence list, so a real supercruise arrival beeps. Commanders heard in the last 10 minutes that you left behind stay silent when the game re-lists them
+- The Now display logs the fade once, when Now clears, so the debug log is no longer flooded on every presence check
+- The quiet timeout only fades the Now display. Beep presence stays until a real leave, so a commander still with you does not beep again because Now faded, and a refresh of someone still here stays silent
+- Joining a wing no longer beeps for the wingmates the game lists, including a wing add or an accepted wing invite. They still show as here. An unnamed contact is not silenced by that short window, and a real arrival after it still beeps
+- Death, respawn, a Location event that changes system, and the Operations-screen ShutDown reset presence. Respawn is the journal Resurrect event. A system change clears the old instance and keeps the return re-list quiet, including detention or a teleport where you stay in normal space. The Operations screen arrives as ShutDown and clears presence the same way the main menu does
+- Update spelling treats o and 0 as look-alikes. When a ship scan, wing name, PvP kill, or interdiction shows a saved name with o and 0 swapped, and never shows the saved letters exactly, the row takes the game's spelling and keeps the old spelling as an alias. Chat alone does not swap them. Two saved commanders who differ only by o and 0 are left unchanged, and so are two different look-alike spellings from the game
+
+## 1.1.0
+- Seen Commanders backups: "Back up now" saves a copy on demand, and "Open backups folder" opens the backups folder
+- "Restore backup..." lists your backups and restores the one you pick. Your current list is backed up first, so a restore can be undone
+- "Import names..." adds commander names from another player's seen_commanders.json. Only commanders with a real name are added, sounds are set to neutral, and kills and seen counts are not copied. Names you already have are kept, and unknown names are filled in. Your list is backed up before the import
+- Options window reorganised into Sound, Alerts, Window and Seen commanders sections, with the long explanations moved into a collapsible Help section
+- The Options checkboxes, scrollbar and window colours now follow the EDMarketConnector theme instead of plugin colours
+- Seen commanders saves are now serialised, so a backup, restore or import cannot be overwritten by the background save
+- A seen count of 0 is no longer changed to 1 when the list loads, so imported names show 0 seen
+
+## 1.0.46
+- A commander you killed in your instance who respawns and is re-listed while you are in supercruise is announced as a new arrival, instead of being silenced as someone left behind
 
 ## 1.0.44
 - A commander you killed or who escaped while they were in your instance is no longer announced as a new arrival when the game re-lists them after you die. They count as left behind, like everyone else in the instance at death

@@ -178,6 +178,15 @@ def _expire_batch(generation: int) -> None:
     _send_clear()
 
 
+def announce_name_conflict(name: str, count: int) -> None:
+    if not config.get_config("overlay_announce", False):
+        return
+    if not _ensure_imports():
+        return
+    _ensure_group()
+    _send_message(f"{ID_PREFIX}name-conflict", f"'{name}' matches {count} commanders here")
+
+
 def clear_connected() -> None:
     """Remove any connection announcement still on screen (jump, shutdown, stop)."""
     global _generation, _clear_timer
