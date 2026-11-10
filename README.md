@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.12](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.12/beep-beep-gui-1.1.12.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.13](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.13/beep-beep-gui-1.1.13.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -32,6 +32,12 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.13
+- Wing members stay muted for the whole wing session when wing alerts are off. The journal wing roster (WingJoin/WingAdd) names them even when CommanderHistory has no WingMember flag yet, and when the 20-second join window has passed
+- Leaving the wing (WingLeave) clears the roster, so former wingmates beep again
+- A ship scan or lock no longer beeps. It refreshes presence and helps resolve names instead
+- Local chat no longer beeps either. It refreshes presence and name evidence only
 
 ## 1.1.12
 - A commander you left behind now beeps when they return after 15 minutes or more, even when the game keeps their history row listed the whole time. The Met time is the only signal in that case. A shorter re-list stays silent, and a commander still in your instance is not treated as a return
