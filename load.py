@@ -119,6 +119,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         if isinstance(name, str) and name.strip():
             names.append(name)
         if names:
+            location.add_wing_roster(names)
             history_inst.note_wing_mates(names)
 
     elif event == "WingInvite":
@@ -160,7 +161,8 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
         channel = str(entry.get("Channel") or "").strip().lower()
         if channel == "local":
             who = entry.get("From_Localised") or entry.get("From")
-            history_inst.announce_evidence("local_chat", who)
+            # Chat is presence and name evidence only. It never beeps.
+            history_inst.note_target_silent(who)
             
     elif event == "PVPKill":
         victim = entry.get("Victim")        

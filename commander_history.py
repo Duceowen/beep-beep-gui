@@ -31,6 +31,9 @@ class Location:
         # name_key -> wall time when WingJoin/WingAdd/WingInvite named them.
         # CommanderHistory often lists wingmates without WingMember on the first tick.
         self.wing_join_names: dict[str, float] = {}
+        # name_key of everyone in your current wing (from WingJoin/WingAdd journal lines).
+        # Kept for the whole wing session, unlike wing_join_names which expires in 20s.
+        self.wing_roster: set[str] = set()
         self.interdiction_ts = None
         self.interdiction_target = None
         # Set on supercruise drop-in after a successful interdiction: target name and drop time.
@@ -70,6 +73,8 @@ class Location:
 
     def set_wing(self, in_wing: bool):
         self.wing = in_wing
+        if not in_wing:
+            self.wing_roster.clear()
 
     def set(self, state=None, system=None, event=None):
         if event == "SupercruiseExit":
@@ -223,6 +228,17 @@ class Location:
 
     def clear_wing_join_names(self) -> None:
         self.wing_join_names.clear()
+
+    def add_wing_roster(self, names) -> None:
+        """Add wingmates from WingJoin/WingAdd. Used for mute checks while in the wing."""
+        for name in names:
+            if isinstance(name, str) and name.strip():
+                self.wing_roster.add(name_key(name))
+
+    def in_wing_roster(self, name) -> bool:
+        if not self.wing or not isinstance(name, str) or is_unknown_name(name):
+            return False
+        return name_key(name) in self.wing_roster
 
     def interdiction(self, target=None):
         self.interdiction_ts = time.time()
@@ -1799,6 +1815,9 @@ class CommanderHistoryManager:
 
     def _emit_named(self, name: str, reason: str) -> None:
         """Beep for a journal name that has no history id yet. Does not write the seen list."""
+        if not self.wing_notify and location.in_wing_roster(name):
+            self._beep_decision(name, False, "wing_muted")
+            return
         self._beep_decision(name, True, reason)
         info = {"commander_id": name, "name": name, "sound": "neutral"}
         if self._sound_listener:
@@ -2896,7 +2915,7 @@ class CommanderHistoryManager:
             if not location.wing:
                 allow_beep = True
             else:
-                if is_wing:
+                if is_wing or location.in_wing_roster(info.get("name")):
                     allow_beep = self.wing_notify
                 else:
                     allow_beep = True
@@ -3181,7 +3200,11 @@ class CommanderHistoryManager:
         """True for a wing member while you are in a wing and wing alerts are off."""
         if not location.wing or self.wing_notify:
             return False
-        return "WingMember" in self.last_interactions.get(str(cmdr_id), set())
+        if "WingMember" in self.last_interactions.get(str(cmdr_id), set()):
+            return True
+        # Scan/target/local evidence can name a wingmate whose CommanderHistory row
+        # has no WingMember flag yet. The journal wing roster still knows them.
+        return location.in_wing_roster(self._name_for(cmdr_id))
 
     def _process_departures(self):
         departed = location.departed
@@ -3227,7 +3250,22 @@ class CommanderHistoryManager:
         except Exception:
             return
         for name in names:
-            self.announce_evidence("target", name)
+            self.note_target_silent(name)
+
+    def note_target_silent(self, name) -> None:
+        """A scanned or targeted commander is here. Refresh presence and never beep."""
+        try:
+            if not isinstance(name, str) or is_unknown_name(name):
+                return
+            cid = self.resolve_commander(name)
+            if cid is None:
+                log.info("Target scan for %s: no saved id yet; presence not changed", name)
+                return
+            self.machine.note_announced(cid)
+            self._mark_present(cid)
+            self._beep_decision(cid, False, "target_silent")
+        except Exception:
+            log.exception("Target scan presence update failed")
 
     def note_kill(self, victim) -> None:
         """A PvP kill by you removes the victim from the list at once.
