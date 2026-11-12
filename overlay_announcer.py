@@ -5,6 +5,7 @@ import time
 
 from logutil import log
 from beep_beep_config import config
+from i18n import tl
 
 ALERT_COLOR = "#13ec39"
 ALERT_TTL = 3
@@ -14,7 +15,6 @@ ALERT_Y = 192
 ID_PREFIX = "beepbeep-connect-"
 BATCH_ID = f"{ID_PREFIX}batch"
 PLUGIN_NAME = "BeepBeep"
-GROUP_NAME = "BeepBeep Connections"
 
 _lock = threading.Lock()
 _initialised = False
@@ -101,7 +101,7 @@ def _ensure_group() -> None:
         _define_group(
             plugin_name=PLUGIN_NAME,
             plugin_matching_prefixes=["beepbeep-"],
-            plugin_group_name=GROUP_NAME,
+            plugin_group_name=tl("BeepBeep Connections"),
             plugin_group_prefixes=[ID_PREFIX],
             plugin_group_anchor="center",
             plugin_group_offset_x=0,
@@ -118,8 +118,8 @@ def _ensure_group() -> None:
 def _format_line(entry) -> str:
     raw_name = str(entry.get("name") or "").strip()
     if not raw_name or raw_name.lower() == "unknown":
-        return "A commander has jumped in"
-    return f"Commander {raw_name} has jumped in"
+        return tl("A commander has jumped in")
+    return tl("Commander {NAME} has jumped in").format(NAME=raw_name)
 
 
 def _message_id(entry) -> str:
@@ -184,7 +184,10 @@ def announce_name_conflict(name: str, count: int) -> None:
     if not _ensure_imports():
         return
     _ensure_group()
-    _send_message(f"{ID_PREFIX}name-conflict", f"'{name}' matches {count} commanders here")
+    _send_message(
+        f"{ID_PREFIX}name-conflict",
+        tl("'{NAME}' matches {COUNT} commanders here").format(NAME=name, COUNT=count),
+    )
 
 
 def clear_connected() -> None:

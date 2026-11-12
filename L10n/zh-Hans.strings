@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "简体中文";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "“{NAME}”与此处的{COUNT}名指挥官相符";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "...以及另外{COUNT}条";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "有指挥官进入实例";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvP击杀会为该次停留中唯一的未知指挥官填上名字。";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "新增指挥官：{ADDED}。{CR}补全未知名字：{FILLED}。{CR}保留已有名字：{KEPT}。{CR}跳过无名字条目：{SKIPPED}。{CR}拒绝无效行：{INVALID}。{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "警报音量 (%)";
+
+/* Alerts */
+"Alerts" = "警报";
+
+/* All files */
+"All files" = "所有文件";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "在 Modern Overlay 中播报到达";
+
+/* Autofill on kill */
+"Autofill on kill" = "击杀时自动填名";
+
+/* Back up now */
+"Back up now" = "立即备份";
+
+/* Backup failed */
+"Backup failed" = "备份失败";
+
+/* Backup saved */
+"Backup saved" = "备份已保存";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Beep Beep 选项已打开。关闭选项窗口后才能编辑列表";
+
+/* Beep for wing members */
+"Beep for wing members" = "编队成员也警报";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "指挥官离开时也警报";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "离开警报：你在超巡中时，有人离开也会播放声音。";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "BeepBeep 连接";
+
+/* Beeped early */
+"Beeped early" = "警报过早";
+
+/* Beeped late */
+"Beeped late" = "警报过晚";
+
+/* Before import */
+"Before import" = "导入前";
+
+/* Cancel */
+"Cancel" = "取消";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "更改 {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "更改的名字：{COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "勾选要保留的名字。最终确认前不会写入。关闭则所有名字保持不变。";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "勾选要保留的名字。最终确认前不会写入。";
+
+/* Clear */
+"Clear" = "清除";
+
+/* Close */
+"Close" = "关闭";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "指挥官 {NAME} 进入了实例";
+
+/* Confirm */
+"Confirm" = "确认";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "确认拼写更改";
+
+/* Continue */
+"Continue" = "继续";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "无法备份当前列表，因此没有导入任何内容。";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "无法备份当前列表，因此没有恢复任何内容。";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "无法移除：{ERROR}";
+
+/* Debugging */
+"Debugging" = "调试";
+
+/* Detect */
+"Detect" = "检测";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "编辑指挥官 {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "需要 EDMC Modern Overlay。";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "所有建议都已选中。最终确认前不会写入。";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "开始时所有建议都已选中。取消不想要的名字。最终确认前不会写入。";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "实验性的拼写更新。请先复制 seen_commanders.json。最后一次确认会保存勾选的名字。";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "多余警报";
+
+/* Go Back */
+"Go Back" = "返回";
+
+/* Hidden */
+"Hidden" = "隐藏";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "鼠标穿透: {MODE}";
+
+/* Hide help */
+"Hide help" = "隐藏帮助";
+
+/* Import */
+"Import" = "导入";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "导入只在预览后添加名字。没有名字的条目会被跳过，声音变为 neutral。";
+
+/* Import commander names */
+"Import commander names" = "导入指挥官名字";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "从另一份 seen_commanders.json 导入指挥官名字";
+
+/* Import failed */
+"Import failed" = "导入失败";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "导入失败：{ERROR}";
+
+/* Import finished */
+"Import finished" = "导入完成";
+
+/* Import names... */
+"Import names..." = "导入名字...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "导入：读取另一名玩家的 seen_commanders.json，并先显示预览。只添加有真实名字的指挥官。时间、击杀和相遇次数不会复制，你已有的名字会保留。取消不会写入任何内容。";
+
+/* Interdiction */
+"Interdiction" = "拦截";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "无效行：{COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "保持在游戏之上";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "保持在游戏之上：仅窗口化和无边框。在 Linux 上，处于焦点的全屏游戏仍可能挡住此窗口。";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "保留已有名字：{COUNT}";
+
+/* Killed */
+"Killed" = "已击杀";
+
+/* Kills */
+"Kills" = "击杀";
+
+/* Last Encounter */
+"Last Encounter" = "上次相遇";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "{MINUTES}分钟前见到";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "{SECONDS}秒前见到";
+
+/* Manual */
+"Manual" = "手动";
+
+/* Mark failed */
+"Mark failed" = "标记失败";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "已标记：{LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay：在屏幕中央显示“指挥官 <name> 进入了实例”。名字来自 Seen Commanders，要改名字就在那里改。";
+
+/* Multiple sounds */
+"Multiple sounds" = "连续音效";
+
+/* Name */
+"Name" = "名字";
+
+/* Name: */
+"Name:" = "名字：";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "新增    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "新名字：{COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "没有警报";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "没有名字会被添加或更改。";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "日志里没有比已保存名字更清晰的写法。";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "所选名字都无法保存。";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "不是已知的备份文件：{NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "人不在（却显示当前）";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "没有变化，因此没有做备份。";
+
+/* Now */
+"Now" = "当前";
+
+/* Off */
+"Off" = "关";
+
+/* OK */
+"OK" = "确定";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "默认开启。在 recordings 中写入会话文件。警报不变。不保存聊天内容。";
+
+/* Opacity (%) */
+"Opacity (%)" = "不透明度 (%)";
+
+/* Open backups folder */
+"Open backups folder" = "打开备份文件夹";
+
+/* Open recordings folder */
+"Open recordings folder" = "打开 recordings 文件夹";
+
+/* Open sounds folder */
+"Open sounds folder" = "打开 sounds 文件夹";
+
+/* Options */
+"Options" = "选项";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "选择一份备份。会先备份当前列表，因此可以撤销。";
+
+/* Play */
+"Play" = "播放";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "每位指挥官的声音间隔 200 毫秒。";
+
+/* Reading journals... */
+"Reading journals..." = "正在读取日志...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "记录会话数据以便调试";
+
+/* Reload sounds */
+"Reload sounds" = "重新加载音效";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "重新加载音效会在不重启 EDMC 的情况下识别新增或替换的文件。";
+
+/* Remove commander */
+"Remove commander" = "移除指挥官";
+
+/* Remove from list... */
+"Remove from list..." = "从列表中移除...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "从已见列表中移除 {NAME}（id {ID}）？{CR}{CR}只有从备份恢复才能找回。如果游戏仍列出该指挥官，下次见到时会作为新的一行出现。";
+
+/* Report beep issue */
+"Report beep issue" = "报告警报问题";
+
+/* Restore */
+"Restore" = "恢复";
+
+/* Restore backup */
+"Restore backup" = "恢复备份";
+
+/* Restore backup... */
+"Restore backup..." = "恢复备份...";
+
+/* Restore done */
+"Restore done" = "已恢复";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "恢复失败：{ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "恢复已见指挥官";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "恢复：从列表中选择一份备份。会先备份当前列表，因此可以撤销恢复。";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "已从 {FILE} 恢复 {COUNT} 名指挥官。";
+
+/* Save */
+"Save" = "保存";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "备份已保存：{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "已保存 {COUNT} 个名字。";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "已保存 {COUNT} 个名字。";
+
+/* Seen */
+"Seen" = "次数";
+
+/* Seen Commanders */
+"Seen Commanders" = "已见指挥官";
+
+/* Seen commanders */
+"Seen commanders" = "已见指挥官";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "已见指挥官（鼠标穿透）";
+
+/* Seen commanders list */
+"Seen commanders list" = "已见指挥官列表";
+
+/* Select a backup first. */
+"Select a backup first." = "请先选择一份备份。";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "最终确认前请至少选择一个名字。";
+
+/* Show help */
+"Show help" = "显示帮助";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "已跳过（无名字）：{COUNT}";
+
+/* Sound */
+"Sound" = "声音";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "音效文件：把 WAV 或 MP3 放进 sounds 文件夹。不要改动 default 文件夹。主 sounds 文件夹里同名文件会替换 default 中的音效（扩展名无关）。每个名字使用最新的文件。";
+
+/* Sound: */
+"Sound:" = "声音：";
+
+/* Spelling changes */
+"Spelling changes" = "拼写更改";
+
+/* Spelling saved */
+"Spelling saved" = "拼写已保存";
+
+/* Startup */
+"Startup" = "启动时";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "启动：如果 EDMC 在你已经处于小队中时启动，已在场的指挥官可能会倒序播放声音。在空实例（普通空间、超巡或超空间）中等待约 5 秒即可复位。";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "该文件无法按文本读取。";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "该文件超过 20,000 条，因此没有导入。";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "该文件没有有效的指挥官条目。";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "该文件大于 5 MB，因此没有读取。";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "该文件嵌套太深，无法读取。";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "该文件不是已见指挥官列表。";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "该文件不是有效的 JSON。";
+
+/* That file is too large to read. */
+"That file is too large to read." = "该文件太大，无法读取。";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "该导入计划无效。";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "无法写入备份。请查看 EDMC 日志。";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "未找到 Elite 的日志文件夹。";
+
+/* The journals could not be read. */
+"The journals could not be read." = "无法读取日志。";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "还没有备份。请先使用“立即备份”。";
+
+/* These are the names you selected. */
+"These are the names you selected." = "这些是你选择的名字。";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "这是实验功能。{CR}{CR}当舰船扫描、编队名字、击杀或拦截显示同一名字，并且大小写和标点与指挥官所用的一致时，Beep Beep 可以更新已保存的名字，例如 Tishtech 变成 TishTech。打出来的聊天行不会使用。未知指挥官保持未知。如果这些记录互相矛盾，或者两条已保存的记录写法已经不同，这个名字会被跳过。{CR}{CR}继续之前请先复制 seen_commanders.json。{CR}{CR}确认会打开列表。最终确认前不会写入。";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "文件中的时间、击杀和相遇次数会被忽略。{CR}在你选择导入之前不会写入。取消不会改动你的列表。";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "采用日志中的写法";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "采用日志写法后，这些建议已选中，没有逐个核对名字。";
+
+/* unknown time */
+"unknown time" = "时间未知";
+
+/* Update name spelling */
+"Update name spelling" = "更新名字写法";
+
+/* Update spelling */
+"Update spelling" = "更新写法";
+
+/* Verify all */
+"Verify all" = "全部勾选";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV 或 MP3。sounds 文件夹中的同名文件会替换 default 中的音效。";
+
+/* Window */
+"Window" = "窗口";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "编队：关闭后，编队成员不会有声音。这只影响编队警报。";
+
+/* Wrong name */
+"Wrong name" = "名字不对";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "你的列表已备份到 {FILE}。";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}准备保存 {COUNT} 个名字。尚未写入任何内容。{CR}{CR}确认会写入它们。返回则所有名字保持不变。";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ 播放";
+

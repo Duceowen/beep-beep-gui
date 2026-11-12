@@ -4,6 +4,7 @@ from overlay_announcer import announce_connected, clear_connected
 from gui import gui_inst
 from logutil import log
 from version import __version__  # noqa: F401
+from i18n import tl
 import myNotebook as nb  # noqa
 
 def plugin_start3(plugin_dir):
@@ -23,7 +24,7 @@ def plugin_start3(plugin_dir):
     history_inst.aggregated_commanders_load()
     history_inst.start_kill_backfill()
     history_inst.start_worker()
-    return "Beep Beep"
+    return tl("Beep Beep")
 
 
 def plugin_app(parent):
@@ -177,6 +178,11 @@ def plugin_prefs(parent, cmdr, is_beta):
     frame_container = nb.Frame(parent)
     gui_inst.options_menu(frame_container)
     return frame_container
+
+def prefs_changed(cmdr, is_beta):
+    # EDMC calls this after the commander applies Settings, including language.
+    gui_inst.refresh_language()
+
 
 def plugin_stop():
     clear_connected()

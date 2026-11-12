@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "日本語";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "「{NAME}」はこのインスタンスのCMDR {COUNT}人に一致";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "...ほか{COUNT}件";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "CMDRがインスタンスに入った";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvPキルで、その滞在の未知のCMDRが一人だけなら名前が付きます。";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "追加したCMDR: {ADDED}.{CR}未知の名前を補完: {FILLED}.{CR}既存の名前を維持: {KEPT}.{CR}名前なしをスキップ: {SKIPPED}.{CR}不正な行を拒否: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "警報の音量 (%)";
+
+/* Alerts */
+"Alerts" = "警報";
+
+/* All files */
+"All files" = "すべてのファイル";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Modern Overlayで到着を表示";
+
+/* Autofill on kill */
+"Autofill on kill" = "キルで名前を補完";
+
+/* Back up now */
+"Back up now" = "今すぐバックアップ";
+
+/* Backup failed */
+"Backup failed" = "バックアップ失敗";
+
+/* Backup saved */
+"Backup saved" = "バックアップを保存しました";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Beep Beepのオプションが開いています。リストを編集するには閉じてください";
+
+/* Beep for wing members */
+"Beep for wing members" = "ウィングメンバーも鳴らす";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "CMDRが離れたときも鳴らす";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "離脱時の音: スーパークルーズ中に誰かが離れても鳴ります。";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "BeepBeep 接続";
+
+/* Beeped early */
+"Beeped early" = "音が早すぎた";
+
+/* Beeped late */
+"Beeped late" = "音が遅すぎた";
+
+/* Before import */
+"Before import" = "インポート前";
+
+/* Cancel */
+"Cancel" = "キャンセル";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "変更 {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "変更した名前: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "残したい名前を選んでください。最終確認まで保存されません。閉じると名前はそのままです。";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "残したい名前を選んでください。最終確認まで保存されません。";
+
+/* Clear */
+"Clear" = "クリア";
+
+/* Close */
+"Close" = "閉じる";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "CMDR {NAME} がインスタンスに入った";
+
+/* Confirm */
+"Confirm" = "確認";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "表記の変更を確認";
+
+/* Continue */
+"Continue" = "続ける";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "現在のリストをバックアップできなかったため、何もインポートしていません。";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "現在のリストをバックアップできなかったため、何も復元していません。";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "削除できませんでした: {ERROR}";
+
+/* Debugging */
+"Debugging" = "デバッグ";
+
+/* Detect */
+"Detect" = "検出";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "CMDR {NAME} を編集";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "EDMC Modern Overlay が必要です。";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "候補はすべて選択済みです。最終確認まで保存されません。";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "最初は候補がすべて選択されています。不要な名前は外してください。最終確認まで保存されません。";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "実験的な表記の更新です。先に seen_commanders.json をコピーしてください。最後の確認で選んだ名前が保存されます。";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "余分な音";
+
+/* Go Back */
+"Go Back" = "戻る";
+
+/* Hidden */
+"Hidden" = "透過";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "マウス透過: {MODE}";
+
+/* Hide help */
+"Hide help" = "ヘルプを隠す";
+
+/* Import */
+"Import" = "インポート";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "インポートは確認のあと名前だけを足します。名前のない項目は飛ばし、音は neutral になります。";
+
+/* Import commander names */
+"Import commander names" = "CMDR名をインポート";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "別の seen_commanders.json からCMDR名をインポート";
+
+/* Import failed */
+"Import failed" = "インポート失敗";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "インポート失敗: {ERROR}";
+
+/* Import finished */
+"Import finished" = "インポート完了";
+
+/* Import names... */
+"Import names..." = "名前をインポート...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "インポート: 他のプレイヤーの seen_commanders.json を読み、先にプレビューを出します。本当の名前があるCMDRだけ追加されます。時刻、キル、遭遇回数はコピーされず、既存の名前は残ります。キャンセルは何も書きません。";
+
+/* Interdiction */
+"Interdiction" = "インターディクト";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "不正な行: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "ゲームより手前";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "ゲームより手前: ウィンドウとボーダーレスのみ。Linuxでは、フォーカス中のフルスクリーンがこの窓を覆うことがあります。";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "既存の名前を維持: {COUNT}";
+
+/* Killed */
+"Killed" = "撃破";
+
+/* Kills */
+"Kills" = "キル";
+
+/* Last Encounter */
+"Last Encounter" = "最終遭遇";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "{MINUTES}分前";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "{SECONDS}秒前";
+
+/* Manual */
+"Manual" = "手動";
+
+/* Mark failed */
+"Mark failed" = "記録できませんでした";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "記録: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: 画面中央に「CMDR <name> がインスタンスに入った」と出します。名前は Seen Commanders から取るので、そこで変えてください。";
+
+/* Multiple sounds */
+"Multiple sounds" = "連続再生";
+
+/* Name */
+"Name" = "名前";
+
+/* Name: */
+"Name:" = "名前:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "新規    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "新しい名前: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "音が鳴らなかった";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "追加も変更もされる名前はありません。";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "ジャーナルに、保存済みの名前より明確な表記はありませんでした。";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "選んだ名前はどれも保存できませんでした。";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "既知のバックアップではありません: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "ここにいない（今と表示）";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "変更がないのでバックアップは作りませんでした。";
+
+/* Now */
+"Now" = "今";
+
+/* Off */
+"Off" = "オフ";
+
+/* OK */
+"OK" = "OK";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "標準でオンです。recordings にセッションファイルを書きます。音は変わりません。チャット本文は保存しません。";
+
+/* Opacity (%) */
+"Opacity (%)" = "不透明度 (%)";
+
+/* Open backups folder */
+"Open backups folder" = "バックアップフォルダを開く";
+
+/* Open recordings folder */
+"Open recordings folder" = "recordings フォルダを開く";
+
+/* Open sounds folder */
+"Open sounds folder" = "sounds フォルダを開く";
+
+/* Options */
+"Options" = "オプション";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "バックアップを選んでください。現在のリストを先に保存するので、元に戻せます。";
+
+/* Play */
+"Play" = "再生";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "CMDRごとに200 ms空けて鳴らします。";
+
+/* Reading journals... */
+"Reading journals..." = "ジャーナルを読んでいます...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "デバッグ用にセッションを記録";
+
+/* Reload sounds */
+"Reload sounds" = "音を再読み込み";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "音の再読み込みは、EDMCを再起動せずに追加・差し替えファイルを拾います。";
+
+/* Remove commander */
+"Remove commander" = "CMDRを削除";
+
+/* Remove from list... */
+"Remove from list..." = "リストから削除...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "遭遇リストから {NAME}（id {ID}）を削除しますか？{CR}{CR}戻すにはバックアップの復元だけです。ゲームがまだこのCMDRを出していると、次に見たとき新しい行になります。";
+
+/* Report beep issue */
+"Report beep issue" = "音の問題を記録";
+
+/* Restore */
+"Restore" = "復元";
+
+/* Restore backup */
+"Restore backup" = "バックアップを復元";
+
+/* Restore backup... */
+"Restore backup..." = "バックアップを復元...";
+
+/* Restore done */
+"Restore done" = "復元しました";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "復元失敗: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "遭遇したCMDRを復元";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "復元: 一覧からバックアップを選びます。現在のリストを先に保存するので、復元を取り消せます。";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "{FILE} からCMDRを {COUNT}人復元しました。";
+
+/* Save */
+"Save" = "保存";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "バックアップを保存しました:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "{COUNT}件の名前を保存しました。";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "{COUNT}件の名前を保存しました。";
+
+/* Seen */
+"Seen" = "遭遇";
+
+/* Seen Commanders */
+"Seen Commanders" = "遭遇したCMDR";
+
+/* Seen commanders */
+"Seen commanders" = "遭遇したCMDR";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "遭遇したCMDR（マウス透過）";
+
+/* Seen commanders list */
+"Seen commanders list" = "遭遇したCMDRのリスト";
+
+/* Select a backup first. */
+"Select a backup first." = "先にバックアップを選んでください。";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "最終確認の前に名前を一つ以上選んでください。";
+
+/* Show help */
+"Show help" = "ヘルプを表示";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "スキップ（名前なし）: {COUNT}";
+
+/* Sound */
+"Sound" = "音";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "音声ファイル: WAVかMP3を sounds フォルダに置きます。default フォルダは変更しないでください。メインの sounds にある同じ名前のファイルが default を置き換えます（拡張子は不問）。各名前では最新のファイルを使います。";
+
+/* Sound: */
+"Sound:" = "音:";
+
+/* Spelling changes */
+"Spelling changes" = "表記の変更";
+
+/* Spelling saved */
+"Spelling saved" = "表記を保存しました";
+
+/* Startup */
+"Startup" = "起動時";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "起動: すでにグループにいる状態でEDMCが起動すると、その場のCMDRが逆順で鳴ることがあります。空のインスタンス（通常空間、スーパークルーズ、ハイパースペース）で約5秒待つと戻ります。";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "このファイルはテキストとして読めませんでした。";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "このファイルは2万件を超えるため、インポートしていません。";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "このファイルに有効なCMDRの項目はありません。";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "このファイルは5 MBを超えるため、読んでいません。";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "このファイルは入れ子が深すぎて読めません。";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "このファイルは遭遇したCMDRのリストではありません。";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "このファイルは正しいJSONではありません。";
+
+/* That file is too large to read. */
+"That file is too large to read." = "このファイルは大きすぎて読めません。";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "このインポート計画は無効です。";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "バックアップを書けませんでした。EDMCのログを見てください。";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Eliteのジャーナルフォルダが見つかりません。";
+
+/* The journals could not be read. */
+"The journals could not be read." = "ジャーナルを読めませんでした。";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "バックアップはまだありません。先に「今すぐバックアップ」を使ってください。";
+
+/* These are the names you selected. */
+"These are the names you selected." = "選んだ名前はこれらです。";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "これは実験的な機能です。{CR}{CR}艦のスキャン、ウィング名、キル、インターディクトが、CMDRの大文字や記号どおりの同じ名前を示したとき、Beep Beepは保存済みの名前を更新できます。例: Tishtech が TishTech になる。打ち込んだチャットは使いません。未知のCMDRはそのままです。それらの記録が食い違うとき、または保存済みの二つの行がすでに別の表記のときは名前を飛ばします。{CR}{CR}続ける前に seen_commanders.json のコピーを取ってください。{CR}{CR}確認で一覧が開きます。最終確認まで保存されません。";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "ファイル内の時刻、キル、遭遇回数は無視します。{CR}インポートを選ぶまで何も書きません。キャンセルはリストを変えません。";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "ジャーナルの表記を採用";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "ジャーナルの表記を採用したため、名前を一つずつ見ずにこれらの候補が選ばれています。";
+
+/* unknown time */
+"unknown time" = "時刻不明";
+
+/* Update name spelling */
+"Update name spelling" = "名前の表記を更新";
+
+/* Update spelling */
+"Update spelling" = "表記を更新";
+
+/* Verify all */
+"Verify all" = "すべて選択";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAVまたはMP3。sounds フォルダの同じ名前のファイルが default を置き換えます。";
+
+/* Window */
+"Window" = "ウィンドウ";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "ウィング: オフのとき、ウィングメンバーには音が鳴りません。ウィングの警報だけに効きます。";
+
+/* Wrong name */
+"Wrong name" = "名前が違う";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "リストを {FILE} にバックアップしました。";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}{COUNT}件の名前を保存する準備ができました。まだ何も書いていません。{CR}{CR}確認で書き込みます。戻るでは名前はそのままです。";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ 再生";
+

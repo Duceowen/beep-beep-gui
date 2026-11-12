@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "Türkçe";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "'{NAME}' buradaki {COUNT} CMDR ile eşleşiyor";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... ve {COUNT} tane daha";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "Bir CMDR instance'a girdi";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "Bir PvP öldürmesi, o ziyaretin tek bilinmeyen CMDR'sine ad verir.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "Eklenen CMDR: {ADDED}.{CR}Doldurulan bilinmeyen ad: {FILLED}.{CR}Korunan mevcut ad: {KEPT}.{CR}Adsız atlanan: {SKIPPED}.{CR}Reddedilen geçersiz satır: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Uyarı sesi (%)";
+
+/* Alerts */
+"Alerts" = "Uyarılar";
+
+/* All files */
+"All files" = "Tüm dosyalar";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Varışları Modern Overlay ile duyur";
+
+/* Autofill on kill */
+"Autofill on kill" = "Öldürünce ad doldur";
+
+/* Back up now */
+"Back up now" = "Şimdi yedekle";
+
+/* Backup failed */
+"Backup failed" = "Yedekleme başarısız";
+
+/* Backup saved */
+"Backup saved" = "Yedek kaydedildi";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Beep Beep seçenekleri açık. Listeyi düzenlemek için pencereyi kapatın";
+
+/* Beep for wing members */
+"Beep for wing members" = "Wing üyeleri için uyarı";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "CMDR ayrılınca da uyar";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Ayrılış uyarısı: supercruise'tayken biri ayrılınca da ses çalar.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "BeepBeep bağlantıları";
+
+/* Beeped early */
+"Beeped early" = "Uyarı çok erken";
+
+/* Beeped late */
+"Beeped late" = "Uyarı çok geç";
+
+/* Before import */
+"Before import" = "İçe aktarmadan önce";
+
+/* Cancel */
+"Cancel" = "İptal";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Değişiklik {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Değişen adlar: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "İstediğiniz adları işaretleyin. Son onaydan önce hiçbir şey yazılmaz. Kapatmak adları olduğu gibi bırakır.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "İstediğiniz adları işaretleyin. Son onaydan önce hiçbir şey yazılmaz.";
+
+/* Clear */
+"Clear" = "Temizle";
+
+/* Close */
+"Close" = "Kapat";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "CMDR {NAME} instance'a girdi";
+
+/* Confirm */
+"Confirm" = "Onayla";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Yazım değişikliklerini onayla";
+
+/* Continue */
+"Continue" = "Devam";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Geçerli liste yedeklenemedi, bu yüzden hiçbir şey içe aktarılmadı.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Geçerli liste yedeklenemedi, bu yüzden hiçbir şey geri yüklenmedi.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Kaldırılamadı: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Hata ayıklama";
+
+/* Detect */
+"Detect" = "Algıla";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "CMDR {NAME} düzenle";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "EDMC Modern Overlay gerekli.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Tüm öneriler seçili. Son onaydan önce hiçbir şey yazılmaz.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Tüm öneriler seçili başlar. İstemediklerinizin işaretini kaldırın. Son onaydan önce hiçbir şey yazılmaz.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Deneysel yazım güncellemesi. Önce seen_commanders.json dosyasını kopyalayın. Son onay işaretli adları kaydeder.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Fazladan uyarı";
+
+/* Go Back */
+"Go Back" = "Geri";
+
+/* Hidden */
+"Hidden" = "Gizli";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Fareden gizle: {MODE}";
+
+/* Hide help */
+"Hide help" = "Yardımı gizle";
+
+/* Import */
+"Import" = "İçe aktar";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "İçe aktarma, önizlemeden sonra yalnızca ad ekler. Adsız kayıtlar atlanır ve ses neutral olur.";
+
+/* Import commander names */
+"Import commander names" = "CMDR adlarını içe aktar";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Başka bir seen_commanders.json dosyasından CMDR adlarını içe aktar";
+
+/* Import failed */
+"Import failed" = "İçe aktarma başarısız";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "İçe aktarma başarısız: {ERROR}";
+
+/* Import finished */
+"Import finished" = "İçe aktarma bitti";
+
+/* Import names... */
+"Import names..." = "Adları içe aktar...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "İçe aktarma: başka bir oyuncunun seen_commanders.json dosyasını okur ve önce önizleme gösterir. Yalnızca gerçek adı olan CMDR'ler eklenir. Zamanlar, öldürmeler ve sayılar kopyalanmaz, sizin adlarınız kalır. İptal hiçbir şey yazmaz.";
+
+/* Interdiction */
+"Interdiction" = "Interdiction";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Geçersiz satırlar: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Oyunun üstünde tut";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Oyunun üstünde: yalnızca pencereli ve çerçevesiz. Linux'ta odaktaki tam ekran oyun bu pencereyi yine kapatabilir.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Korunan mevcut adlar: {COUNT}";
+
+/* Killed */
+"Killed" = "Öldürüldü";
+
+/* Kills */
+"Kills" = "Öldürme";
+
+/* Last Encounter */
+"Last Encounter" = "Son karşılaşma";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "{MINUTES} dk önce";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "{SECONDS} sn önce";
+
+/* Manual */
+"Manual" = "Elle";
+
+/* Mark failed */
+"Mark failed" = "İşaret kaydedilemedi";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "İşaretlendi: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: ekranın ortasında «CMDR <name> instance'a girdi» gösterir. Ad Seen Commanders'dan gelir, orada değiştirin.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Birden çok ses";
+
+/* Name */
+"Name" = "Ad";
+
+/* Name: */
+"Name:" = "Ad:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "Yeni    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "Yeni adlar: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "Uyarı yok";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "Hiçbir ad eklenmez veya değişmez.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "Kayıtlı hiçbir adın günlüklerde daha net bir yazılışı yoktu.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "Seçilen adların hiçbiri kaydedilemedi.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Bilinen bir yedek dosyası değil: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Burada değil (Şimdi görünüyor)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Bir şey değişmedi, yedek alınmadı.";
+
+/* Now */
+"Now" = "Şimdi";
+
+/* Off */
+"Off" = "Kapalı";
+
+/* OK */
+"OK" = "Tamam";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "Varsayılan olarak açık. recordings altına bir oturum dosyası yazar. Uyarılar aynı kalır. Sohbet metni kaydedilmez.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Opaklık (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Yedek klasörünü aç";
+
+/* Open recordings folder */
+"Open recordings folder" = "recordings klasörünü aç";
+
+/* Open sounds folder */
+"Open sounds folder" = "sounds klasörünü aç";
+
+/* Options */
+"Options" = "Seçenekler";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Bir yedek seçin. Geçerli liste önce kaydedilir, bu yüzden geri alınabilir.";
+
+/* Play */
+"Play" = "Çal";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Her CMDR 200 ms arayla çalar.";
+
+/* Reading journals... */
+"Reading journals..." = "Günlükler okunuyor...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Hata ayıklama için oturumu kaydet";
+
+/* Reload sounds */
+"Reload sounds" = "Sesleri yenile";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Sesleri yenile, EDMC'yi yeniden başlatmadan eklenen veya değişen dosyaları alır.";
+
+/* Remove commander */
+"Remove commander" = "CMDR'yi kaldır";
+
+/* Remove from list... */
+"Remove from list..." = "Listeden kaldır...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "{NAME} (id {ID}) görülenler listesinden kaldırılsın mı?{CR}{CR}Geri getirmenin tek yolu yedekten geri yüklemektir. Oyun bu CMDR'yi yazmaya devam ederse, bir sonraki görüşte yeni satır olarak gelir.";
+
+/* Report beep issue */
+"Report beep issue" = "Uyarı sorununu bildir";
+
+/* Restore */
+"Restore" = "Geri yükle";
+
+/* Restore backup */
+"Restore backup" = "Yedeği geri yükle";
+
+/* Restore backup... */
+"Restore backup..." = "Yedeği geri yükle...";
+
+/* Restore done */
+"Restore done" = "Geri yükleme bitti";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Geri yükleme başarısız: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Görülen CMDR'leri geri yükle";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Geri yükleme: listeden bir yedek seçin. Geçerli liste önce kaydedilir, bu yüzden geri alabilirsiniz.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "{FILE} dosyasından {COUNT} CMDR geri yüklendi.";
+
+/* Save */
+"Save" = "Kaydet";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Yedek kaydedildi:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "{COUNT} ad kaydedildi.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "{COUNT} ad kaydedildi.";
+
+/* Seen */
+"Seen" = "Görülen";
+
+/* Seen Commanders */
+"Seen Commanders" = "Görülen CMDR'ler";
+
+/* Seen commanders */
+"Seen commanders" = "Görülen CMDR'ler";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "Görülen CMDR'ler (fareden gizli)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Görülen CMDR listesi";
+
+/* Select a backup first. */
+"Select a backup first." = "Önce bir yedek seçin.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Son onaydan önce en az bir ad seçin.";
+
+/* Show help */
+"Show help" = "Yardımı göster";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Atlandı (ad yok): {COUNT}";
+
+/* Sound */
+"Sound" = "Ses";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Ses dosyaları: WAV veya MP3 dosyalarını sounds klasörüne koyun. default klasörünü değiştirmeyin. Ana sounds klasöründeki aynı adlı dosya, default içindeki sesin yerine geçer (uzantı önemli değil). Her ad için en yeni dosya kullanılır.";
+
+/* Sound: */
+"Sound:" = "Ses:";
+
+/* Spelling changes */
+"Spelling changes" = "Yazım değişiklikleri";
+
+/* Spelling saved */
+"Spelling saved" = "Yazım kaydedildi";
+
+/* Startup */
+"Startup" = "Başlangıçta";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Başlangıç: zaten bir gruptayken EDMC açılırsa, orada olan CMDR'ler ters sırada çalabilir. Bunu sıfırlamak için boş bir instance'ta (normal uzay, supercruise veya hiperuzay) yaklaşık 5 saniye bekleyin.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "Bu dosya metin olarak okunamadı.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "Bu dosyada 20.000'den fazla kayıt var, bu yüzden içe aktarılmadı.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "Bu dosyada geçerli CMDR kaydı yok.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "Bu dosya 5 MB'tan büyük, bu yüzden okunmadı.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "Bu dosya okunamayacak kadar derin iç içe.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "Bu dosya görülen CMDR listesi değil.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "Bu dosya geçerli bir JSON değil.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "Bu dosya okunamayacak kadar büyük.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "Bu içe aktarma planı geçerli değil.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "Yedek yazılamadı. EDMC günlüğüne bakın.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Elite günlük klasörü bulunamadı.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "Günlükler okunamadı.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "Henüz yedek yok. Önce «Şimdi yedekle»yi kullanın.";
+
+/* These are the names you selected. */
+"These are the names you selected." = "Seçtiğiniz adlar bunlar.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "Bu deneyseldir.{CR}{CR}Gemi taraması, wing adı, öldürme veya interdiction, CMDR'nin kullandığı büyük harf ve noktalama ile aynı adı gösterdiğinde Beep Beep kayıtlı adı güncelleyebilir; örneğin Tishtech, TishTech olur. Yazılan sohbet satırı kullanılmaz. Bilinmeyen CMDR'ler bilinmeyen kalır. Bu kayıtlar uyuşmazsa veya kayıtlı iki satır adı zaten farklı yazıyorsa ad atlanır.{CR}{CR}Devam etmeden önce seen_commanders.json dosyasının kopyasını alın.{CR}{CR}Onayla listeyi açar. Son onaya kadar hiçbir şey yazılmaz.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Dosyadaki zamanlar, öldürmeler ve sayılar yok sayılır.{CR}İçe aktar'ı seçene kadar hiçbir şey yazılmaz. İptal listenize dokunmaz.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Günlük yazımına güven";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Günlük yazımına güvenmek, her adı tek tek kontrol etmeden bu önerileri seçti.";
+
+/* unknown time */
+"unknown time" = "zaman bilinmiyor";
+
+/* Update name spelling */
+"Update name spelling" = "Ad yazımını güncelle";
+
+/* Update spelling */
+"Update spelling" = "Yazımı güncelle";
+
+/* Verify all */
+"Verify all" = "Tümünü işaretle";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV veya MP3. sounds klasöründeki aynı adlı dosya, default içindeki sesin yerine geçer.";
+
+/* Window */
+"Window" = "Pencere";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Wing: kapalıyken wing üyeleri için ses çalmaz. Yalnızca wing uyarılarını etkiler.";
+
+/* Wrong name */
+"Wrong name" = "Yanlış ad";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Listeniz {FILE} dosyasına yedeklendi.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}{COUNT} ad kaydetmeye hazır. Henüz hiçbir şey yazılmadı.{CR}{CR}Onayla onları yazar. Geri her adı olduğu gibi bırakır.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Çal";
+
