@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.13](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.13/beep-beep-gui-1.1.13.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.14](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.14/beep-beep-gui-1.1.14.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -22,6 +22,7 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 - Hide from mouse (Windows): click-through Seen Commanders window while on foot, with a Detect/Hidden/Off button in the EDMC main window
 - Configurable alert settings
 - Session recording for debugging, on until you turn it off in Options. Chat text is not saved. Beeps are unchanged
+- Follows the language selected in EDMC. English is used when that language has no translation yet
 
 ## Notes
 - Only tested with the latest version of EDMarketConnector
@@ -32,6 +33,10 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.14
+- Seen Commanders, Options, and the messages on screen follow the language chosen in EDMC
+- English is used when that language has no translation yet
 
 ## 1.1.13
 - Wing members stay muted for the whole wing session when wing alerts are off. The journal wing roster (WingJoin/WingAdd) names them even when CommanderHistory has no WingMember flag yet, and when the 20-second join window has passed

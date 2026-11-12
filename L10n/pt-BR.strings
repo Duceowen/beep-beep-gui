@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "Português (Brasil)";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "'{NAME}' corresponde a {COUNT} CMDRs aqui";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... e mais {COUNT}";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "Um CMDR entrou na instância";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "Um abate PvP nomeia o único CMDR desconhecido daquela visita.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "CMDRs adicionados: {ADDED}.{CR}Nomes desconhecidos preenchidos: {FILLED}.{CR}Nomes que você já tinha: {KEPT}.{CR}Entradas sem nome ignoradas: {SKIPPED}.{CR}Linhas inválidas rejeitadas: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Volume do alerta (%)";
+
+/* Alerts */
+"Alerts" = "Alertas";
+
+/* All files */
+"All files" = "Todos os arquivos";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Anunciar chegadas no Modern Overlay";
+
+/* Autofill on kill */
+"Autofill on kill" = "Preencher nome no abate";
+
+/* Back up now */
+"Back up now" = "Fazer backup agora";
+
+/* Backup failed */
+"Backup failed" = "Falha no backup";
+
+/* Backup saved */
+"Backup saved" = "Backup salvo";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "As opções do Beep Beep estão abertas. Feche-as para editar a lista";
+
+/* Beep for wing members */
+"Beep for wing members" = "Alerta para a ala";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "Alertar quando um CMDR sair";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Alerta de saída: também toca quando alguém sai enquanto você está em supercruise.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "Conexões BeepBeep";
+
+/* Beeped early */
+"Beeped early" = "Alerta cedo demais";
+
+/* Beeped late */
+"Beeped late" = "Alerta tarde demais";
+
+/* Before import */
+"Before import" = "Antes da importação";
+
+/* Cancel */
+"Cancel" = "Cancelar";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Mudança {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Nomes alterados: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "Marque cada nome que quiser. Nada é salvo até a confirmação final. Fechar deixa todos os nomes como estão.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "Marque os nomes que quiser. Nada é salvo até a confirmação final.";
+
+/* Clear */
+"Clear" = "Limpar";
+
+/* Close */
+"Close" = "Fechar";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "CMDR {NAME} entrou na instância";
+
+/* Confirm */
+"Confirm" = "Confirmar";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Confirmar correções de nome";
+
+/* Continue */
+"Continue" = "Continuar";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Não foi possível fazer backup da lista, então nada foi importado.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Não foi possível fazer backup da lista, então nada foi restaurado.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Não foi possível remover: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Depuração";
+
+/* Detect */
+"Detect" = "Detectar";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "Editar CMDR {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "EDMC Modern Overlay necessário.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Todas as sugestões estão marcadas. Nada é salvo até a confirmação final.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Todas as sugestões começam marcadas. Desmarque os nomes que não quiser. Nada é salvo até a confirmação final.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Atualização experimental de nomes. Copie seen_commanders.json antes. A confirmação final salva os nomes marcados.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Alerta a mais";
+
+/* Go Back */
+"Go Back" = "Voltar";
+
+/* Hidden */
+"Hidden" = "Oculto";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Ocultar do mouse: {MODE}";
+
+/* Hide help */
+"Hide help" = "Ocultar ajuda";
+
+/* Import */
+"Import" = "Importar";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "A importação só adiciona nomes, depois da prévia. Entradas sem nome são ignoradas e o som vira neutral.";
+
+/* Import commander names */
+"Import commander names" = "Importar nomes de CMDR";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Importar nomes de CMDR de outro seen_commanders.json";
+
+/* Import failed */
+"Import failed" = "Falha na importação";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "Falha na importação: {ERROR}";
+
+/* Import finished */
+"Import finished" = "Importação concluída";
+
+/* Import names... */
+"Import names..." = "Importar nomes...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "Importação: lê o seen_commanders.json de outro jogador e mostra uma prévia primeiro. Só entram CMDRs com nome de verdade. Horas, abates e contagens não são copiados, e os nomes que você já tem ficam. Cancelar não grava nada.";
+
+/* Interdiction */
+"Interdiction" = "Interdição";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Linhas inválidas: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Acima do jogo";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Acima do jogo: só em janela e sem borda. No Linux, um jogo em tela cheia com foco ainda pode cobrir esta janela.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Nomes que você já tinha: {COUNT}";
+
+/* Killed */
+"Killed" = "Abatido";
+
+/* Kills */
+"Kills" = "Abates";
+
+/* Last Encounter */
+"Last Encounter" = "Último encontro";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "Visto há {MINUTES} min";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "Visto há {SECONDS} s";
+
+/* Manual */
+"Manual" = "Manual";
+
+/* Mark failed */
+"Mark failed" = "Falha ao marcar";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "Marcado: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: mostra no centro «CMDR <name> entrou na instância». O nome vem de Seen Commanders; renomeie o CMDR lá para mudá-lo.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Vários sons";
+
+/* Name */
+"Name" = "Nome";
+
+/* Name: */
+"Name:" = "Nome:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "Novo    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "Nomes novos: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "Sem alerta";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "Nenhum nome seria adicionado ou alterado.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "Nenhum nome salvo tinha uma grafia mais clara nos diários.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "Nenhum dos nomes selecionados pôde ser salvo.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Não é um backup conhecido: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Não está aqui (mostrado como Agora)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Nada mudou, então nenhum backup foi feito.";
+
+/* Now */
+"Now" = "Agora";
+
+/* Off */
+"Off" = "Desligado";
+
+/* OK */
+"OK" = "OK";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "Ligado por padrão. Grava um arquivo de sessão em recordings. Os alertas continuam iguais. O texto do chat não é salvo.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Opacidade (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Abrir pasta de backups";
+
+/* Open recordings folder */
+"Open recordings folder" = "Abrir a pasta recordings";
+
+/* Open sounds folder */
+"Open sounds folder" = "Abrir a pasta sounds";
+
+/* Options */
+"Options" = "Opções";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Escolha um backup. A lista atual é salva antes, então dá para desfazer.";
+
+/* Play */
+"Play" = "Tocar";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Toca cada CMDR com 200 ms de intervalo.";
+
+/* Reading journals... */
+"Reading journals..." = "Lendo os diários...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Gravar a sessão para depuração";
+
+/* Reload sounds */
+"Reload sounds" = "Recarregar sons";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Recarregar sons pega arquivos adicionados ou trocados sem reiniciar o EDMC.";
+
+/* Remove commander */
+"Remove commander" = "Remover CMDR";
+
+/* Remove from list... */
+"Remove from list..." = "Remover da lista...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "Remover {NAME} (id {ID}) da lista?{CR}{CR}Só um restore de backup traz de volta. Se o jogo ainda listar este CMDR, ele volta como uma linha nova na próxima vez.";
+
+/* Report beep issue */
+"Report beep issue" = "Informar problema do alerta";
+
+/* Restore */
+"Restore" = "Restaurar";
+
+/* Restore backup */
+"Restore backup" = "Restaurar backup";
+
+/* Restore backup... */
+"Restore backup..." = "Restaurar backup...";
+
+/* Restore done */
+"Restore done" = "Restauração feita";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Falha ao restaurar: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Restaurar CMDRs vistos";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Restauração: escolha um backup na lista. A lista atual é salva antes, então dá para desfazer.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "{COUNT} CMDRs restaurados de {FILE}.";
+
+/* Save */
+"Save" = "Salvar";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Backup salvo:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "{COUNT} nome salvo.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "{COUNT} nomes salvos.";
+
+/* Seen */
+"Seen" = "Vistos";
+
+/* Seen Commanders */
+"Seen Commanders" = "CMDRs vistos";
+
+/* Seen commanders */
+"Seen commanders" = "CMDRs vistos";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "CMDRs vistos (oculto do mouse)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Lista de CMDRs vistos";
+
+/* Select a backup first. */
+"Select a backup first." = "Selecione um backup primeiro.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Selecione ao menos um nome antes da confirmação final.";
+
+/* Show help */
+"Show help" = "Mostrar ajuda";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Ignorados (sem nome): {COUNT}";
+
+/* Sound */
+"Sound" = "Som";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Arquivos de som: coloque WAV ou MP3 na pasta sounds. Não altere a pasta default. Um arquivo na pasta sounds principal com o mesmo nome substitui um do default (a extensão não importa). Vale o arquivo mais novo de cada nome.";
+
+/* Sound: */
+"Sound:" = "Som:";
+
+/* Spelling changes */
+"Spelling changes" = "Correções de nome";
+
+/* Spelling saved */
+"Spelling saved" = "Nomes salvos";
+
+/* Startup */
+"Startup" = "Na inicialização";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Inicialização: se o EDMC abrir com você já em um grupo, os CMDRs já presentes podem tocar ao contrário. Espere uns 5 segundos numa instância vazia (espaço normal, supercruise ou hiperespaço) para zerar isso.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "Esse arquivo não pôde ser lido como texto.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "Esse arquivo tem mais de 20.000 entradas, então não foi importado.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "Esse arquivo não tem entradas válidas de CMDR.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "Esse arquivo passa de 5 MB, então não foi lido.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "Esse arquivo está aninhado fundo demais para ser lido.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "Esse arquivo não é uma lista de CMDRs vistos.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "Esse arquivo não é um JSON válido.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "Esse arquivo é grande demais para ser lido.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "Esse plano de importação não é válido.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "O backup não pôde ser gravado. Veja o log do EDMC.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "A pasta de diários do Elite não foi encontrada.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "Os diários não puderam ser lidos.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "Ainda não há backups. Use primeiro «Fazer backup agora».";
+
+/* These are the names you selected. */
+"These are the names you selected." = "Estes são os nomes que você escolheu.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "Isto é experimental.{CR}{CR}O Beep Beep pode atualizar um nome salvo quando um scan, um nome de ala, um abate ou uma interdição mostra esse mesmo nome com as maiúsculas e a pontuação que o CMDR usou, como Tishtech virando TishTech. Uma linha de chat digitada não entra. CMDRs desconhecidos continuam desconhecidos. Um nome é ignorado se esses registros discordam, ou se duas linhas salvas já o escrevem de forma diferente.{CR}{CR}Faça uma cópia de seen_commanders.json antes de continuar.{CR}{CR}Confirmar abre a lista. Nada é salvo até a confirmação final.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Horas, abates e contagens no arquivo são ignorados.{CR}Nada é gravado até você escolher Importar. Cancelar deixa sua lista intacta.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Confiar na grafia do diário";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Confiar na grafia do diário marcou estas sugestões sem checar cada nome.";
+
+/* unknown time */
+"unknown time" = "hora desconhecida";
+
+/* Update name spelling */
+"Update name spelling" = "Atualizar grafia dos nomes";
+
+/* Update spelling */
+"Update spelling" = "Atualizar grafia";
+
+/* Verify all */
+"Verify all" = "Marcar todos";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV ou MP3. Um arquivo com o mesmo nome na pasta sounds substitui um do default.";
+
+/* Window */
+"Window" = "Janela";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Ala: desligado, nenhum som para membros da ala. Isso só afeta os alertas da ala.";
+
+/* Wrong name */
+"Wrong name" = "Nome errado";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Sua lista foi salva em {FILE}.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}Pronto para salvar {COUNT} nomes. Nada foi gravado ainda.{CR}{CR}Confirmar grava. Voltar deixa todos os nomes como estão.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Tocar";
+

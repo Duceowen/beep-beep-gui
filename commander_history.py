@@ -10,6 +10,7 @@ import unicodedata
 from typing import Callable, Dict, NotRequired, TypedDict
 from logutil import log
 from beep_beep_config import config
+from i18n import tl
 from session_recorder import SessionRecorder
 from instance_machine import (
     HISTORY_POLL_SECONDS,
@@ -489,11 +490,11 @@ def describe_import_plan(plan: dict) -> str:
     added = plan.get("added") if isinstance(plan.get("added"), list) else []
     filled = plan.get("filled") if isinstance(plan.get("filled"), list) else []
     return "\n".join((
-        "New names: %d" % len(added),
-        "Changed names: %d" % len(filled),
-        "Kept names you already have: %d" % count("kept"),
-        "Skipped (no name): %d" % count("skipped"),
-        "Invalid rows: %d" % count("invalid"),
+        tl("New names: {COUNT}").format(COUNT=len(added)),
+        tl("Changed names: {COUNT}").format(COUNT=len(filled)),
+        tl("Kept names you already have: {COUNT}").format(COUNT=count("kept")),
+        tl("Skipped (no name): {COUNT}").format(COUNT=count("skipped")),
+        tl("Invalid rows: {COUNT}").format(COUNT=count("invalid")),
     ))
 
 
@@ -504,8 +505,8 @@ def import_plan_lines(plan: dict, limit: int = 40) -> list[str]:
     lines = []
     shown = 0
     groups = (
-        ("New    ", plan.get("added")),
-        ("Change ", plan.get("filled")),
+        ("New    {ID}    {NAME}", plan.get("added")),
+        ("Change {ID}    {NAME}", plan.get("filled")),
     )
     total = 0
     for _prefix, items in groups:
@@ -519,11 +520,11 @@ def import_plan_lines(plan: dict, limit: int = 40) -> list[str]:
                 break
             if not isinstance(item, dict):
                 continue
-            lines.append("%s%s    %s" % (prefix, item.get("id", ""), item.get("name", "")))
+            lines.append(tl(prefix).format(ID=item.get("id", ""), NAME=item.get("name", "")))
             shown += 1
     extra = total - shown
     if extra > 0:
-        lines.append("... and %d more" % extra)
+        lines.append(tl("... and {COUNT} more").format(COUNT=extra))
     return lines
 
 
@@ -1877,9 +1878,9 @@ class CommanderHistoryManager:
             last = self._visit.get(str(cmdr_id))
             age = max(0, int(time.monotonic() - last))
             if age >= 60:
-                return "Last Seen %dm ago" % (age // 60)
-            return "Last Seen %ds ago" % age
-        return "Now"
+                return tl("Last Seen {MINUTES}m ago").format(MINUTES=age // 60)
+            return tl("Last Seen {SECONDS}s ago").format(SECONDS=age)
+        return tl("Now")
 
     def _clear_history_absence(self) -> None:
         self._history_listed = None

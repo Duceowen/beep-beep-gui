@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "한국어(Korean)";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "'{NAME}' 이(가) 여기 CMDR {COUNT}명과 일치";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... 외 {COUNT}개";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "CMDR가 인스턴스에 진입했습니다";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvP 킬은 그 방문의 미확인 CMDR가 한 명일 때 이름을 붙입니다.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "추가한 CMDR: {ADDED}.{CR}미확인 이름 채움: {FILLED}.{CR}기존 이름 유지: {KEPT}.{CR}이름 없는 항목 건너뜀: {SKIPPED}.{CR}잘못된 행 거부: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "경보 음량 (%)";
+
+/* Alerts */
+"Alerts" = "경보";
+
+/* All files */
+"All files" = "모든 파일";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Modern Overlay에 도착 표시";
+
+/* Autofill on kill */
+"Autofill on kill" = "킬 시 이름 채우기";
+
+/* Back up now */
+"Back up now" = "지금 백업";
+
+/* Backup failed */
+"Backup failed" = "백업 실패";
+
+/* Backup saved */
+"Backup saved" = "백업을 저장했습니다";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Beep Beep 옵션이 열려 있습니다. 목록을 고치려면 옵션을 닫으세요";
+
+/* Beep for wing members */
+"Beep for wing members" = "윙 멤버도 알림";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "CMDR가 떠날 때도 알림";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "이탈 알림: 슈퍼크루즈 중에 누군가 떠나도 소리가 납니다.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "BeepBeep 연결";
+
+/* Beeped early */
+"Beeped early" = "알림이 너무 빠름";
+
+/* Beeped late */
+"Beeped late" = "알림이 너무 늦음";
+
+/* Before import */
+"Before import" = "가져오기 전";
+
+/* Cancel */
+"Cancel" = "취소";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "변경 {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "바뀐 이름: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "원하는 이름을 고르세요. 최종 확인 전에는 저장되지 않습니다. 닫으면 이름은 그대로입니다.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "원하는 이름을 고르세요. 최종 확인 전에는 저장되지 않습니다.";
+
+/* Clear */
+"Clear" = "지우기";
+
+/* Close */
+"Close" = "닫기";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "CMDR {NAME} 님이 인스턴스에 진입했습니다";
+
+/* Confirm */
+"Confirm" = "확인";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "표기 변경 확인";
+
+/* Continue */
+"Continue" = "계속";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "현재 목록을 백업하지 못해 아무것도 가져오지 않았습니다.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "현재 목록을 백업하지 못해 아무것도 복원하지 않았습니다.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "제거할 수 없습니다: {ERROR}";
+
+/* Debugging */
+"Debugging" = "디버그";
+
+/* Detect */
+"Detect" = "감지";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "CMDR {NAME} 편집";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "EDMC Modern Overlay가 필요합니다.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "제안이 모두 선택되어 있습니다. 최종 확인 전에는 저장되지 않습니다.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "처음에는 제안이 모두 선택되어 있습니다. 원하지 않는 이름은 해제하세요. 최종 확인 전에는 저장되지 않습니다.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "실험적인 표기 업데이트입니다. 먼저 seen_commanders.json을 복사하세요. 마지막 확인이 선택한 이름을 저장합니다.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "불필요한 알림";
+
+/* Go Back */
+"Go Back" = "뒤로";
+
+/* Hidden */
+"Hidden" = "숨김";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "마우스 통과: {MODE}";
+
+/* Hide help */
+"Hide help" = "도움말 숨기기";
+
+/* Import */
+"Import" = "가져오기";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "가져오기는 미리보기 뒤에 이름만 더합니다. 이름 없는 항목은 건너뛰고 소리는 neutral이 됩니다.";
+
+/* Import commander names */
+"Import commander names" = "CMDR 이름 가져오기";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "다른 seen_commanders.json에서 CMDR 이름 가져오기";
+
+/* Import failed */
+"Import failed" = "가져오기 실패";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "가져오기 실패: {ERROR}";
+
+/* Import finished */
+"Import finished" = "가져오기 완료";
+
+/* Import names... */
+"Import names..." = "이름 가져오기...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "가져오기: 다른 플레이어의 seen_commanders.json을 읽고 먼저 미리보기를 보여 줍니다. 실제 이름이 있는 CMDR만 추가됩니다. 시각, 킬, 목격 횟수는 복사되지 않고 기존 이름은 남습니다. 취소는 아무것도 쓰지 않습니다.";
+
+/* Interdiction */
+"Interdiction" = "인터딕트";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "잘못된 행: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "게임 위에 유지";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "게임 위에 유지: 창 모드와 테두리 없음만 해당합니다. Linux에서는 포커스된 전체 화면 게임이 이 창을 가릴 수 있습니다.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "기존 이름 유지: {COUNT}";
+
+/* Killed */
+"Killed" = "처치";
+
+/* Kills */
+"Kills" = "킬";
+
+/* Last Encounter */
+"Last Encounter" = "마지막 조우";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "{MINUTES}분 전";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "{SECONDS}초 전";
+
+/* Manual */
+"Manual" = "수동";
+
+/* Mark failed */
+"Mark failed" = "표시를 기록하지 못했습니다";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "표시함: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: 화면 가운데에 「CMDR <name> 님이 인스턴스에 진입했습니다」를 보여 줍니다. 이름은 Seen Commanders에서 오므로 거기서 바꾸세요.";
+
+/* Multiple sounds */
+"Multiple sounds" = "연속 재생";
+
+/* Name */
+"Name" = "이름";
+
+/* Name: */
+"Name:" = "이름:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "신규    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "새 이름: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "알림 없음";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "추가되거나 바뀔 이름이 없습니다.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "저널에 저장된 이름보다 더 분명한 표기가 없었습니다.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "선택한 이름을 하나도 저장하지 못했습니다.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "알려진 백업 파일이 아닙니다: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "여기 없음 (지금으로 표시)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "바뀐 것이 없어 백업하지 않았습니다.";
+
+/* Now */
+"Now" = "지금";
+
+/* Off */
+"Off" = "끔";
+
+/* OK */
+"OK" = "확인";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "기본으로 켜져 있습니다. recordings에 세션 파일을 씁니다. 알림은 그대로입니다. 채팅 내용은 저장하지 않습니다.";
+
+/* Opacity (%) */
+"Opacity (%)" = "불투명도 (%)";
+
+/* Open backups folder */
+"Open backups folder" = "백업 폴더 열기";
+
+/* Open recordings folder */
+"Open recordings folder" = "recordings 폴더 열기";
+
+/* Open sounds folder */
+"Open sounds folder" = "sounds 폴더 열기";
+
+/* Options */
+"Options" = "옵션";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "백업을 고르세요. 현재 목록을 먼저 저장하므로 되돌릴 수 있습니다.";
+
+/* Play */
+"Play" = "재생";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "CMDR마다 200 ms 간격을 두고 재생합니다.";
+
+/* Reading journals... */
+"Reading journals..." = "저널을 읽는 중...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "디버그용 세션 기록";
+
+/* Reload sounds */
+"Reload sounds" = "소리 다시 읽기";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "소리 다시 읽기는 EDMC를 다시 시작하지 않고 추가되거나 바뀐 파일을 읽습니다.";
+
+/* Remove commander */
+"Remove commander" = "CMDR 제거";
+
+/* Remove from list... */
+"Remove from list..." = "목록에서 제거...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "본 목록에서 {NAME} (id {ID})을(를) 제거할까요?{CR}{CR}백업 복원으로만 되돌릴 수 있습니다. 게임이 이 CMDR를 계속 보여 주면 다음에 볼 때 새 행으로 나타납니다.";
+
+/* Report beep issue */
+"Report beep issue" = "알림 문제 기록";
+
+/* Restore */
+"Restore" = "복원";
+
+/* Restore backup */
+"Restore backup" = "백업 복원";
+
+/* Restore backup... */
+"Restore backup..." = "백업 복원...";
+
+/* Restore done */
+"Restore done" = "복원했습니다";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "복원 실패: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "본 CMDR 복원";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "복원: 목록에서 백업을 고릅니다. 현재 목록을 먼저 저장하므로 복원을 되돌릴 수 있습니다.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "{FILE}에서 CMDR {COUNT}명을 복원했습니다.";
+
+/* Save */
+"Save" = "저장";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "백업을 저장했습니다:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "이름 {COUNT}개를 저장했습니다.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "이름 {COUNT}개를 저장했습니다.";
+
+/* Seen */
+"Seen" = "목격";
+
+/* Seen Commanders */
+"Seen Commanders" = "본 CMDR";
+
+/* Seen commanders */
+"Seen commanders" = "본 CMDR";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "본 CMDR (마우스 통과)";
+
+/* Seen commanders list */
+"Seen commanders list" = "본 CMDR 목록";
+
+/* Select a backup first. */
+"Select a backup first." = "먼저 백업을 선택하세요.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "최종 확인 전에 이름을 하나 이상 선택하세요.";
+
+/* Show help */
+"Show help" = "도움말 보기";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "건너뜀 (이름 없음): {COUNT}";
+
+/* Sound */
+"Sound" = "소리";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "소리 파일: WAV나 MP3를 sounds 폴더에 넣으세요. default 폴더는 바꾸지 마세요. 기본 sounds 폴더의 같은 이름 파일이 default를 대체합니다(확장자는 상관없음). 이름마다 가장 최근 파일을 씁니다.";
+
+/* Sound: */
+"Sound:" = "소리:";
+
+/* Spelling changes */
+"Spelling changes" = "표기 변경";
+
+/* Spelling saved */
+"Spelling saved" = "표기를 저장했습니다";
+
+/* Startup */
+"Startup" = "시작 시";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "시작: 이미 그룹에 있는 동안 EDMC가 시작되면, 그 자리의 CMDR가 역순으로 울릴 수 있습니다. 빈 인스턴스(일반 공간, 슈퍼크루즈, 하이퍼스페이스)에서 약 5초 기다리면 초기화됩니다.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "이 파일은 텍스트로 읽을 수 없습니다.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "이 파일은 항목이 20,000개를 넘어 가져오지 않았습니다.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "이 파일에 유효한 CMDR 항목이 없습니다.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "이 파일은 5 MB보다 커서 읽지 않았습니다.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "이 파일은 중첩이 너무 깊어 읽을 수 없습니다.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "이 파일은 본 CMDR 목록이 아닙니다.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "이 파일은 올바른 JSON이 아닙니다.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "이 파일은 너무 커서 읽을 수 없습니다.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "이 가져오기 계획은 유효하지 않습니다.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "백업을 쓰지 못했습니다. EDMC 로그를 보세요.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Elite 저널 폴더를 찾지 못했습니다.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "저널을 읽을 수 없습니다.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "아직 백업이 없습니다. 먼저 「지금 백업」을 사용하세요.";
+
+/* These are the names you selected. */
+"These are the names you selected." = "선택한 이름은 이것들입니다.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "실험적인 기능입니다.{CR}{CR}함선 스캔, 윙 이름, 킬, 인터딕트가 CMDR가 쓴 대소문자와 문장 부호 그대로 같은 이름을 보여 주면 Beep Beep이 저장된 이름을 고칠 수 있습니다. 예: Tishtech가 TishTech가 됩니다. 직접 친 채팅은 쓰지 않습니다. 미확인 CMDR는 그대로입니다. 그 기록이 서로 다르거나, 저장된 두 행이 이미 다르게 적혀 있으면 그 이름은 건너뜁니다.{CR}{CR}계속하기 전에 seen_commanders.json을 복사하세요.{CR}{CR}확인을 누르면 목록이 열립니다. 최종 확인 전에는 저장되지 않습니다.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "파일의 시각, 킬, 목격 횟수는 무시합니다.{CR}가져오기를 고르기 전에는 아무것도 쓰지 않습니다. 취소는 목록을 그대로 둡니다.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "저널 표기를 신뢰";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "저널 표기를 신뢰해서, 이름을 하나씩 확인하지 않고 이 제안들이 선택되어 있습니다.";
+
+/* unknown time */
+"unknown time" = "시간 불명";
+
+/* Update name spelling */
+"Update name spelling" = "이름 표기 업데이트";
+
+/* Update spelling */
+"Update spelling" = "표기 업데이트";
+
+/* Verify all */
+"Verify all" = "모두 선택";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV 또는 MP3. sounds 폴더의 같은 이름 파일이 default를 대체합니다.";
+
+/* Window */
+"Window" = "창";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "윙: 끄면 윙 멤버에게는 소리가 나지 않습니다. 윙 알림에만 적용됩니다.";
+
+/* Wrong name */
+"Wrong name" = "이름이 틀림";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "목록을 {FILE}에 백업했습니다.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}이름 {COUNT}개를 저장할 준비가 되었습니다. 아직 아무것도 쓰지 않았습니다.{CR}{CR}확인이 기록합니다. 뒤로는 이름을 그대로 둡니다.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ 재생";
+

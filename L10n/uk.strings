@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "Українська";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "«{NAME}» збігається з {COUNT} КМДР тут";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... і ще {COUNT}";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "КМДР увійшов в інстанс";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvP-вбивство називає єдиного невідомого КМДР з цього візиту.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "Додано КМДР: {ADDED}.{CR}Заповнено невідомих імен: {FILLED}.{CR}Залишено ваших імен: {KEPT}.{CR}Пропущено без імені: {SKIPPED}.{CR}Відхилено некоректних рядків: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Гучність сигналу (%)";
+
+/* Alerts */
+"Alerts" = "Сигнали";
+
+/* All files */
+"All files" = "Усі файли";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Оголошувати прибуття в Modern Overlay";
+
+/* Autofill on kill */
+"Autofill on kill" = "Ім'я за вбивством";
+
+/* Back up now */
+"Back up now" = "Зберегти копію";
+
+/* Backup failed */
+"Backup failed" = "Копію не створено";
+
+/* Backup saved */
+"Backup saved" = "Копію збережено";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Параметри Beep Beep відкриті. Закрийте вікно параметрів, щоб змінити список";
+
+/* Beep for wing members */
+"Beep for wing members" = "Сигнал для крила";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "Сигнал, коли КМДР іде";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Сигнал, коли КМДР іде: звук лунає і тоді, коли хтось іде, поки ви в суперкруїзі.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "З'єднання BeepBeep";
+
+/* Beeped early */
+"Beeped early" = "Сигнал занадто рано";
+
+/* Beeped late */
+"Beeped late" = "Сигнал занадто пізно";
+
+/* Before import */
+"Before import" = "Перед імпортом";
+
+/* Cancel */
+"Cancel" = "Скасувати";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Зміна {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Змінені імена: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "Позначте потрібні імена. Нічого не записується до останнього підтвердження. Закриття лишає імена як були.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "Позначте потрібні імена. Нічого не записується до останнього підтвердження.";
+
+/* Clear */
+"Clear" = "Зняти";
+
+/* Close */
+"Close" = "Закрити";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "КМДР {NAME} увійшов в інстанс";
+
+/* Confirm */
+"Confirm" = "Підтвердити";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Підтвердити зміни написання";
+
+/* Continue */
+"Continue" = "Далі";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Поточний список не вдалося скопіювати, тож нічого не імпортовано.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Поточний список не вдалося скопіювати, тож нічого не відновлено.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Не вдалося видалити: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Налагодження";
+
+/* Detect */
+"Detect" = "Авто";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "Змінити КМДР {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "Потрібен EDMC Modern Overlay.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Усі варіанти вибрані. Нічого не записується до останнього підтвердження.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Спочатку вибрані всі варіанти. Зніміть імена, які не потрібні. Нічого не записується до останнього підтвердження.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Пробне оновлення написання. Спочатку скопіюйте seen_commanders.json. Останнє підтвердження зберігає позначені імена.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Зайвий сигнал";
+
+/* Go Back */
+"Go Back" = "Назад";
+
+/* Hidden */
+"Hidden" = "Сховано";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Сховати від миші: {MODE}";
+
+/* Hide help */
+"Hide help" = "Сховати довідку";
+
+/* Import */
+"Import" = "Імпорт";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "Імпорт додає лише імена, після перегляду. Записи без імені пропускаються, звук стає neutral.";
+
+/* Import commander names */
+"Import commander names" = "Імпорт імен КМДР";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Імпорт імен КМДР з іншого seen_commanders.json";
+
+/* Import failed */
+"Import failed" = "Імпорт не вдався";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "Імпорт не вдався: {ERROR}";
+
+/* Import finished */
+"Import finished" = "Імпорт завершено";
+
+/* Import names... */
+"Import names..." = "Імпорт імен...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "Імпорт: читає seen_commanders.json іншого гравця і спершу показує перегляд. Додаються лише КМДР зі справжнім іменем. Час, вбивства і лічильник зустрічей не копіюються, ваші імена лишаються. Скасування нічого не пише.";
+
+/* Interdiction */
+"Interdiction" = "Перехоплення";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Некоректні рядки: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Над грою";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Над грою: лише віконний і безрамковий режим. У Linux гра у фокусі на весь екран все ще може закрити це вікно.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Залишено ваші імена: {COUNT}";
+
+/* Killed */
+"Killed" = "Вбито";
+
+/* Kills */
+"Kills" = "Вбивства";
+
+/* Last Encounter */
+"Last Encounter" = "Остання зустріч";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "Бачили {MINUTES} хв тому";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "Бачили {SECONDS} сек тому";
+
+/* Manual */
+"Manual" = "Вручну";
+
+/* Mark failed */
+"Mark failed" = "Позначку не записано";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "Позначено: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: показує в центрі екрана «КМДР <name> увійшов в інстанс». Ім'я береться з Seen Commanders, перейменуйте КМДР там, щоб його змінити.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Кілька звуків";
+
+/* Name */
+"Name" = "Ім'я";
+
+/* Name: */
+"Name:" = "Ім'я:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "Новий    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "Нові імена: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "Не було сигналу";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "Жодне ім'я не додасться і не зміниться.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "У журналах не знайшлося яснішого написання збережених імен.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "Жодне вибране ім'я не вдалося зберегти.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Це не відомий файл копії: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Немає тут (а показано Зараз)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Нічого не змінилося, копія не потрібна.";
+
+/* Now */
+"Now" = "Зараз";
+
+/* Off */
+"Off" = "Вимк";
+
+/* OK */
+"OK" = "ОК";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "Увімкнено за замовчуванням. Пише файл сесії в recordings. Сигнали не змінюються. Текст чату не зберігається.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Прозорість (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Відкрити теку копій";
+
+/* Open recordings folder */
+"Open recordings folder" = "Відкрити теку recordings";
+
+/* Open sounds folder */
+"Open sounds folder" = "Відкрити теку sounds";
+
+/* Options */
+"Options" = "Параметри";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Виберіть копію. Поточний список спершу зберігається, тож це можна скасувати.";
+
+/* Play */
+"Play" = "Грати";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Кожен КМДР звучить з паузою 200 мс.";
+
+/* Reading journals... */
+"Reading journals..." = "Читаю журнали...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Записувати сесію для налагодження";
+
+/* Reload sounds */
+"Reload sounds" = "Оновити звуки";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Оновити звуки підхоплює додані й замінені файли без перезапуску EDMC.";
+
+/* Remove commander */
+"Remove commander" = "Видалити КМДР";
+
+/* Remove from list... */
+"Remove from list..." = "Видалити зі списку...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "Видалити {NAME} (id {ID}) зі списку зустрінутих?{CR}{CR}Повернути можна лише з копії. Якщо гра й далі пише цього КМДР, при наступній зустрічі з'явиться новий рядок.";
+
+/* Report beep issue */
+"Report beep issue" = "Повідомити про сигнал";
+
+/* Restore */
+"Restore" = "Відновити";
+
+/* Restore backup */
+"Restore backup" = "Відновити копію";
+
+/* Restore backup... */
+"Restore backup..." = "Відновити копію...";
+
+/* Restore done */
+"Restore done" = "Відновлено";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Відновлення не вдалося: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Відновити зустрінутих КМДР";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Відновлення: виберіть копію зі списку. Поточний список спершу зберігається, тож відновлення можна скасувати.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "Відновлено КМДР: {COUNT} з {FILE}.";
+
+/* Save */
+"Save" = "Зберегти";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Копію збережено:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "Збережено імен: {COUNT}.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "Збережено імен: {COUNT}.";
+
+/* Seen */
+"Seen" = "Зустрічі";
+
+/* Seen Commanders */
+"Seen Commanders" = "Зустрінуті КМДР";
+
+/* Seen commanders */
+"Seen commanders" = "Зустрінуті КМДР";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "Зустрінуті КМДР (сховано від миші)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Список зустрінутих КМДР";
+
+/* Select a backup first. */
+"Select a backup first." = "Спочатку виберіть копію.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Перед останнім підтвердженням виберіть хоча б одне ім'я.";
+
+/* Show help */
+"Show help" = "Показати довідку";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Пропущено (немає імені): {COUNT}";
+
+/* Sound */
+"Sound" = "Звук";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Файли звуків: кладіть WAV або MP3 у теку sounds. Теку default не змінюйте. Файл в основній теці sounds з тим самим іменем замінює звук із default (розширення не важливе). Береться найновіший файл кожного імені.";
+
+/* Sound: */
+"Sound:" = "Звук:";
+
+/* Spelling changes */
+"Spelling changes" = "Зміни написання";
+
+/* Spelling saved */
+"Spelling saved" = "Написання збережено";
+
+/* Startup */
+"Startup" = "Під час запуску";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Запуск: якщо EDMC стартує, коли ви вже в групі, вже присутні КМДР можуть прозвучати у зворотному порядку. Зачекайте близько 5 секунд у порожньому інстансі (звичайний космос, суперкруїз або гіперпростір), щоб це скинути.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "Цей файл не прочитався як текст.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "У файлі більше 20 000 записів, тож його не імпортовано.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "У файлі немає придатних записів КМДР.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "Файл більший за 5 МБ, тож його не читали.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "Файл вкладений занадто глибоко, його не прочитати.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "Це не список зустрінутих КМДР.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "Це не коректний JSON.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "Файл завеликий, його не прочитати.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "Цей план імпорту не годиться.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "Копію не вдалося записати. Дивіться журнал EDMC.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Теку журналів Elite не знайдено.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "Журнали не вдалося прочитати.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "Копій ще немає. Спочатку натисніть «Зберегти копію».";
+
+/* These are the names you selected. */
+"These are the names you selected." = "Це вибрані вами імена.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "Це пробна функція.{CR}{CR}Beep Beep може оновити збережене ім'я, коли скан корабля, ім'я в крилі, вбивство або перехоплення показує те саме ім'я з великими літерами й знаками, як їх пише КМДР, наприклад Tishtech стає TishTech. Набраний рядок чату не використовується. Невідомі КМДР лишаються невідомими. Ім'я пропускається, якщо ці записи суперечать або два збережені рядки вже пишуть його по-різному.{CR}{CR}Перед продовженням зробіть копію seen_commanders.json.{CR}{CR}Підтвердження відкриває список. Нічого не записується до останнього підтвердження.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Час, вбивства і лічильник зустрічей з файлу не беруться.{CR}Нічого не записується, поки ви не натиснете «Імпорт». Скасування не чіпає ваш список.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Довіряти написанню з журналу";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Довіра до журналу вибрала ці варіанти без перевірки кожного імені.";
+
+/* unknown time */
+"unknown time" = "час невідомий";
+
+/* Update name spelling */
+"Update name spelling" = "Оновити написання імен";
+
+/* Update spelling */
+"Update spelling" = "Оновити написання";
+
+/* Verify all */
+"Verify all" = "Позначити всі";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV або MP3. Файл з тим самим іменем у теці sounds замінює звук із default.";
+
+/* Window */
+"Window" = "Вікно";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Крило: якщо вимкнено, для членів крила звуку немає. Це стосується лише сигналів крила.";
+
+/* Wrong name */
+"Wrong name" = "Неправильне ім'я";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Ваш список скопійовано в {FILE}.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}Готово зберегти імен: {COUNT}. Поки нічого не записано.{CR}{CR}Підтвердження їх запише. Назад лишає всі імена як були.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Грати";
+

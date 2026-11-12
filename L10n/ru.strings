@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "Русский";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "«{NAME}» совпадает с {COUNT} КМДР здесь";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... и ещё {COUNT}";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "КМДР вошёл в инстанс";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvP-убийство называет единственного неизвестного КМДР с этого визита.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "Добавлено КМДР: {ADDED}.{CR}Заполнено неизвестных имён: {FILLED}.{CR}Оставлено ваших имён: {KEPT}.{CR}Пропущено без имени: {SKIPPED}.{CR}Отклонено неверных строк: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Громкость сигнала (%)";
+
+/* Alerts */
+"Alerts" = "Сигналы";
+
+/* All files */
+"All files" = "Все файлы";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Объявлять прибытия в Modern Overlay";
+
+/* Autofill on kill */
+"Autofill on kill" = "Имя по убийству";
+
+/* Back up now */
+"Back up now" = "Сохранить копию";
+
+/* Backup failed */
+"Backup failed" = "Копия не создана";
+
+/* Backup saved */
+"Backup saved" = "Копия сохранена";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Параметры Beep Beep открыты. Закройте окно параметров, чтобы править список";
+
+/* Beep for wing members */
+"Beep for wing members" = "Сигнал для звена";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "Сигнал, когда КМДР уходит";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Сигнал, когда КМДР уходит: звук играет и тогда, когда кто-то уходит, пока вы в суперкруизе.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "Подключения BeepBeep";
+
+/* Beeped early */
+"Beeped early" = "Сигнал слишком рано";
+
+/* Beeped late */
+"Beeped late" = "Сигнал слишком поздно";
+
+/* Before import */
+"Before import" = "Перед импортом";
+
+/* Cancel */
+"Cancel" = "Отмена";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Изменение {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Изменённые имена: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "Отметьте нужные имена. Ничего не пишется до последнего подтверждения. Закрытие оставляет имена как были.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "Отметьте нужные имена. Ничего не пишется до последнего подтверждения.";
+
+/* Clear */
+"Clear" = "Снять";
+
+/* Close */
+"Close" = "Закрыть";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "КМДР {NAME} вошёл в инстанс";
+
+/* Confirm */
+"Confirm" = "Подтвердить";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Подтвердить правки написания";
+
+/* Continue */
+"Continue" = "Далее";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Текущий список не удалось скопировать, поэтому ничего не импортировано.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Текущий список не удалось скопировать, поэтому ничего не восстановлено.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Не удалось удалить: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Отладка";
+
+/* Detect */
+"Detect" = "Авто";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "Править КМДР {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "Нужен EDMC Modern Overlay.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Все варианты выбраны. Ничего не пишется до последнего подтверждения.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Сначала выбраны все варианты. Снимите имена, которые не нужны. Ничего не пишется до последнего подтверждения.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Пробное обновление написания. Сначала скопируйте seen_commanders.json. Последнее подтверждение сохраняет отмеченные имена.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Лишний сигнал";
+
+/* Go Back */
+"Go Back" = "Назад";
+
+/* Hidden */
+"Hidden" = "Скрыто";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Скрыть от мыши: {MODE}";
+
+/* Hide help */
+"Hide help" = "Скрыть справку";
+
+/* Import */
+"Import" = "Импорт";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "Импорт добавляет только имена, после предпросмотра. Записи без имени пропускаются, звук становится neutral.";
+
+/* Import commander names */
+"Import commander names" = "Импорт имён КМДР";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Импорт имён КМДР из другого seen_commanders.json";
+
+/* Import failed */
+"Import failed" = "Импорт не удался";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "Импорт не удался: {ERROR}";
+
+/* Import finished */
+"Import finished" = "Импорт завершён";
+
+/* Import names... */
+"Import names..." = "Импорт имён...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "Импорт: читает seen_commanders.json другого игрока и сначала показывает предпросмотр. Добавляются только КМДР с настоящим именем. Время, убийства и счётчик встреч не копируются, ваши имена остаются. Отмена ничего не пишет.";
+
+/* Interdiction */
+"Interdiction" = "Перехват";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Неверные строки: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Поверх игры";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Поверх игры: только оконный и безрамочный режим. В Linux игра в фокусе на весь экран всё ещё может закрыть это окно.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Оставлены ваши имена: {COUNT}";
+
+/* Killed */
+"Killed" = "Убит";
+
+/* Kills */
+"Kills" = "Убийства";
+
+/* Last Encounter */
+"Last Encounter" = "Последняя встреча";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "Видели {MINUTES} мин назад";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "Видели {SECONDS} сек назад";
+
+/* Manual */
+"Manual" = "Вручную";
+
+/* Mark failed */
+"Mark failed" = "Отметку не записать";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "Отмечено: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: показывает в центре экрана «КМДР <name> вошёл в инстанс». Имя берётся из Seen Commanders, переименуйте КМДР там, чтобы его сменить.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Несколько звуков";
+
+/* Name */
+"Name" = "Имя";
+
+/* Name: */
+"Name:" = "Имя:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "Новый    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "Новые имена: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "Не было сигнала";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "Ни одно имя не добавится и не изменится.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "В журналах не нашлось более ясного написания сохранённых имён.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "Ни одно выбранное имя не удалось сохранить.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Это не известный файл копии: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Нет здесь (а показано Сейчас)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Ничего не изменилось, копия не нужна.";
+
+/* Now */
+"Now" = "Сейчас";
+
+/* Off */
+"Off" = "Выкл";
+
+/* OK */
+"OK" = "ОК";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "Включено по умолчанию. Пишет файл сессии в recordings. Сигналы не меняются. Текст чата не сохраняется.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Прозрачность (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Открыть папку копий";
+
+/* Open recordings folder */
+"Open recordings folder" = "Открыть папку recordings";
+
+/* Open sounds folder */
+"Open sounds folder" = "Открыть папку sounds";
+
+/* Options */
+"Options" = "Параметры";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Выберите копию. Текущий список сначала сохраняется, так что это можно отменить.";
+
+/* Play */
+"Play" = "Играть";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Каждый КМДР звучит с паузой 200 мс.";
+
+/* Reading journals... */
+"Reading journals..." = "Читаю журналы...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Записывать сессию для отладки";
+
+/* Reload sounds */
+"Reload sounds" = "Обновить звуки";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Обновить звуки подхватывает добавленные и заменённые файлы без перезапуска EDMC.";
+
+/* Remove commander */
+"Remove commander" = "Удалить КМДР";
+
+/* Remove from list... */
+"Remove from list..." = "Удалить из списка...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "Удалить {NAME} (id {ID}) из списка встреченных?{CR}{CR}Вернуть можно только из копии. Если игра всё ещё пишет этого КМДР, при следующей встрече появится новая строка.";
+
+/* Report beep issue */
+"Report beep issue" = "Сообщить о сигнале";
+
+/* Restore */
+"Restore" = "Восстановить";
+
+/* Restore backup */
+"Restore backup" = "Восстановить копию";
+
+/* Restore backup... */
+"Restore backup..." = "Восстановить копию...";
+
+/* Restore done */
+"Restore done" = "Восстановлено";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Восстановление не удалось: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Восстановить встреченных КМДР";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Восстановление: выберите копию из списка. Текущий список сначала сохраняется, так что восстановление можно отменить.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "Восстановлено КМДР: {COUNT} из {FILE}.";
+
+/* Save */
+"Save" = "Сохранить";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Копия сохранена:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "Сохранено имён: {COUNT}.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "Сохранено имён: {COUNT}.";
+
+/* Seen */
+"Seen" = "Встречи";
+
+/* Seen Commanders */
+"Seen Commanders" = "Встреченные КМДР";
+
+/* Seen commanders */
+"Seen commanders" = "Встреченные КМДР";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "Встреченные КМДР (скрыто от мыши)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Список встреченных КМДР";
+
+/* Select a backup first. */
+"Select a backup first." = "Сначала выберите копию.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Перед последним подтверждением выберите хотя бы одно имя.";
+
+/* Show help */
+"Show help" = "Показать справку";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Пропущено (нет имени): {COUNT}";
+
+/* Sound */
+"Sound" = "Звук";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Файлы звуков: кладите WAV или MP3 в папку sounds. Папку default не меняйте. Файл в основной папке sounds с тем же именем заменяет звук из default (расширение не важно). Берётся самый новый файл каждого имени.";
+
+/* Sound: */
+"Sound:" = "Звук:";
+
+/* Spelling changes */
+"Spelling changes" = "Правки написания";
+
+/* Spelling saved */
+"Spelling saved" = "Написание сохранено";
+
+/* Startup */
+"Startup" = "При запуске";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Запуск: если EDMC стартует, когда вы уже в группе, уже присутствующие КМДР могут прозвучать в обратном порядке. Подождите около 5 секунд в пустом инстансе (обычный космос, суперкруиз или гиперпространство), чтобы это сбросить.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "Этот файл не прочитался как текст.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "В файле больше 20 000 записей, поэтому он не импортирован.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "В файле нет годных записей КМДР.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "Файл больше 5 МБ, поэтому его не читали.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "Файл вложен слишком глубоко, его не прочитать.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "Это не список встреченных КМДР.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "Это не корректный JSON.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "Файл слишком большой, его не прочитать.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "Этот план импорта не годится.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "Копию не удалось записать. Смотрите журнал EDMC.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Папка журналов Elite не найдена.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "Журналы не удалось прочитать.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "Копий ещё нет. Сначала нажмите «Сохранить копию».";
+
+/* These are the names you selected. */
+"These are the names you selected." = "Это выбранные вами имена.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "Это пробная функция.{CR}{CR}Beep Beep может обновить сохранённое имя, когда скан корабля, имя в звене, убийство или перехват показывает то же имя с заглавными буквами и знаками, как их пишет КМДР, например Tishtech становится TishTech. Набранная строка чата не используется. Неизвестные КМДР остаются неизвестными. Имя пропускается, если эти записи спорят или две сохранённые строки уже пишут его по-разному.{CR}{CR}Перед продолжением сделайте копию seen_commanders.json.{CR}{CR}Подтверждение открывает список. Ничего не пишется до последнего подтверждения.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Время, убийства и счётчик встреч из файла не берутся.{CR}Ничего не пишется, пока вы не нажмёте «Импорт». Отмена не трогает ваш список.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Доверять написанию из журнала";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Доверие к журналу выбрало эти варианты без проверки каждого имени.";
+
+/* unknown time */
+"unknown time" = "время неизвестно";
+
+/* Update name spelling */
+"Update name spelling" = "Обновить написание имён";
+
+/* Update spelling */
+"Update spelling" = "Обновить написание";
+
+/* Verify all */
+"Verify all" = "Отметить все";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV или MP3. Файл с тем же именем в папке sounds заменяет звук из default.";
+
+/* Window */
+"Window" = "Окно";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Звено: если выключено, для членов звена звука нет. Это касается только сигналов звена.";
+
+/* Wrong name */
+"Wrong name" = "Неверное имя";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Ваш список скопирован в {FILE}.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}Готово сохранить имён: {COUNT}. Пока ничего не записано.{CR}{CR}Подтверждение их запишет. Назад оставляет все имена как были.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Играть";
+

@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "Čeština";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "'{NAME}' odpovídá {COUNT} CMDR zde";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... a dalších {COUNT}";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "Do instance vstoupil CMDR";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "PvP zabití pojmenuje jediného neznámého CMDR z té návštěvy.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "Přidáno CMDR: {ADDED}.{CR}Doplněno neznámých jmen: {FILLED}.{CR}Ponecháno vašich jmen: {KEPT}.{CR}Přeskočeno bez jména: {SKIPPED}.{CR}Odmítnuto neplatných řádků: {INVALID}.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Hlasitost upozornění (%)";
+
+/* Alerts */
+"Alerts" = "Upozornění";
+
+/* All files */
+"All files" = "Všechny soubory";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Hlásit přílety v Modern Overlay";
+
+/* Autofill on kill */
+"Autofill on kill" = "Jméno při zabití";
+
+/* Back up now */
+"Back up now" = "Zálohovat teď";
+
+/* Backup failed */
+"Backup failed" = "Záloha selhala";
+
+/* Backup saved */
+"Backup saved" = "Záloha uložena";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Možnosti Beep Beep jsou otevřené. Zavřete je, abyste mohli upravit seznam";
+
+/* Beep for wing members */
+"Beep for wing members" = "Upozornění pro wing";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "Upozornit, když CMDR odejde";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Odchod: zvuk se přehraje i když někdo odejde, zatímco jste v supercruise.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "Spojení BeepBeep";
+
+/* Beeped early */
+"Beeped early" = "Upozornění příliš brzy";
+
+/* Beeped late */
+"Beeped late" = "Upozornění příliš pozdě";
+
+/* Before import */
+"Before import" = "Před importem";
+
+/* Cancel */
+"Cancel" = "Zrušit";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Změna {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Změněná jména: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "Zaškrtněte jména, která chcete. Do konečného potvrzení se nic nezapíše. Zavření nechá všechna jména beze změny.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "Zaškrtněte jména, která chcete. Do konečného potvrzení se nic nezapíše.";
+
+/* Clear */
+"Clear" = "Zrušit výběr";
+
+/* Close */
+"Close" = "Zavřít";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "CMDR {NAME} vstoupil do instance";
+
+/* Confirm */
+"Confirm" = "Potvrdit";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Potvrdit úpravy jmen";
+
+/* Continue */
+"Continue" = "Pokračovat";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Aktuální seznam se nepodařilo zálohovat, proto se nic neimportovalo.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Aktuální seznam se nepodařilo zálohovat, proto se nic neobnovilo.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Nelze odebrat: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Ladění";
+
+/* Detect */
+"Detect" = "Zjistit";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "Upravit CMDR {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "Je potřeba EDMC Modern Overlay.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Všechny návrhy jsou vybrané. Do konečného potvrzení se nic nezapíše.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Všechny návrhy začínají vybrané. Odškrtněte jména, která nechcete. Do konečného potvrzení se nic nezapíše.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Pokusná úprava jmen. Nejdřív zkopírujte seen_commanders.json. Poslední potvrzení uloží zaškrtnutá jména.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Upozornění navíc";
+
+/* Go Back */
+"Go Back" = "Zpět";
+
+/* Hidden */
+"Hidden" = "Skryto";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Skrýt před myší: {MODE}";
+
+/* Hide help */
+"Hide help" = "Skrýt nápovědu";
+
+/* Import */
+"Import" = "Importovat";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "Import po náhledu přidá jen jména. Záznamy bez jména se přeskočí a zvuk bude neutral.";
+
+/* Import commander names */
+"Import commander names" = "Importovat jména CMDR";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Importovat jména CMDR z jiného seen_commanders.json";
+
+/* Import failed */
+"Import failed" = "Import selhal";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "Import selhal: {ERROR}";
+
+/* Import finished */
+"Import finished" = "Import dokončen";
+
+/* Import names... */
+"Import names..." = "Importovat jména...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "Import: přečte seen_commanders.json jiného hráče a nejdřív ukáže náhled. Přidají se jen CMDR se skutečným jménem. Časy, zabití a počty se nekopírují, vaše jména zůstanou. Zrušit nic nezapíše.";
+
+/* Interdiction */
+"Interdiction" = "Interdikce";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Neplatné řádky: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Nad hrou";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Nad hrou: jen v okně a bez okrajů. V Linuxu může hra na celou obrazovku v popředí toto okno pořád zakrýt.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Ponechaná vaše jména: {COUNT}";
+
+/* Killed */
+"Killed" = "Zabit";
+
+/* Kills */
+"Kills" = "Zabití";
+
+/* Last Encounter */
+"Last Encounter" = "Poslední setkání";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "Viděn před {MINUTES} min";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "Viděn před {SECONDS} s";
+
+/* Manual */
+"Manual" = "Ručně";
+
+/* Mark failed */
+"Mark failed" = "Značku se nepodařilo zapsat";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "Označeno: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: uprostřed ukáže «CMDR <name> vstoupil do instance». Jméno bere ze Seen Commanders, přejmenujte CMDR tam.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Více zvuků";
+
+/* Name */
+"Name" = "Jméno";
+
+/* Name: */
+"Name:" = "Jméno:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "Nový    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "Nová jména: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "Bez upozornění";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "Žádné jméno by se nepřidalo ani nezměnilo.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "Žádné uložené jméno nemělo v žurnálech jasnější zápis.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "Žádné z vybraných jmen se nepodařilo uložit.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Není to známý soubor zálohy: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Není tady (zobrazeno Teď)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Nic se nezměnilo, záloha se nedělala.";
+
+/* Now */
+"Now" = "Teď";
+
+/* Off */
+"Off" = "Vyp";
+
+/* OK */
+"OK" = "OK";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "Ve výchozím stavu zapnuto. Píše soubor sezení do recordings. Upozornění se nemění. Text chatu se neukládá.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Krytí (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Otevřít složku záloh";
+
+/* Open recordings folder */
+"Open recordings folder" = "Otevřít složku recordings";
+
+/* Open sounds folder */
+"Open sounds folder" = "Otevřít složku sounds";
+
+/* Options */
+"Options" = "Možnosti";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Vyberte zálohu. Aktuální seznam se nejdřív uloží, takže to jde vrátit.";
+
+/* Play */
+"Play" = "Přehrát";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Každý CMDR zazní s odstupem 200 ms.";
+
+/* Reading journals... */
+"Reading journals..." = "Čtení žurnálů...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Zaznamenat sezení pro ladění";
+
+/* Reload sounds */
+"Reload sounds" = "Znovu načíst zvuky";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Znovu načíst zvuky vezme přidané nebo nahrazené soubory bez restartu EDMC.";
+
+/* Remove commander */
+"Remove commander" = "Odebrat CMDR";
+
+/* Remove from list... */
+"Remove from list..." = "Odebrat ze seznamu...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "Odebrat {NAME} (id {ID}) ze seznamu?{CR}{CR}Vrátí ho jen obnova zálohy. Pokud ho hra dál vypisuje, při dalším setkání se objeví jako nový řádek.";
+
+/* Report beep issue */
+"Report beep issue" = "Nahlásit problém se zvukem";
+
+/* Restore */
+"Restore" = "Obnovit";
+
+/* Restore backup */
+"Restore backup" = "Obnovit zálohu";
+
+/* Restore backup... */
+"Restore backup..." = "Obnovit zálohu...";
+
+/* Restore done */
+"Restore done" = "Obnoveno";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Obnova selhala: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Obnovit viděné CMDR";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Obnova: vyberte zálohu ze seznamu. Aktuální seznam se nejdřív uloží, takže obnovu jde vrátit.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "Obnoveno {COUNT} CMDR ze souboru {FILE}.";
+
+/* Save */
+"Save" = "Uložit";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Záloha uložena:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "Uloženo {COUNT} jméno.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "Uloženo {COUNT} jmen.";
+
+/* Seen */
+"Seen" = "Viděn";
+
+/* Seen Commanders */
+"Seen Commanders" = "Vidění CMDR";
+
+/* Seen commanders */
+"Seen commanders" = "Vidění CMDR";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "Vidění CMDR (skryto před myší)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Seznam viděných CMDR";
+
+/* Select a backup first. */
+"Select a backup first." = "Nejdřív vyberte zálohu.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Před konečným potvrzením vyberte aspoň jedno jméno.";
+
+/* Show help */
+"Show help" = "Zobrazit nápovědu";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Přeskočeno (bez jména): {COUNT}";
+
+/* Sound */
+"Sound" = "Zvuk";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Zvukové soubory: vložte WAV nebo MP3 do složky sounds. Složku default neměňte. Soubor v hlavní složce sounds se stejným jménem nahradí zvuk z default (přípona je jedno). Pro každé jméno se bere nejnovější soubor.";
+
+/* Sound: */
+"Sound:" = "Zvuk:";
+
+/* Spelling changes */
+"Spelling changes" = "Úpravy jmen";
+
+/* Spelling saved */
+"Spelling saved" = "Jména uložena";
+
+/* Startup */
+"Startup" = "Při startu";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Start: když se EDMC spustí a už jste ve skupině, přítomní CMDR mohou zaznít pozpátku. Počkejte asi 5 sekund v prázdné instanci (normální prostor, supercruise nebo hyperprostor), ať se to vynuluje.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "Ten soubor nešel přečíst jako text.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "Ten soubor má víc než 20 000 záznamů, proto se neimportoval.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "Ten soubor nemá platné záznamy CMDR.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "Ten soubor je větší než 5 MB, proto se nečetl.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "Ten soubor je zanořený příliš hluboko na čtení.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "Ten soubor není seznam viděných CMDR.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "Ten soubor není platný JSON.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "Ten soubor je příliš velký na čtení.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "Tento plán importu není platný.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "Zálohu se nepodařilo zapsat. Viz protokol EDMC.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "Složka žurnálů Elite se nenašla.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "Žurnály se nepodařilo přečíst.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "Zálohy zatím nejsou. Nejdřív použijte «Zálohovat teď».";
+
+/* These are the names you selected. */
+"These are the names you selected." = "Toto jsou jména, která jste vybrali.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "Je to pokusné.{CR}{CR}Beep Beep může upravit uložené jméno, když sken lodi, jméno ve wingu, zabití nebo interdikce ukáže totéž jméno s velkými písmeny a znaménky, jak je píše CMDR, třeba z Tishtech na TishTech. Napsaný řádek chatu se nepoužije. Neznámí CMDR zůstanou neznámí. Jméno se přeskočí, když se ty záznamy neshodují, nebo když ho dva uložené řádky už píšou jinak.{CR}{CR}Než budete pokračovat, udělejte kopii seen_commanders.json.{CR}{CR}Potvrdit otevře seznam. Do konečného potvrzení se nic nezapíše.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Časy, zabití a počty v souboru se ignorují.{CR}Nic se nezapíše, dokud nezvolíte Importovat. Zrušit nechá váš seznam být.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Důvěřovat zápisu ze žurnálu";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Důvěra v žurnál vybrala tyto návrhy bez kontroly každého jména.";
+
+/* unknown time */
+"unknown time" = "neznámý čas";
+
+/* Update name spelling */
+"Update name spelling" = "Aktualizovat zápis jmen";
+
+/* Update spelling */
+"Update spelling" = "Upravit jména";
+
+/* Verify all */
+"Verify all" = "Vybrat vše";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV nebo MP3. Soubor se stejným jménem ve složce sounds nahradí zvuk z default.";
+
+/* Window */
+"Window" = "Okno";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Wing: když je vypnuto, členové wingu nezní. Týká se to jen upozornění wingu.";
+
+/* Wrong name */
+"Wrong name" = "Špatné jméno";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Váš seznam byl uložen do {FILE}.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}Připraveno uložit {COUNT} jmen. Zatím se nic nezapsalo.{CR}{CR}Potvrdit je zapíše. Zpět nechá všechna jména beze změny.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Přehrát";
+

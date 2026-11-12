@@ -1,0 +1,487 @@
+/* Beep Beep user-visible text. English is the lookup key. */
+/* Language name */
+"!Language" = "English";
+
+/* '{NAME}' matches {COUNT} commanders here */
+"'{NAME}' matches {COUNT} commanders here" = "'{NAME}' matches {COUNT} commanders here";
+
+/* ... and {COUNT} more */
+"... and {COUNT} more" = "... and {COUNT} more";
+
+/* A commander has jumped in */
+"A commander has jumped in" = "A commander has jumped in";
+
+/* A PvP kill names the one unknown commander from that visit. */
+"A PvP kill names the one unknown commander from that visit." = "A PvP kill names the one unknown commander from that visit.";
+
+/* Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you... */
+"Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}" = "Added {ADDED} commanders.{CR}Filled in {FILLED} unknown names.{CR}Kept {KEPT} names you already had.{CR}Skipped {SKIPPED} entries with no name.{CR}Rejected {INVALID} invalid rows.{CR}{CR}{BACKUP}";
+
+/* Alert volume (%) */
+"Alert volume (%)" = "Alert volume (%)";
+
+/* Alerts */
+"Alerts" = "Alerts";
+
+/* All files */
+"All files" = "All files";
+
+/* Announce arrivals in Modern Overlay */
+"Announce arrivals in Modern Overlay" = "Announce arrivals in Modern Overlay";
+
+/* Autofill on kill */
+"Autofill on kill" = "Autofill on kill";
+
+/* Back up now */
+"Back up now" = "Back up now";
+
+/* Backup failed */
+"Backup failed" = "Backup failed";
+
+/* Backup saved */
+"Backup saved" = "Backup saved";
+
+/* Beep Beep */
+"Beep Beep" = "Beep Beep";
+
+/* Beep Beep Options are Open. Close Options window to edit list */
+"Beep Beep Options are Open. Close Options window to edit list" = "Beep Beep Options are Open. Close Options window to edit list";
+
+/* Beep for wing members */
+"Beep for wing members" = "Beep for wing members";
+
+/* Beep when a commander leaves */
+"Beep when a commander leaves" = "Beep when a commander leaves";
+
+/* Beep when a commander leaves: a sound also plays when someone leaves while you are in S... */
+"Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise." = "Beep when a commander leaves: a sound also plays when someone leaves while you are in Supercruise.";
+
+/* BeepBeep Connections */
+"BeepBeep Connections" = "BeepBeep Connections";
+
+/* Beeped early */
+"Beeped early" = "Beeped early";
+
+/* Beeped late */
+"Beeped late" = "Beeped late";
+
+/* Before import */
+"Before import" = "Before import";
+
+/* Cancel */
+"Cancel" = "Cancel";
+
+/* Change {ID}    {NAME} */
+"Change {ID}    {NAME}" = "Change {ID}    {NAME}";
+
+/* Changed names: {COUNT} */
+"Changed names: {COUNT}" = "Changed names: {COUNT}";
+
+/* Check each name you want. Nothing is saved until the final confirmation. Close leaves e... */
+"Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged." = "Check each name you want. Nothing is saved until the final confirmation. Close leaves every name unchanged.";
+
+/* Check the names you want. Nothing is saved until the final confirmation. */
+"Check the names you want. Nothing is saved until the final confirmation." = "Check the names you want. Nothing is saved until the final confirmation.";
+
+/* Clear */
+"Clear" = "Clear";
+
+/* Close */
+"Close" = "Close";
+
+/* Commander {NAME} has jumped in */
+"Commander {NAME} has jumped in" = "Commander {NAME} has jumped in";
+
+/* Confirm */
+"Confirm" = "Confirm";
+
+/* Confirm spelling changes */
+"Confirm spelling changes" = "Confirm spelling changes";
+
+/* Continue */
+"Continue" = "Continue";
+
+/* Could not back up the current list, so nothing was imported. */
+"Could not back up the current list, so nothing was imported." = "Could not back up the current list, so nothing was imported.";
+
+/* Could not back up the current list, so nothing was restored. */
+"Could not back up the current list, so nothing was restored." = "Could not back up the current list, so nothing was restored.";
+
+/* Could not remove: {ERROR} */
+"Could not remove: {ERROR}" = "Could not remove: {ERROR}";
+
+/* Debugging */
+"Debugging" = "Debugging";
+
+/* Detect */
+"Detect" = "Detect";
+
+/* Edit Commander {NAME} */
+"Edit Commander {NAME}" = "Edit Commander {NAME}";
+
+/* EDMC Modern Overlay Required. */
+"EDMC Modern Overlay Required." = "EDMC Modern Overlay Required.";
+
+/* Every suggestion is selected. Nothing is saved until the final confirmation. */
+"Every suggestion is selected. Nothing is saved until the final confirmation." = "Every suggestion is selected. Nothing is saved until the final confirmation.";
+
+/* Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved un... */
+"Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation." = "Every suggestion starts selected. Uncheck any name you do not want. Nothing is saved until the final confirmation.";
+
+/* Experimental spelling update. Copy seen_commanders.json first. The last confirm saves c... */
+"Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names." = "Experimental spelling update. Copy seen_commanders.json first. The last confirm saves checked names.";
+
+/* Extra beep (unexpected) */
+"Extra beep (unexpected)" = "Extra beep (unexpected)";
+
+/* Go Back */
+"Go Back" = "Go Back";
+
+/* Hidden */
+"Hidden" = "Hidden";
+
+/* Hide from mouse: {MODE} */
+"Hide from mouse: {MODE}" = "Hide from mouse: {MODE}";
+
+/* Hide help */
+"Hide help" = "Hide help";
+
+/* Import */
+"Import" = "Import";
+
+/* Import adds names only, after a preview. Unknown entries are skipped and sounds become ... */
+"Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral." = "Import adds names only, after a preview. Unknown entries are skipped and sounds become neutral.";
+
+/* Import commander names */
+"Import commander names" = "Import commander names";
+
+/* Import commander names from another seen_commanders.json */
+"Import commander names from another seen_commanders.json" = "Import commander names from another seen_commanders.json";
+
+/* Import failed */
+"Import failed" = "Import failed";
+
+/* Import failed: {ERROR} */
+"Import failed: {ERROR}" = "Import failed: {ERROR}";
+
+/* Import finished */
+"Import finished" = "Import finished";
+
+/* Import names... */
+"Import names..." = "Import names...";
+
+/* Import: reads another player's seen_commanders.json and shows a preview first. Only com... */
+"Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing." = "Import: reads another player's seen_commanders.json and shows a preview first. Only commanders with a real name are added. Times, kills and seen counts are not copied, and names you already have are kept. Cancel writes nothing.";
+
+/* Interdiction */
+"Interdiction" = "Interdiction";
+
+/* Invalid rows: {COUNT} */
+"Invalid rows: {COUNT}" = "Invalid rows: {COUNT}";
+
+/* Keep above the game */
+"Keep above the game" = "Keep above the game";
+
+/* Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game ... */
+"Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window." = "Keep above the game: windowed and borderless only. On Linux, a focused fullscreen game can still cover this window.";
+
+/* Kept names you already have: {COUNT} */
+"Kept names you already have: {COUNT}" = "Kept names you already have: {COUNT}";
+
+/* Killed */
+"Killed" = "Killed";
+
+/* Kills */
+"Kills" = "Kills";
+
+/* Last Encounter */
+"Last Encounter" = "Last Encounter";
+
+/* Last Seen {MINUTES}m ago */
+"Last Seen {MINUTES}m ago" = "Last Seen {MINUTES}m ago";
+
+/* Last Seen {SECONDS}s ago */
+"Last Seen {SECONDS}s ago" = "Last Seen {SECONDS}s ago";
+
+/* Manual */
+"Manual" = "Manual";
+
+/* Mark failed */
+"Mark failed" = "Mark failed";
+
+/* Marked: {LABEL} */
+"Marked: {LABEL}" = "Marked: {LABEL}";
+
+/* Modern Overlay: shows "Commander <name> has jumped in" at the centre of the screen. The... */
+"Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it." = "Modern Overlay: shows \"Commander <name> has jumped in\" at the centre of the screen. The name comes from Seen Commanders, so rename a commander there to change it.";
+
+/* Multiple sounds */
+"Multiple sounds" = "Multiple sounds";
+
+/* Name */
+"Name" = "Name";
+
+/* Name: */
+"Name:" = "Name:";
+
+/* New    {ID}    {NAME} */
+"New    {ID}    {NAME}" = "New    {ID}    {NAME}";
+
+/* New names: {COUNT} */
+"New names: {COUNT}" = "New names: {COUNT}";
+
+/* No beep (missed) */
+"No beep (missed)" = "No beep (missed)";
+
+/* No names would be added or changed. */
+"No names would be added or changed." = "No names would be added or changed.";
+
+/* No saved names had a clearer spelling in the journals. */
+"No saved names had a clearer spelling in the journals." = "No saved names had a clearer spelling in the journals.";
+
+/* None of the selected names could be saved. */
+"None of the selected names could be saved." = "None of the selected names could be saved.";
+
+/* Not a known backup file: {NAME} */
+"Not a known backup file: {NAME}" = "Not a known backup file: {NAME}";
+
+/* Not here (shown as Now) */
+"Not here (shown as Now)" = "Not here (shown as Now)";
+
+/* Nothing changed, so no backup was made. */
+"Nothing changed, so no backup was made." = "Nothing changed, so no backup was made.";
+
+/* Now */
+"Now" = "Now";
+
+/* Off */
+"Off" = "Off";
+
+/* OK */
+"OK" = "OK";
+
+/* On by default. Writes a session file under recordings. Beeps stay the same. Chat text i... */
+"On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved." = "On by default. Writes a session file under recordings. Beeps stay the same. Chat text is not saved.";
+
+/* Opacity (%) */
+"Opacity (%)" = "Opacity (%)";
+
+/* Open backups folder */
+"Open backups folder" = "Open backups folder";
+
+/* Open recordings folder */
+"Open recordings folder" = "Open recordings folder";
+
+/* Open sounds folder */
+"Open sounds folder" = "Open sounds folder";
+
+/* Options */
+"Options" = "Options";
+
+/* Pick a backup. Your current list is backed up first, so this can be undone. */
+"Pick a backup. Your current list is backed up first, so this can be undone." = "Pick a backup. Your current list is backed up first, so this can be undone.";
+
+/* Play */
+"Play" = "Play";
+
+/* Plays each commander 200 ms apart. */
+"Plays each commander 200 ms apart." = "Plays each commander 200 ms apart.";
+
+/* Reading journals... */
+"Reading journals..." = "Reading journals...";
+
+/* Record session data for debugging */
+"Record session data for debugging" = "Record session data for debugging";
+
+/* Reload sounds */
+"Reload sounds" = "Reload sounds";
+
+/* Reload sounds picks up added or replaced files without restarting EDMC. */
+"Reload sounds picks up added or replaced files without restarting EDMC." = "Reload sounds picks up added or replaced files without restarting EDMC.";
+
+/* Remove commander */
+"Remove commander" = "Remove commander";
+
+/* Remove from list... */
+"Remove from list..." = "Remove from list...";
+
+/* Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back... */
+"Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen." = "Remove {NAME} (id {ID}) from the seen list?{CR}{CR}Only a backup restore brings it back. If the game still lists this commander, they will reappear as a new row when next seen.";
+
+/* Report beep issue */
+"Report beep issue" = "Report beep issue";
+
+/* Restore */
+"Restore" = "Restore";
+
+/* Restore backup */
+"Restore backup" = "Restore backup";
+
+/* Restore backup... */
+"Restore backup..." = "Restore backup...";
+
+/* Restore done */
+"Restore done" = "Restore done";
+
+/* Restore failed: {ERROR} */
+"Restore failed: {ERROR}" = "Restore failed: {ERROR}";
+
+/* Restore seen commanders */
+"Restore seen commanders" = "Restore seen commanders";
+
+/* Restore: pick a backup from the list. Your current list is backed up first, so you can ... */
+"Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore." = "Restore: pick a backup from the list. Your current list is backed up first, so you can undo a restore.";
+
+/* Restored {COUNT} commanders from {FILE}. */
+"Restored {COUNT} commanders from {FILE}." = "Restored {COUNT} commanders from {FILE}.";
+
+/* Save */
+"Save" = "Save";
+
+/* Saved a backup:{CR}{FILE} */
+"Saved a backup:{CR}{FILE}" = "Saved a backup:{CR}{FILE}";
+
+/* Saved {COUNT} name. */
+"Saved {COUNT} name." = "Saved {COUNT} name.";
+
+/* Saved {COUNT} names. */
+"Saved {COUNT} names." = "Saved {COUNT} names.";
+
+/* Seen */
+"Seen" = "Seen";
+
+/* Seen Commanders */
+"Seen Commanders" = "Seen Commanders";
+
+/* Seen commanders */
+"Seen commanders" = "Seen commanders";
+
+/* Seen Commanders (hidden from mouse) */
+"Seen Commanders (hidden from mouse)" = "Seen Commanders (hidden from mouse)";
+
+/* Seen commanders list */
+"Seen commanders list" = "Seen commanders list";
+
+/* Select a backup first. */
+"Select a backup first." = "Select a backup first.";
+
+/* Select at least one name before the final confirmation. */
+"Select at least one name before the final confirmation." = "Select at least one name before the final confirmation.";
+
+/* Show help */
+"Show help" = "Show help";
+
+/* Skipped (no name): {COUNT} */
+"Skipped (no name): {COUNT}" = "Skipped (no name): {COUNT}";
+
+/* Sound */
+"Sound" = "Sound";
+
+/* Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folde... */
+"Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used." = "Sound files: put WAV or MP3 files in the sounds folder. Do not change the default folder. A file in the main sounds folder with the same name replaces a default (extension does not matter). The newest file for each name is used.";
+
+/* Sound: */
+"Sound:" = "Sound:";
+
+/* Spelling changes */
+"Spelling changes" = "Spelling changes";
+
+/* Spelling saved */
+"Spelling saved" = "Spelling saved";
+
+/* Startup */
+"Startup" = "Startup";
+
+/* Startup: if EDMC starts while you are already in a group, commanders already present ma... */
+"Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this." = "Startup: if EDMC starts while you are already in a group, commanders already present may trigger sounds in reverse. Wait about 5 seconds in an empty instance (Normal Space, Supercruise or Hyperspace) to reset this.";
+
+/* That file could not be read as text. */
+"That file could not be read as text." = "That file could not be read as text.";
+
+/* That file has more than 20,000 entries, so it was not imported. */
+"That file has more than 20,000 entries, so it was not imported." = "That file has more than 20,000 entries, so it was not imported.";
+
+/* That file has no valid commander entries. */
+"That file has no valid commander entries." = "That file has no valid commander entries.";
+
+/* That file is larger than 5 MB, so it was not read. */
+"That file is larger than 5 MB, so it was not read." = "That file is larger than 5 MB, so it was not read.";
+
+/* That file is nested too deeply to read. */
+"That file is nested too deeply to read." = "That file is nested too deeply to read.";
+
+/* That file is not a seen commanders list. */
+"That file is not a seen commanders list." = "That file is not a seen commanders list.";
+
+/* That file is not valid JSON. */
+"That file is not valid JSON." = "That file is not valid JSON.";
+
+/* That file is too large to read. */
+"That file is too large to read." = "That file is too large to read.";
+
+/* That import plan is not valid. */
+"That import plan is not valid." = "That import plan is not valid.";
+
+/* The backup could not be written. See the EDMC log. */
+"The backup could not be written. See the EDMC log." = "The backup could not be written. See the EDMC log.";
+
+/* The Elite journal folder was not found. */
+"The Elite journal folder was not found." = "The Elite journal folder was not found.";
+
+/* The journals could not be read. */
+"The journals could not be read." = "The journals could not be read.";
+
+/* There are no backups yet. Use Back up now first. */
+"There are no backups yet. Use Back up now first." = "There are no backups yet. Use Back up now first.";
+
+/* These are the names you selected. */
+"These are the names you selected." = "These are the names you selected.";
+
+/* This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing n... */
+"This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation." = "This is experimental.{CR}{CR}Beep Beep can update a saved name when a ship scan, wing name, kill, or interdiction shows that same name with the capitalization and punctuation the commander used, such as Tishtech becoming TishTech. A typed chat line is not used. Unknown commanders stay unknown. A name is skipped when those logs disagree, or when two saved rows already spell it differently.{CR}{CR}Make a backup of seen_commanders.json before you continue.{CR}{CR}Confirm opens the list. Nothing is saved until the final confirmation.";
+
+/* Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you c... */
+"Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched." = "Times, kills and seen counts in the file are ignored.{CR}Nothing is written until you choose Import. Cancel leaves your list untouched.";
+
+/* Trust journal spelling */
+"Trust journal spelling" = "Trust journal spelling";
+
+/* Trust journal spelling selected these suggestions without checking each name. */
+"Trust journal spelling selected these suggestions without checking each name." = "Trust journal spelling selected these suggestions without checking each name.";
+
+/* unknown time */
+"unknown time" = "unknown time";
+
+/* Update name spelling */
+"Update name spelling" = "Update name spelling";
+
+/* Update spelling */
+"Update spelling" = "Update spelling";
+
+/* Verify all */
+"Verify all" = "Verify all";
+
+/* WAV or MP3. A file with the same name in the sounds folder replaces a default. */
+"WAV or MP3. A file with the same name in the sounds folder replaces a default." = "WAV or MP3. A file with the same name in the sounds folder replaces a default.";
+
+/* Window */
+"Window" = "Window";
+
+/* Wing members: when off, no sounds play for wing members. This only affects wing alerts. */
+"Wing members: when off, no sounds play for wing members. This only affects wing alerts." = "Wing members: when off, no sounds play for wing members. This only affects wing alerts.";
+
+/* Wrong name */
+"Wrong name" = "Wrong name";
+
+/* Your list was backed up to {FILE}. */
+"Your list was backed up to {FILE}." = "Your list was backed up to {FILE}.";
+
+/* {LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm... */
+"{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged." = "{LEAD}{CR}{CR}Ready to save {COUNT} names. Nothing has been written yet.{CR}{CR}Confirm writes them. Go Back leaves every name unchanged.";
+
+/* {OLD} → {NEW} */
+"{OLD} → {NEW}" = "{OLD} → {NEW}";
+
+/* ▶ Play */
+"▶ Play" = "▶ Play";
+
