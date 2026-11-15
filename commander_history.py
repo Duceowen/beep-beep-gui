@@ -3655,6 +3655,9 @@ class CommanderHistoryManager:
                 self._reset_timer.cancel()
             
             self._reset_timer = threading.Timer(5.0, self._check_reset)
+            # A non-daemon timer keeps the interpreter alive after EDMC's
+            # main loop has returned, which leaves the process running.
+            self._reset_timer.daemon = True
             self._reset_timer.start()
             self._trigger = True
 
@@ -3677,9 +3680,15 @@ class CommanderHistoryManager:
 
     def stop_worker(self):
         self.worker_stop_event.set()
+        timer = self._reset_timer
+        self._reset_timer = None
+        if timer is not None:
+            timer.cancel()
         if self.worker_thread:
             self.worker_thread.join(timeout=3)
             log.info("Beepbeep worker stopped.")
+        # Write only when something changed, through the same atomic save
+        # the worker uses. A clean file is left untouched.
         self.flush_seen_commanders(force=True)
         self.flush_instance_seen(force=True)
         try:

@@ -185,7 +185,25 @@ def prefs_changed(cmdr, is_beta):
 
 
 def plugin_stop():
-    clear_connected()
-    beep_inst.stop_playback()
-    history_inst.stop_worker()
+    # Close plugin windows before anything else. An open pop-out or a modal
+    # dialog is what keeps EDMC's process alive after a close, a taskkill,
+    # or a Windows logoff. The commander list is written afterwards by the
+    # same flush the worker uses, and only when it has unsaved changes.
+    log.info("beep_beep plugin stopping")
+    try:
+        gui_inst.shutdown()
+    except Exception:
+        log.exception("beep_beep window shutdown failed")
+    try:
+        clear_connected()
+    except Exception:
+        log.exception("beep_beep overlay clear failed")
+    try:
+        beep_inst.stop_playback()
+    except Exception:
+        log.exception("beep_beep playback stop failed")
+    try:
+        history_inst.stop_worker()
+    except Exception:
+        log.exception("beep_beep worker stop failed")
     log.info("beep_beep plugin stopped!")
