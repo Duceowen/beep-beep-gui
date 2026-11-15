@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.14](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.14/beep-beep-gui-1.1.14.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.15](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.15/beep-beep-gui-1.1.15.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.15
+- A commander you killed beeps the next time they show up, including after you enter supercruise and after you drop back out. The same return in normal space already beeped
+- The short quiet period right after the kill is unchanged, so the kill itself still does not beep
+- A commander you did not kill does not beep just because they are listed again
 
 ## 1.1.14
 - Seen Commanders, Options, and the messages on screen follow the language chosen in EDMC

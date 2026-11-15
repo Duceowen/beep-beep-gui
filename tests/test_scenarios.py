@@ -227,6 +227,154 @@ class KillsAndEscapes(unittest.TestCase):
         self.assertEqual(h.sent, [["1"]])
 
 
+def enter_supercruise(h, system=None):
+    """StartJump then SupercruiseEntry, the same order as the journal."""
+    system = system or location.system or "Sol"
+    location.set(1, system, "StartJump")
+    location.jump()
+    h.note_transition_pending("Supercruise")
+    location.set(1, system, "SupercruiseEntry")
+    location.leave_instance()
+    h.remember_leave_snapshot()
+    h.note_instance_reset()
+
+
+class KillReturnAfterSupercruise(unittest.TestCase):
+    """BowserJR was killed, then supercruise, then CommanderHistory listed them
+    again. That return must beep. The same return in normal space already did.
+    A commander who was not killed must not start beeping on a repeat listing.
+    """
+
+    def setUp(self):
+        self.h = fresh_history()
+        add_row(self.h, "1", "BowserJR")
+        add_row(self.h, "2", "Friend")
+        location.system, location.state = "Sol", 0
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 19, 29))
+        self.assertEqual(self.h.sent, [["1", "2"]])
+        self.h.sent.clear()
+        self.h.note_kill("BowserJR")
+        self.assertNotIn("1", self.h.machine.announced)
+        self.assertIn("2", self.h.machine.announced)
+
+    def test_suppress_window_stays_quiet(self):
+        feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 21, 50))
+        self.assertEqual(self.h.sent, [])
+        self.assertFalse(present("1"))
+
+    def test_return_while_still_in_supercruise_beeps_once(self):
+        feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 21, 50))
+        self.assertEqual(self.h.sent, [])
+        self.h._gone["1"]["suppress_until"] = time.time() - 1
+        enter_supercruise(self.h)
+        self.assertTrue(location.instance_reset_pending)
+        self.assertNotIn("1", self.h.machine.announced)
+        self.assertFalse(self.h._gone.get("1", {}).get("departed"))
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(self.h.sent, [["1"]])
+        self.assertTrue(present("1"))
+        self.assertFalse(present("2"))
+        self.h.sent.clear()
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 25, 0))
+        self.assertEqual(self.h.sent, [])
+        self.assertTrue(present("1"))
+
+    def test_return_after_supercruise_exit_beeps_once(self):
+        self.h._gone["1"].pop("suppress_until", None)
+        enter_supercruise(self.h)
+        location.set(0, "Sol", "SupercruiseExit")
+        self.h.drop_supercruise_arrivals()
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(self.h.sent, [])
+        self.assertFalse(present("1"))
+        location.last_drop_ts -= 31
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 26, 0))
+        self.assertEqual(self.h.sent, [["1"]])
+        self.assertTrue(present("1"))
+        self.h.sent.clear()
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 27, 0))
+        self.assertEqual(self.h.sent, [])
+
+    def test_supercruise_during_the_kill_window_does_not_beep(self):
+        location.set(1, "Sol", "StartJump")
+        location.jump()
+        self.h.note_transition_pending("Supercruise")
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 21, 50))
+        location.set(1, "Sol", "SupercruiseEntry")
+        location.leave_instance()
+        self.h.remember_leave_snapshot()
+        self.h.note_instance_reset()
+        self.assertEqual(self.h.sent, [])
+        self.assertNotIn("1", self.h.machine.announced)
+        self.h._gone["1"]["suppress_until"] = time.time() - 1
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(self.h.sent, [["1"]])
+        self.h.sent.clear()
+        feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 25, 0))
+        self.assertEqual(self.h.sent, [])
+
+    def test_return_in_normal_space_still_beeps_once(self):
+        self.h._gone["1"]["suppress_until"] = time.time() + 30
+        feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 21, 50))
+        self.assertEqual(self.h.sent, [])
+        self.h._gone["1"].pop("suppress_until", None)
+        feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(self.h.sent, [["1"]])
+        self.h.sent.clear()
+        feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 25, 0))
+        self.assertEqual(self.h.sent, [])
+        self.assertTrue(present("2"))
+
+    def test_friend_listed_again_after_supercruise_stays_silent(self):
+        enter_supercruise(self.h)
+        feed(self.h, ["2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(self.h.sent, [])
+        location.set(0, "Sol", "SupercruiseExit")
+        self.h.drop_supercruise_arrivals()
+        location.last_drop_ts -= 31
+        feed(self.h, ["2"], datetime.datetime(2026, 11, 15, 4, 26, 0))
+        self.assertEqual(self.h.sent, [])
+
+    def test_kill_after_interdiction_drop_then_supercruise_return_beeps(self):
+        # The fight in the log: interdiction, drop, kill, later supercruise, return.
+        h = fresh_history()
+        add_row(h, "1", "BowserJR")
+        add_row(h, "2", "Friend")
+        location.system, location.state = "Sol", 0
+        feed(h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 19, 29))
+        h.sent.clear()
+        location.interdiction("BowserJR")
+        location.set(0, "Sol", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        h.sent.clear()
+        h.note_kill("BowserJR")
+        h._gone["1"]["suppress_until"] = time.time() - 1
+        if location.last_drop_ts is not None:
+            location.last_drop_ts -= 120
+        enter_supercruise(h)
+        feed(h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(h.sent, [["1"]])
+        self.assertTrue(present("1"))
+        h.sent.clear()
+        feed(h, ["1"], datetime.datetime(2026, 11, 15, 4, 25, 0))
+        self.assertEqual(h.sent, [])
+
+    def test_escape_return_after_supercruise_beeps_once(self):
+        h = fresh_history()
+        add_row(h, "5", "Runner")
+        location.system, location.state = "Sol", 0
+        feed(h, ["5"], datetime.datetime(2026, 11, 15, 4, 19, 29))
+        h.sent.clear()
+        h.note_escape("Runner")
+        h._gone["5"].pop("suppress_until", None)
+        enter_supercruise(h)
+        feed(h, ["5"], datetime.datetime(2026, 11, 15, 4, 24, 2))
+        self.assertEqual(h.sent, [["5"]])
+        h.sent.clear()
+        feed(h, ["5"], datetime.datetime(2026, 11, 15, 4, 25, 0))
+        self.assertEqual(h.sent, [])
+
+
 class DropOutOrder(unittest.TestCase):
     def test_arrival_just_before_drop_out_is_still_dropped(self):
         h = fresh_history()
