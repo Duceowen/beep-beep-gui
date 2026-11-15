@@ -88,6 +88,15 @@ class InstanceMachine:
         before = set() if relog else {str(cid) for cid in self.present_before_jump}
         kept_ids = set(self.announced) if preserve_announced else set()
         kept_names = set(self.announced_names) if preserve_announced else set()
+        if preserve_announced:
+            # A kill ended that announcement. Keeping the id makes the return
+            # look like a refresh of someone still in this instance.
+            killed_ids = {str(cid) for cid in self.killed}
+            kept_ids -= killed_ids
+            if killed_ids:
+                for key, ids in self.by_name.items():
+                    if ids and set(map(str, ids)) <= killed_ids:
+                        kept_names.discard(key)
         self.staged = []
         self.pending = False
         self.pending_since = None
@@ -174,11 +183,21 @@ class InstanceMachine:
         self.announced.add(cid)
         return True, kind
 
+    def release_return(self, cmdr_id) -> None:
+        """This visit's beep is spent. The next sighting may announce them again.
+
+        Used for a kill or an escape. Leaving the id in announced lets the next
+        supercruise commit preserve it, and the return is then a silent refresh.
+        """
+        cid = str(cmdr_id)
+        self.clear_announcement(cid)
+        self.present_before_jump.discard(cid)
+
     def note_killed(self, cmdr_id) -> None:
         """The kill row itself is not an arrival. A later return can still be announced."""
         cid = str(cmdr_id)
         self.killed.add(cid)
-        self.confirmed.discard(cid)
+        self.release_return(cid)
 
     def index_name(self, cmdr_id, name) -> None:
         """Remember a display name for an id. Does not announce."""

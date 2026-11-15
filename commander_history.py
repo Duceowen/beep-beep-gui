@@ -1394,8 +1394,31 @@ class CommanderHistoryManager:
         for rec in self._gone.values():
             rec.pop("quiet_left", None)
 
+    def _release_unreturned(self) -> None:
+        """Drop beep tokens for a kill or escape that has not come back yet.
+
+        An instance change forgets the departed flag. If the id is still
+        announced, the next supercruise commit preserves it and the return
+        is a silent refresh instead of a beep.
+        """
+        for cid, rec in list(self._gone.items()):
+            if isinstance(rec, dict) and rec.get("departed"):
+                self.machine.release_return(cid)
+
+    def _unstage_suppressed(self) -> None:
+        """A history row still inside the post-kill window is not an arrival."""
+        now = time.time()
+        kept = []
+        for cid in self.machine.staged:
+            until = self._gone.get(str(cid), {}).get("suppress_until")
+            if until is not None and now < until:
+                continue
+            kept.append(cid)
+        self.machine.staged = kept
+
     def _clear_departures(self) -> None:
         """Forget leave timers and departure marks. Suppression windows are kept."""
+        self._release_unreturned()
         for rec in self._gone.values():
             rec.pop("left_at", None)
             rec.pop("departed", None)
@@ -1567,6 +1590,7 @@ class CommanderHistoryManager:
             now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             lag = max(0.0, (now_utc - event_at).total_seconds())
         self._batch_until = time.monotonic() + max(0.0, _LOAD_BATCH_SECONDS - lag)
+        self._unstage_suppressed()
         self.machine.relog()
         location.instance_reset_pending = False
         self._announced_at.clear()
@@ -1637,6 +1661,7 @@ class CommanderHistoryManager:
         SupercruiseEntry does not start a second generation. People already
         announced by a scan during the jump are not announced again.
         """
+        self._unstage_suppressed()
         already = (
             self.machine.jump_open
             and not self.machine.pending
@@ -1672,9 +1697,17 @@ class CommanderHistoryManager:
             log.exception("Immediate history read failed")
 
     def _emit_fresh(self, ids) -> None:
+        now = time.time()
         for cid in ids or []:
             try:
-                self._emit_arrival(str(cid), "new_arrival")
+                cid = str(cid)
+                until = self._gone.get(cid, {}).get("suppress_until")
+                if until is not None and now < until:
+                    # The jump commit must not turn the post-kill refresh into an arrival.
+                    self.machine.clear_announcement(cid)
+                    self._beep_decision(cid, False, "kill_suppress")
+                    continue
+                self._emit_arrival(cid, "new_arrival")
             except Exception:
                 log.exception("Failed to announce a staged arrival")
 
@@ -2780,6 +2813,7 @@ class CommanderHistoryManager:
                 location.pvp_kill_ts = None
                 location.pvp_kill_victim = None
                 rec["departed"] = True
+                self.machine.note_killed(cmdr_id)
                 beep_this_commander = self._beep_decision(cmdr_id, False, "kill_reset")
                 rec["suppress_until"] = now_ts + _KILL_RESET_SUPPRESS_SECONDS
                 self.last_interactions[cmdr_id] = current_flags
@@ -3293,6 +3327,10 @@ class CommanderHistoryManager:
                 location.kill_departed.add(cid)
                 location.forget(cid)
                 rec["kill_removed"] = True
+            # Drop the beep token now. SupercruiseEntry preserves announced
+            # ids, and this one must not ride along as "already announced".
+            self.machine.index_name(cid, info.get("name") if isinstance(info.get("name"), str) else victim)
+            self.machine.note_killed(cid)
         if resolved:
             self.machine.index_name(resolved, victim)
             self.machine.note_killed(resolved)
@@ -3320,6 +3358,7 @@ class CommanderHistoryManager:
                 location.kill_departed.add(cid)
                 location.forget(cid)
                 rec["kill_removed"] = True
+            self.machine.release_return(cid)
         log.info("Interdiction target %s got away", name)
 
     def remember_leave_snapshot(self) -> None:
@@ -3474,8 +3513,16 @@ class CommanderHistoryManager:
         if target and location.state != 1:
             self._establish_presence_by_name(target)
         sc_ids = set(self.machine.announced) | set(dropped) | set(location.leave_snapshot)
+        # Someone you killed or who escaped still owes a return beep. Do not
+        # file them with the people you left behind, or the drop silences them.
+        sc_ids.difference_update(
+            str(cid)
+            for cid, rec in self._gone.items()
+            if isinstance(rec, dict) and rec.get("departed")
+        )
         # The drop is its own instance, even if a jump was still marked open.
         self.machine.jump_open = False
+        self._unstage_suppressed()
         self._emit_fresh(self.machine.commit(sc_ids))
         if target and location.state != 1:
             seconds = getattr(location, "interdiction_cooldown", None) or INTERDICTION_SUCCESS_COOLDOWN
