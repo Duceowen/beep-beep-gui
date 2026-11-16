@@ -97,6 +97,14 @@ class InstanceMachine:
                 for key, ids in self.by_name.items():
                     if ids and set(map(str, ids)) <= killed_ids:
                         kept_names.discard(key)
+            # Only people you left behind keep their announcement. An id that
+            # is no longer in the departure set (heard long ago, dropped from
+            # the leave snapshot) is a fresh sighting when it returns.
+            left_behind = {str(cid) for cid in departure_ids}
+            kept_ids &= left_behind
+            for key, ids in self.by_name.items():
+                if ids and not (set(map(str, ids)) & kept_ids):
+                    kept_names.discard(key)
         self.staged = []
         self.pending = False
         self.pending_since = None

@@ -411,6 +411,43 @@ class DropOutOrder(unittest.TestCase):
         self.assertEqual(h.sent, [])
 
 
+class StaleAnnouncementAfterSupercruise(unittest.TestCase):
+    """A commander beeped earlier, then unheard for over 10 minutes, then gone
+    into supercruise with you. Their id must not survive the supercruise commit
+    as "already announced", or their return is silenced as a refresh."""
+
+    def test_stale_announced_commander_returning_in_supercruise_beeps(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "12", "Blubpotato")
+        location.add_instance("12", state=0, system="Sol")
+        location.instance["12"]["here"] = True
+        h.machine.note_announced("12")
+        h._visit["12"] = time.monotonic() - 1200  # not heard for 20 minutes
+        enter_supercruise(h, "Sol")
+        h._log_presence_changes()  # the worker tick that records the removal
+        self.assertNotIn("12", h.machine.announced)
+        # Re-listed in supercruise, well after the re-add window.
+        location.state = 1
+        feed(h, ["12"], datetime.datetime(2026, 11, 16, 21, 17, 0))
+        self.assertEqual(h.sent, [["12"]])
+
+    def test_announced_commander_still_left_behind_stays_silent(self):
+        h = fresh_history()
+        location.system, location.state = "Sol", 0
+        add_row(h, "13", "Recent")
+        location.add_instance("13", state=0, system="Sol")
+        location.instance["13"]["here"] = True
+        h.machine.note_announced("13")
+        h._visit["13"] = time.monotonic() - 30  # heard a moment ago
+        enter_supercruise(h, "Sol")
+        h._log_presence_changes()
+        self.assertIn("13", location.leave_snapshot)
+        location.state = 1
+        feed(h, ["13"], datetime.datetime(2026, 11, 16, 21, 17, 0))
+        self.assertEqual(h.sent, [])
+
+
 class LongSupercruiseRelist(unittest.TestCase):
     def test_left_behind_commander_relisted_later_in_supercruise_is_silent(self):
         h = fresh_history()

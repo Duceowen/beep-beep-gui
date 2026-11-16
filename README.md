@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.18](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.18/beep-beep-gui-1.1.18.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.19](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.19/beep-beep-gui-1.1.19.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,9 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.19
+- A commander you beeped earlier, who was not heard for over 10 minutes before you entered supercruise, now beeps again when they return in supercruise. Previously the return was silenced as a refresh of the old announcement
 
 ## 1.1.18
 - Seen counts go up only when a commander is announced. Silent re-lists after a supercruise drop-out, and transition, wing, and kill paths, no longer add to Seen
