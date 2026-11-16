@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.16](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.16/beep-beep-gui-1.1.16.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.17](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.17/beep-beep-gui-1.1.17.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,10 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.17
+- Session recording no longer lists and sizes every file in the recordings folder on each recorded line. The folder total is kept in memory and rechecked at most every 30 seconds, so busy journal moments stay lighter on EDMC's window
+- The recording size cap now counts the Windows line endings, so the folder stays under the cap exactly
 
 ## 1.1.16
 - EDMC exits when its window is closed, when another program sends a close, and when Windows signs out, restarts, or shuts down, even if Seen Commanders or Options is still open

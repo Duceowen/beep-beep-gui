@@ -185,6 +185,9 @@ class SessionRecorder:
         self._path = None
         self._epochs = {}
         self._failed = False
+        # Folder total from the last scan plus writes since; see _room_for.
+        self._room_total = None
+        self._room_scanned_at = 0.0
 
     def directory(self) -> str:
         return os.path.join(self._plugin_dir(), "recordings")
@@ -293,11 +296,13 @@ class SessionRecorder:
                 if key not in ("kind", "wall"):
                     payload[key] = value
         line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
-        extra = len(line.encode("utf-8"))
+        # Text mode on Windows writes "\r\n", one byte more per line than the string length.
+        nl = len(os.linesep) - 1
+        extra = len(line.encode("utf-8")) + nl
         header = None
         if self._fh is None:
             header = self._header_line()
-            extra += len(header.encode("utf-8"))
+            extra += len(header.encode("utf-8")) + nl
         if not self._room_for(extra):
             return False
         if not self._ensure_file(header):
@@ -327,6 +332,18 @@ class SessionRecorder:
         """Drop the oldest session files until this write fits. Never deletes the open file."""
         if extra > self.max_total_bytes:
             return False
+        # Most writes fit under the cap already. Reuse the last folder total and add
+        # this write to it, and rescan the folder at most every 30 seconds to catch
+        # changes made outside this process. This keeps the Tk thread from listing
+        # and stat-ing every recording file on each journal line.
+        cached = self._room_total
+        if (
+            cached is not None
+            and time.monotonic() - self._room_scanned_at < 30.0
+            and cached + extra <= self.max_total_bytes
+        ):
+            self._room_total = cached + extra
+            return True
         files = self._session_files()
         total = sum(size for _path, size in files)
         active = self._path
@@ -340,7 +357,10 @@ class SessionRecorder:
             except OSError:
                 continue
             total -= size
-        return total + extra <= self.max_total_bytes
+        self._room_scanned_at = time.monotonic()
+        fits = total + extra <= self.max_total_bytes
+        self._room_total = total + extra if fits else total
+        return fits
 
     def _session_files(self):
         folder = self.directory()
