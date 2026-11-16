@@ -2955,6 +2955,10 @@ class CommanderHistoryManager:
                 else:
                     allow_beep = True
 
+            if beep_this_commander:
+                # An announced arrival counts as a sighting, even if the wing setting mutes the sound.
+                info["seen_count"] = _safe_entry_int(existing, "seen_count", 0) + 1
+
             if beep_this_commander and not allow_beep:
                 self._beep_decision(cmdr_id, False, "wing_muted")
     
@@ -3142,7 +3146,9 @@ class CommanderHistoryManager:
             "name": _safe_entry_text(existing, "name", "unknown"),
             "sound": _safe_entry_text(existing, "sound", "neutral"),
             "last_seen": ts.isoformat(),
-            "seen_count": _safe_entry_int(existing, "seen_count", 0) + 1,
+            # Count only announced arrivals (see the beep block in the history update).
+            # Silent re-lists, transition, wing and kill paths keep the stored count.
+            "seen_count": _safe_entry_int(existing, "seen_count", 0),
             "kills": _safe_entry_int(existing, "kills", 0),
         }
 

@@ -1957,6 +1957,9 @@ class SeenCommandersGUI:
         info = history_inst.seen_data[cmdr_id]
     
         popup = tk.Toplevel(self.window)
+        # Keep hidden until it is placed, then show once. Moving a visible window
+        # after it opens lets Windows hand keyboard focus to whatever is under the mouse.
+        popup.withdraw()
         self._track_toplevel(popup)
         popup.title(tl("Edit Commander {NAME}").format(NAME=info.get("name", "unknown")))
         popup.transient(self.window)
@@ -1976,11 +1979,23 @@ class SeenCommandersGUI:
     
         tk.Label(popup, text=tl("Name:")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         name_var = tk.StringVar(value=info.get("name", "unknown"))
-        name_entry = tk.Entry(popup, textvariable=name_var)
+        # exportselection=False: the Treeview row selection must not clear this entry's highlight.
+        name_entry = tk.Entry(popup, textvariable=name_var, exportselection=False)
         name_entry.grid(row=0, column=1, padx=5, pady=5)
         name_entry.focus_set()
         name_entry.selection_range(0, tk.END)
         name_entry.icursor(0)
+
+        def _popup_regained_focus(e):
+            # Topmost toggles and lifts (and the periodic topmost reassert) can give the
+            # window itself the focus and drop the entry. Return it to the name box.
+            if e.widget is popup:
+                try:
+                    name_entry.focus_set()
+                except tk.TclError:
+                    pass
+
+        popup.bind("<FocusIn>", _popup_regained_focus, add="+")
 
         tk.Label(popup, text=tl("Sound:")).grid(row=1, column=0, padx=5, pady=5, sticky="w")
         
@@ -2054,9 +2069,28 @@ class SeenCommandersGUI:
         self._apply_topmost(popup)
         self.apply_edmc_theme(popup)
         window_bottom = self.window.winfo_rooty() + self.window.winfo_height()
-        self._move_popup(popup, event.x_root, event.y_root, keep_above=window_bottom)
+        # Place the popup beside the pointer, not under it. A pointer on the popup
+        # border shows the resize cursor and a click there moves focus away from the entry.
+        self._move_popup(popup, event.x_root + 20, event.y_root - 20, keep_above=window_bottom)
         name_entry.focus_set()
         self._grab_when_viewable(popup)
+
+        def focus_name_when_mapped():
+            # Tk ignores focus and selection set before the popup is mapped.
+            # Set them again once it shows, so the name is ready to type over.
+            # No grab and no focus_force, so closing still reaches EDMC.
+            try:
+                if not popup.winfo_exists() or not popup.winfo_viewable():
+                    popup.after(50, focus_name_when_mapped)
+                    return
+                popup.lift()
+                name_entry.focus_set()
+                name_entry.selection_range(0, tk.END)
+                name_entry.icursor(0)
+            except tk.TclError:
+                pass
+
+        popup.after(80, focus_name_when_mapped)
 
     def build_ui(self, parent):
         sort_field = config.get_config("sort_field", "last_seen")
