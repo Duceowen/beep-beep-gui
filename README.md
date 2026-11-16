@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.15](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.15/beep-beep-gui-1.1.15.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.16](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.16/beep-beep-gui-1.1.16.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.16
+- EDMC exits when its window is closed, when another program sends a close, and when Windows signs out, restarts, or shuts down, even if Seen Commanders or Options is still open
+- Those windows no longer take a modal grab, so they cannot keep EDMC on screen after it has been asked to leave
+- On the way out, open plugin windows are closed and any unsaved commander list is written the same way as a normal save
 
 ## 1.1.15
 - A commander you killed beeps the next time they show up, including after you enter supercruise and after you drop back out. The same return in normal space already beeped

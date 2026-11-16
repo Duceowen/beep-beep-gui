@@ -11,6 +11,7 @@ from commander_history import backup_list_kind, describe_import_plan, history_in
 from beep_beep import beep_inst, sound_inst
 import clickthrough
 from i18n import shown_error, tl
+from lifetime import lifetime
 from logutil import log
 
 try:
@@ -412,6 +413,7 @@ class SeenCommandersGUI:
         # is built, makes EDMC drop the row. Children packed left and right
         # land on the edges of that row.
         self.plugin_parent = parent
+        lifetime.set_host(parent)
         container = tk.Frame(parent)
 
         btn_show = tk.Button(
@@ -472,6 +474,7 @@ class SeenCommandersGUI:
 
         if self.window and self.window.winfo_exists():
             self._window_open = True
+            self._track_toplevel(self.window, own=True)
             self.window.lift()
             self.build_ui(self.window)
             self._apply_topmost()
@@ -481,6 +484,9 @@ class SeenCommandersGUI:
             return
     
         self.window = tk.Toplevel(parent)
+        # Own the pop-out before it is shown, so Windows does not treat it as
+        # the process main window and deliver EDMC's close here.
+        self._track_toplevel(self.window, own=True)
         self.window.title(tl("Seen Commanders"))
     
         self.window.geometry(f"{width}x{height}+{x}+{y}")
@@ -540,6 +546,7 @@ class SeenCommandersGUI:
         enabled = bool(config.get_config("stay_on_top", False))
         set_always_on_top(win, enabled)
         self._schedule_topmost(win, enabled)
+        lifetime.reown(win)
 
     def _schedule_topmost(self, win, enabled):
         """Reassert the X11 above flag while the window is visible.
@@ -563,6 +570,8 @@ class SeenCommandersGUI:
 
         def tick():
             win._beep_topmost_job = None
+            if lifetime.shutting_down:
+                return
             try:
                 if not win.winfo_exists():
                     return
@@ -573,39 +582,73 @@ class SeenCommandersGUI:
                 return
             set_always_on_top(win, True, lift=False)
             try:
-                win._beep_topmost_job = win.after(TOPMOST_REASSERT_MS, tick)
+                win._beep_topmost_job = lifetime.note_after(
+                    win, win.after(TOPMOST_REASSERT_MS, tick)
+                )
             except Exception:
                 win._beep_topmost_job = None
 
         try:
-            win._beep_topmost_job = win.after(TOPMOST_REASSERT_MS, tick)
+            win._beep_topmost_job = lifetime.note_after(
+                win, win.after(TOPMOST_REASSERT_MS, tick)
+            )
         except Exception:
             win._beep_topmost_job = None
 
-    def _grab_when_viewable(self, popup):
-        """Grab a dialog after the window manager has mapped it.
+    def _track_toplevel(self, window, on_close=None, *, own=False):
+        """Remember a plugin window so EDMC can exit while it is open."""
+        host = getattr(self, "plugin_parent", None) or getattr(self, "parent", None)
+        if host is not None:
+            lifetime.set_host(host)
+        lifetime.track(window, on_close=on_close, own=own)
 
-        Linux Mint raises TclError from grab_set() while the window is not
-        viewable. That error was aborting the Seen Commanders editor before
-        its fields were created.
+    def shutdown(self):
+        """Close every plugin window and cancel its scheduled callbacks.
+
+        The commander list is not written here. plugin_stop flushes it
+        through the usual save after the windows are gone.
         """
-        def attempt(tries_left):
-            try:
-                if not popup.winfo_exists():
-                    return
-                popup.update_idletasks()
-                if getattr(popup, "_beep_allow_grab", True) is False:
-                    return
-                if popup.winfo_viewable():
-                    popup.grab_set()
-                    popup.lift()
-                    return
-            except tk.TclError:
-                return
-            if tries_left > 0:
-                popup.after(20, lambda: attempt(tries_left - 1))
+        try:
+            self._close_column_menu()
+        except Exception:
+            pass
+        try:
+            self._close_beep_mark_menu()
+        except Exception:
+            pass
+        window = getattr(self, "window", None)
+        try:
+            if window is not None and window.winfo_exists():
+                self.save_window_geometry()
+        except Exception:
+            log.exception("Could not save the Seen Commanders window position")
+        popup = getattr(self, "options_popup", None)
+        try:
+            if popup is not None and popup.winfo_exists():
+                self.save_options_geometry(popup)
+        except Exception:
+            log.exception("Could not save the Options window position")
+        lifetime.shutdown()
+        self._window_open = False
+        self.window = None
+        self.options_popup = None
 
-        popup.after(0, lambda: attempt(15))
+    def _grab_when_viewable(self, popup):
+        """Show a dialog without taking a modal grab.
+
+        A grab makes Tk ignore the close sent to EDMC's window, so the
+        process stays running until that dialog is closed by hand.
+        """
+        try:
+            popup._beep_allow_grab = False
+        except Exception:
+            pass
+        owner = None
+        try:
+            owner = popup.master
+        except Exception:
+            owner = None
+        self._raise_in_front(popup, owner)
 
     def _raise_in_front(self, window, owner=None):
         """Show a dialog above the window the commander is using.
@@ -615,6 +658,8 @@ class SeenCommandersGUI:
         hides that dialog until the dialog is topmost too.
         """
         def attempt(tries_left):
+            if lifetime.shutting_down:
+                return
             try:
                 if not window.winfo_exists():
                     return
@@ -627,13 +672,13 @@ class SeenCommandersGUI:
                             keep = bool(owner.wm_attributes("-topmost"))
                     except tk.TclError:
                         keep = False
+                # Lift only. Forcing the foreground makes this window the
+                # process main window, so an external close never reaches EDMC.
                 window.wm_attributes("-topmost", True)
                 window.lift()
-                window.focus_force()
                 if not keep:
                     window.wm_attributes("-topmost", False)
                     window.lift()
-                    window.focus_force()
             except tk.TclError:
                 return
             if tries_left > 0:
@@ -1358,6 +1403,7 @@ class SeenCommandersGUI:
         self._sync_column_vars()
         palette = self._menu_palette()
         popup = tk.Toplevel(self.window)
+        self._track_toplevel(popup)
         # Keep it hidden until it has a position. A borderless window on
         # Windows otherwise opens at the top-right of the screen.
         popup.withdraw()
@@ -1472,8 +1518,9 @@ class SeenCommandersGUI:
                 pass
             self.save_window_geometry()
             self.window.destroy()
-    
-        self.window.protocol("WM_DELETE_WINDOW", on_window_close)        
+
+        self._track_toplevel(self.window, on_window_close, own=True)
+        self.window.protocol("WM_DELETE_WINDOW", on_window_close)
 
 
     def save_window_geometry(self):
@@ -1513,6 +1560,7 @@ class SeenCommandersGUI:
             self.refresh_clickthrough()
         except Exception:
             pass
+        lifetime.reown(window)
 
 
     def make_tree_editable(self):
@@ -1703,6 +1751,7 @@ class SeenCommandersGUI:
         self._close_beep_mark_menu()
         palette = self._edmc_palette()
         popup = tk.Toplevel(self.window)
+        self._track_toplevel(popup)
         popup.withdraw()
         popup.overrideredirect(True)
         try:
@@ -1908,6 +1957,7 @@ class SeenCommandersGUI:
         info = history_inst.seen_data[cmdr_id]
     
         popup = tk.Toplevel(self.window)
+        self._track_toplevel(popup)
         popup.title(tl("Edit Commander {NAME}").format(NAME=info.get("name", "unknown")))
         popup.transient(self.window)
         popup.bind("<Escape>", lambda e: popup.destroy())
@@ -2299,6 +2349,7 @@ class SeenCommandersGUI:
         except Exception:
             pass
         popup = tk.Toplevel(owner)
+        self._track_toplevel(popup)
         popup.title(tl("Options"))
         popup.transient(owner)
 
@@ -2334,6 +2385,8 @@ class SeenCommandersGUI:
         The list comes back when that window closes, which is when editing
         is allowed again.
         """
+        if lifetime.shutting_down:
+            return
         window = getattr(self, "window", None)
         try:
             if not window or not window.winfo_exists():
@@ -3047,6 +3100,8 @@ class SeenCommandersGUI:
                 pass
     
         def refresh():
+            if lifetime.shutting_down:
+                return
             if not self.window or not self.window.winfo_exists():
                 return
 
@@ -3061,9 +3116,9 @@ class SeenCommandersGUI:
                 self._last_full_refresh = now
                 self.refresh_gui()
 
-            self._refresh_id = self.window.after(
-                self.presence_poll_ms,
-                refresh
+            self._refresh_id = lifetime.note_after(
+                self.window,
+                self.window.after(self.presence_poll_ms, refresh),
             )
     
         refresh()
@@ -3098,6 +3153,7 @@ class SeenCommandersGUI:
                 self.options_popup = None
             self._set_seen_list_locked(False)
 
+        self._track_toplevel(popup, on_window_close)
         popup.protocol("WM_DELETE_WINDOW", on_window_close)
         popup.bind("<Destroy>", on_destroy)
     
@@ -3220,6 +3276,7 @@ class SeenCommandersGUI:
         if host is None:
             return
         popup = tk.Toplevel(host)
+        self._track_toplevel(popup)
         popup.title(title)
         popup.resizable(False, False)
         try:
@@ -3265,6 +3322,7 @@ class SeenCommandersGUI:
             ids.append(str(cmdr_id))
 
         window = tk.Toplevel(parent)
+        self._track_toplevel(window)
         self._spelling_changes_window = window
         window.title(tl("Spelling changes"))
         window.geometry("520x460")
@@ -3405,6 +3463,7 @@ class SeenCommandersGUI:
                 )
                 return
             final = tk.Toplevel(window)
+            self._track_toplevel(final)
             final.title(tl("Confirm spelling changes"))
             final.transient(window)
             final.resizable(False, False)
@@ -3499,6 +3558,7 @@ class SeenCommandersGUI:
         from commander_names import collect_journal_spellings, plan_spelling_updates
 
         dialog = tk.Toplevel(parent)
+        self._track_toplevel(dialog)
         self._spelling_warning_window = dialog
         dialog.title(tl("Update name spelling"))
         dialog.transient(parent)
@@ -3794,6 +3854,7 @@ class SeenCommandersGUI:
             return
 
         dialog = tk.Toplevel(parent)
+        self._track_toplevel(dialog)
         dialog.title(tl("Restore seen commanders"))
         dialog.transient(parent)
 
@@ -3867,6 +3928,7 @@ class SeenCommandersGUI:
 
     def _confirm_import_plan(self, parent, plan):
         dialog = tk.Toplevel(parent)
+        self._track_toplevel(dialog)
         dialog.title(tl("Import commander names"))
         dialog.transient(parent)
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
