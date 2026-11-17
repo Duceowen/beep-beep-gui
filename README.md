@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.19](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.19/beep-beep-gui-1.1.19.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.20](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.20/beep-beep-gui-1.1.20.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,11 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.20
+- Beeps for a commander who reappears after you enter supercruise. The leave list only silences re-lists for 20 seconds after you jump, so a later return is a new arrival.
+- The startup quiet window only silences commanders already saved with a name. An unnamed commander present at startup can now beep.
+- Name matching prefers current names over former names (aliases). Scan and chat names can no longer be written onto an unknown commander when that name belongs to any saved commander.
 
 ## 1.1.19
 - A commander you beeped earlier, who was not heard for over 10 minutes before you entered supercruise, now beeps again when they return in supercruise. Previously the return was silenced as a refresh of the old announcement

@@ -49,6 +49,8 @@ class Location:
         self.instance_reset_pending = False
         # Commanders in the instance when supercruise was entered (see leave_instance).
         self.leave_snapshot: set[str] = set()
+        # Wall-clock time the snapshot was taken (entering supercruise).
+        self.leave_snapshot_at: float = 0.0
         # Commanders you killed or who escaped while they were in the instance. A death
         # after that still counts them as left behind, so their re-list is not an arrival.
         self.kill_departed: set[str] = set()
@@ -169,6 +171,7 @@ class Location:
         if after_death:
             # Killed or escaped commanders were in this instance, so the death leaves them behind too.
             self.leave_snapshot |= self.kill_departed
+        self.leave_snapshot_at = time.time()
         self.instance.clear()
         self._jump_company_pending = False
         self.death_snapshot = False
@@ -315,6 +318,9 @@ _LEAVE_MEMORY_SECONDS = 600.0
 _WING_JOIN_SILENCE_SECONDS = 20.0
 _INTERDICTION_WINDOW_SECONDS = 60.0
 _SUPERCRUISE_DROP_GRACE_SECONDS = 12.0
+# The leave snapshot silences re-lists only this long after you enter supercruise.
+# A commander who reappears after that is treated as a new arrival and beeps.
+_LEAVE_SNAPSHOT_EXPIRY_SECONDS = 20.0
 # A killed or escaped commander can be re-listed by the game just after a
 # supercruise drop. Only silence that re-list close to the drop, so a genuine
 # return later in the visit is still announced.
@@ -1065,7 +1071,8 @@ class CommanderHistoryManager:
         # CommanderHistory bumps Met for recent contacts whether or not they
         # entered the new instance. A jump or a load clears the snapshot.
         # While you are still in supercruise the same list covers the re-list.
-        if cmdr_id in location.leave_snapshot or self.machine.suppresses(cmdr_id):
+        snapshot_fresh = now_ts - location.leave_snapshot_at < _LEAVE_SNAPSHOT_EXPIRY_SECONDS
+        if (cmdr_id in location.leave_snapshot and snapshot_fresh) or self.machine.suppresses(cmdr_id):
             return True
         dropped_at = location.supercruise_dropped.get(cmdr_id)
         if dropped_at is not None and now_ts - dropped_at < _SUPERCRUISE_DROP_GRACE_SECONDS:
@@ -1113,10 +1120,14 @@ class CommanderHistoryManager:
     def _decide_new_arrival(self, cmdr_id: str, in_batch: bool, name=None) -> bool:
         """The one decision for a commander who is new to the instance: beep or stay quiet.
 
-        Quiet during the post-load batch, wing-join name window, and for anyone whose
-        announcement rules say no.
+        Quiet during the post-load batch for commanders we already know, wing-join
+        name window, and for anyone whose announcement rules say no. A commander with
+        no saved name yet is not part of the restored list, so the batch does not
+        silence them.
         """
-        if in_batch:
+        info = self.seen_data.get(str(cmdr_id))
+        known = isinstance(info, dict) and not is_unknown_name(info.get("name"))
+        if in_batch and known:
             return self._beep_decision(cmdr_id, False, "load_batch")
         if self._wing_join_name_silent(name if name is not None else self._name_for(cmdr_id)):
             return self._beep_decision(cmdr_id, False, "wing_join")
@@ -1498,10 +1509,20 @@ class CommanderHistoryManager:
         keys = {name_key(name) for name in names if isinstance(name, str) and name.strip()}
         if not keys:
             return
-        matches = [
-            cid for cid, info in self.seen_data.items()
-            if isinstance(info, dict) and self.is_present(cid) and any(row_has_name(info, k) for k in keys)
+        present = [
+            (cid, info) for cid, info in self.seen_data.items()
+            if isinstance(info, dict) and self.is_present(cid)
         ]
+        # Current names first. Former names (aliases) only when no current name matches.
+        matches = [
+            cid for cid, info in present
+            if isinstance(info.get("name"), str) and name_key(info["name"]) in keys
+        ]
+        if not matches:
+            matches = [
+                cid for cid, info in present
+                if any(row_has_name(info, k) for k in keys)
+            ]
         if len(matches) != 1:
             if len(matches) > 1:
                 log.info(
@@ -1781,12 +1802,16 @@ class CommanderHistoryManager:
             return found
         key = name_key(name)
         conf = confusable_key(name)
+        current_exact = []
         exact = []
         like = []
         for cid, info in self.seen_data.items():
             if not isinstance(info, dict):
                 continue
-            names = [info.get("name")]
+            current = info.get("name")
+            if isinstance(current, str) and name_key(current) == key:
+                current_exact.append(str(cid))
+            names = [current]
             aliases = info.get("aliases")
             if isinstance(aliases, list):
                 names.extend(aliases)
@@ -1798,7 +1823,9 @@ class CommanderHistoryManager:
                 elif confusable_key(candidate) == conf:
                     like.append(str(cid))
         chosen = None
-        if len(set(exact)) == 1:
+        if len(set(current_exact)) == 1:
+            chosen = current_exact[0]
+        elif len(set(exact)) == 1:
             chosen = exact[0]
         elif not exact and len(set(like)) == 1:
             chosen = like[0]
@@ -3153,16 +3180,22 @@ class CommanderHistoryManager:
         }
 
     def _known_name_keys(self) -> set[str]:
+        """Every saved name, current or former. A scan or chat line must not
+        give one of these names to a different, unknown commander."""
         keys = set()
         for info in self.seen_data.values():
             if not isinstance(info, dict):
                 continue
-            name = info.get("name")
-            # Hidden characters are not a real saved name. They must not block
-            # Update Spelling or a journal name for someone else.
-            if not isinstance(name, str) or is_unknown_name(name) or _has_hidden_chars(name):
-                continue
-            keys.add(name_key(name))
+            names = [info.get("name")]
+            aliases = info.get("aliases")
+            if isinstance(aliases, list):
+                names.extend(aliases)
+            for name in names:
+                # Hidden characters are not a real saved name. They must not block
+                # Update Spelling or a journal name for someone else.
+                if not isinstance(name, str) or is_unknown_name(name) or _has_hidden_chars(name):
+                    continue
+                keys.add(name_key(name))
         return keys
 
     def _resolve_unknown_names(self, killed_unknown_ids=None, new_wing_unknown_ids=None) -> None:
