@@ -1,11 +1,120 @@
-from commander_history import history_inst, read_session_state, read_current_system, read_in_supercruise, location
+from commander_history import (
+    history_inst,
+    read_session_state,
+    read_current_system,
+    read_in_supercruise,
+    location,
+)
 from beep_beep import beep_inst
-from overlay_announcer import announce_connected, clear_connected
+from overlay_announcer import (
+    announce_connected,
+    clear_connected,
+    start_cooldown as start_overlay_cooldown,
+    stop_cooldown as stop_overlay_cooldown,
+    announce_pvp_kill,
+    clear_pvp_kills,
+    ensure_pvp_group,
+    announce_pvp_whois,
+    clear_pvp_whois,
+    ensure_whois_group,
+)
+import cooldown_timer
+import pvp_whois
 from gui import gui_inst
 from logutil import log
+import time
 from version import __version__  # noqa: F401
 from i18n import tl
+from beep_beep_config import config
 import myNotebook as nb  # noqa
+
+
+_cooldown_context = {
+    "name": None, "id": None, "seconds": cooldown_timer.DEFAULT_SECONDS,
+    "at": 0.0, "used": True,
+}
+
+
+def set_cooldown_context(target, seconds, cmdr_id=None):
+    _cooldown_context["name"] = target
+    _cooldown_context["id"] = cmdr_id
+    _cooldown_context["seconds"] = seconds
+    _cooldown_context["at"] = time.monotonic()
+    _cooldown_context["used"] = False
+
+
+def on_cooldown_start(target, cmdr_id, seconds):
+    set_cooldown_context(target, seconds, cmdr_id)
+    _cooldown_context["used"] = True
+    if not config.get_config("cooldown_timer", True):
+        return
+    cooldown_timer.start(target_name=target, target_id=cmdr_id, seconds=seconds)
+    start_overlay_cooldown()
+
+
+def dashboard_entry(cmdr, is_beta, entry):
+    """EDMC calls this when Status.json changes, about once a second."""
+    gui_inst.set_status_on_foot(entry)
+    flags = entry.get("Flags", 0) if isinstance(entry, dict) else 0
+    edge = cooldown_timer.note_status_flags(flags)
+    if edge == "start":
+        if not config.get_config("cooldown_timer", True) or cooldown_timer.is_active():
+            return
+        if not cooldown_timer.fresh_context(_cooldown_context["at"], _cooldown_context["used"]):
+            # Ordinary FSD cooldown (supercruise exit), not an interdiction.
+            return
+        _cooldown_context["used"] = True
+        name = _cooldown_context["name"]
+        cmdr_id = _cooldown_context["id"]
+        if cmdr_id is None and isinstance(name, str):
+            cmdr_id = history_inst.resolve_commander(name)
+        seconds = _cooldown_context["seconds"]
+        cooldown_timer.start(target_name=name, target_id=cmdr_id, seconds=seconds)
+        start_overlay_cooldown()
+        log.info("FSD cooldown flag set")
+    elif edge == "end" and cooldown_timer.is_active():
+        cooldown_timer.stop()
+        stop_overlay_cooldown()
+        log.info("FSD cooldown flag cleared")
+
+
+def on_cooldown_left(cmdr_id):
+    # A late submit: the target jumps away before the assumed 60 s is over.
+    if not cooldown_timer.is_full_window():
+        return
+    if cooldown_timer.stop_if_target(None, cmdr_id):
+        stop_overlay_cooldown()
+        log.info("Cooldown cleared: target %s jumped away", cmdr_id)
+
+
+def on_whois_result(kind, data):
+    if not isinstance(data, dict):
+        return
+    announce_pvp_whois(
+        kind,
+        data.get("name"),
+        data.get("kills", 0),
+        data.get("deaths", 0),
+        data.get("combat_logger", False),
+    )
+
+
+def on_targeted_for_whois(entry, own_cmdr):
+    if not config.get_config("pvp_overlay", False):
+        return
+    try:
+        stage = int(entry.get("ScanStage") or 0)
+    except (TypeError, ValueError):
+        return
+    raw = entry.get("PilotName")
+    prefix = "$cmdr_decorate:#name="
+    if stage < 1 or not isinstance(raw, str) or not raw.startswith(prefix):
+        return
+    name = raw[len(prefix):-1] if raw.endswith(";") else raw[len(prefix):]
+    if not name or name.casefold() == str(own_cmdr or "").casefold():
+        return
+    pvp_whois.request(name, on_whois_result)
+
 
 def plugin_start3(plugin_dir):
     log.info("beep_beep plugin starting (%s)", plugin_dir)
@@ -21,9 +130,13 @@ def plugin_start3(plugin_dir):
     history_inst.subscribe_sound(beep_inst.handle_event)       
     history_inst.subscribe_gui(gui_inst.add_or_update_commander)
     history_inst.subscribe_overlay(announce_connected)
+    history_inst.subscribe_cooldown(on_cooldown_start)
+    history_inst.subscribe_cooldown_left(on_cooldown_left)
     history_inst.aggregated_commanders_load()
     history_inst.start_kill_backfill()
     history_inst.start_worker()
+    ensure_pvp_group()
+    ensure_whois_group()
     return tl("Beep Beep")
 
 
@@ -42,7 +155,7 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     if isinstance(event, str) and event:
         history_inst.note_last_journal(event, entry.get("timestamp"))
     if event in ("SupercruiseEntry", "SupercruiseExit", "FSDJump", "Location", "PVPKill"):
-        log.info("TIMING journal %s ts=%s recv=%.3f", event, entry.get("timestamp"), __import__("time").time())
+        log.info("TIMING journal %s ts=%s recv=%.3f", event, entry.get("timestamp"), time.time())
     on_foot = bool(state.get("OnFoot"))
     if event in ("Shutdown", "ShutDown"):
         on_foot = False
@@ -73,6 +186,15 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
             location.leave_instance(record_departures=False, after_death=True)
             history_inst.forget_instance()
             history_inst.note_instance_reset()
+            killer = entry.get("KillerName") or entry.get("Killer")
+            if isinstance(killer, str) and killer.strip() and not killer.startswith("$"):
+                announce_pvp_kill(
+                    "death",
+                    killer,
+                    entry.get("KillerRank"),
+                    entry.get("KillerShip"),
+                    system,
+                )
 
     elif event == "SupercruiseEntry":        
         location.set(1, system)
@@ -136,27 +258,44 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
     
     elif event == "Interdiction":
         # Only a successful interdiction keeps its target through the drop-in.
+        location.interdiction_win = False
+        location.interdiction_self = False
+        # Win or lose, an outgoing interdiction uses the 60 s cooldown. Always
+        # refresh the context so a status edge cannot reuse an earlier 10 s one.
+        set_cooldown_context(
+            entry.get("Interdicted"),
+            cooldown_timer.seconds_for_event("Interdiction", entry),
+        )
         if entry.get("Success") is False and entry.get("IsPlayer") is True:
             history_inst.note_escape(entry.get("Interdicted"))
         elif entry.get("IsPlayer") is True:
             location.interdiction(entry.get("Interdicted"))
             # Outgoing Success does not say whether they submitted.
             location.interdiction_cooldown = 60.0
+            location.interdiction_win = True
         else:
-            location.interdiction(entry.get("Interdicted") if entry.get("Success") is not False else None)
+            location.interdiction(
+                entry.get("Interdicted") if entry.get("Success") is not False else None
+            )
 
     elif event == "Interdicted":
         # The other commander pulled you out of supercruise. They drop in with you.
         # Escaping is EscapeInterdiction, which does not land you in their instance.
+        location.interdiction_win = False
+        location.interdiction_self = False
         if entry.get("IsPlayer") is True:
             location.interdiction(entry.get("Interdictor"))
-            location.interdiction_cooldown = 10.0 if entry.get("Submitted") is True else 60.0
+            seconds = cooldown_timer.seconds_for_event("Interdicted", entry)
+            location.interdiction_cooldown = seconds
+            set_cooldown_context(entry.get("Interdictor"), seconds)
+            location.interdiction_self = True
 
     elif event == "ShipTargeted":
         # A locked player ship is in this instance, in normal space or supercruise.
         # Announce on this line. Do not wait for CommanderHistory.
         history_inst.note_ship_present(entry)
         history_inst.note_player_targets(entry)
+        on_targeted_for_whois(entry, cmdrname)
 
     elif event == "ReceiveText":
         channel = str(entry.get("Channel") or "").strip().lower()
@@ -166,10 +305,19 @@ def journal_entry(cmdrname: str, is_beta: bool, system: str, station: str, entry
             history_inst.note_target_silent(who)
             
     elif event == "PVPKill":
-        victim = entry.get("Victim")        
+        victim = entry.get("Victim")
         location.pvp_kill(victim)
         history_inst.record_kill(victim)
         history_inst.note_kill(victim)
+        if cooldown_timer.stop_if_target(victim):
+            stop_overlay_cooldown()
+        announce_pvp_kill(
+            "kill",
+            entry.get("Victim_Localised") or victim,
+            entry.get("CombatRank"),
+            entry.get("VictimShip"),
+            system,
+        )
 
     # A history file that changed before this line is applied now, not on the next poll.
     history_inst.poll_history_now()
@@ -196,6 +344,10 @@ def plugin_stop():
         log.exception("beep_beep window shutdown failed")
     try:
         clear_connected()
+        stop_overlay_cooldown()
+        clear_pvp_kills()
+        clear_pvp_whois()
+        cooldown_timer.stop()
     except Exception:
         log.exception("beep_beep overlay clear failed")
     try:

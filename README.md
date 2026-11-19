@@ -4,7 +4,7 @@
 
 ## Download
 
-**[Download BeepBeep 1.1.20](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.20/beep-beep-gui-1.1.20.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
+**[Download BeepBeep 1.1.38](https://github.com/Duceowen/beep-beep-gui/releases/download/v1.1.38/beep-beep-gui-1.1.38.zip)** (zip) - [all releases](https://github.com/Duceowen/beep-beep-gui/releases)
 
 ### Install
 1. Download the zip and unzip it
@@ -33,6 +33,72 @@ Upgrading: close EDMC and unzip the new version over the old `beep-beep-gui` fol
 
 <details>
 <summary><b>Changelog</b> (click to expand)</summary>
+
+## 1.1.38
+- Code cleanup: removed unused interdiction journal timestamps, the old numeric-countdown helpers, duplicated overlay clear payloads, and an orphaned localization key. No behavior change
+
+## 1.1.37
+- Every commander listed when you drop from supercruise into normal space is now announced once with a beep and a connection overlay, instead of only commanders returning from a kill
+
+## 1.1.36
+- Targeting a player again shows their K/D from the gankers.org lookup and whether the bot knows them, in a separate movable "BeepBeep WhoIs" overlay group
+- The lookup is cached per commander for 15 minutes, throttled to at most 10 requests/minute with a 3-second minimum gap, and pauses all lookups for 5 minutes on a 429 response
+
+## 1.1.35
+- The "BeepBeep Kills" overlay group is registered at startup so it appears in the `!ovr` controller without waiting for the first kill
+
+## 1.1.34
+- A commander who was in your normal-space instance and is re-listed when you enter supercruise is now announced once on entry, instead of being silently committed as "already here"
+
+## 1.1.33
+- A commander who is dropped at supercruise exit and reappears after a real absence is now announced again instead of being held in re-list silence until a scan consumes the beep
+
+## 1.1.32
+- Removed the "FSD cooldown" label from EDMC's main window row; it could leave the window stretched after the cooldown ended. The in-game overlay still shows the indicator
+
+## 1.1.31
+- Added a Modern Overlay banner for PvP kills and deaths, ported from EDMC PvP Bot. New Options checkbox "Show PvP kills, deaths and scans in Modern Overlay" (off by default); banners stack and use their own movable overlay group
+- The scan/whois K/D overlay was not ported because its numbers only come from PvP Bot's website API
+
+## 1.1.30
+- The FSD cooldown display no longer guesses a number. It shows a plain "FSD cooldown" label while the game's own cooldown flag is set, and disappears when it clears
+
+## 1.1.29
+- An ordinary FSD cooldown, such as dropping out of supercruise, no longer starts the interdiction timer. The status flag only counts when a fresh interdiction event set the context
+
+## 1.1.28
+- Losing an interdiction now refreshes the cooldown context to 60 seconds, so the timer cannot start from a stale 10-second submit value on the next status flag change
+
+## 1.1.27
+- Hide from mouse now uses Status.json to clear a stale on-foot state when you board a shuttle/taxi or join another ship as crew. FSS and normal ship mode stay interactive
+
+## 1.1.26
+- The countdown now uses the game's own FSD cooldown flag from Status.json to start and stop, so a late submit ends the timer as soon as your cooldown ends instead of waiting for CommanderHistory
+- The 10 vs 60 second duration still comes from the interdiction context
+
+## 1.1.25
+- The cooldown timer also runs when someone interdicts you: 10 seconds if you submitted, 60 seconds if you fought, using the Submitted flag the journal does provide on your side
+- A 60-second timer clears when the tracked commander drops out of CommanderHistory (a late-submit jump-away); 10-second timers are left alone
+
+## 1.1.24
+- When you win an interdiction and the target submits, the countdown now uses the 10-second submit cooldown instead of 60 seconds. A quick drop after the win is treated as a submit, since the journal does not report it on your side
+- Longer wins still use the full 60-second cooldown
+
+## 1.1.23
+- Added Options toggles for the interdiction cooldown timer: a master on/off switch and a separate Modern Overlay display switch. Both default on, and the overlay display still requires the existing overlay announcement setting
+
+## 1.1.22
+- A successful interdiction now shows a 60-second FSD cooldown countdown, both in the overlay and beside the Beep Beep buttons in EDMC
+- The countdown uses its own Modern Overlay group ("BeepBeep Cooldown"), which can be positioned independently of the arrival announcements in the Overlay Controller
+- Killing the interdiction target clears the countdown; otherwise it expires at zero
+- The overlay countdown follows the existing overlay announcement setting
+
+## 1.1.21
+- A commander who drops off the contact list during a jump and returns later is announced again instead of being silently treated as a refresh. Short re-lists stay quiet
+- A killed or escaped commander returning after the 30-second window is announced once, instead of waiting the full 15 minutes
+- Restoring the leave list after an EDMC restart in supercruise now uses the current time, so the 20-second re-list silence works
+- An old alias no longer blocks a scan or chat line from naming a different commander unless its owner is currently in your instance
+- Each beep decision now records timing fields in the session log for further tuning
 
 ## 1.1.20
 - Beeps for a commander who reappears after you enter supercruise. The leave list only silences re-lists for 20 seconds after you jump, so a later return is a new arrival.

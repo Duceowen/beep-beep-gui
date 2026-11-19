@@ -110,6 +110,51 @@ class StationDropAfterKill(unittest.TestCase):
         self.assertEqual(self.h.sent, [["501"]])
 
 
+class PresenceGapReturn(unittest.TestCase):
+    """Real: Leg-oh-id (id 3381998) beeped at 03:06:49Z, dropped during the
+    03:08:22 SupercruiseEntry, and reappeared at 03:12:28Z. The jump left no
+    departure record, so the announcement token survived and the return was
+    logged as reason=refresh."""
+
+    def setUp(self):
+        self.h = fresh_history()
+        add_row(self.h, "3381998", "Leg-oh-id")
+        location.system, location.state = "Deciat", 1
+        feed(self.h, ["3381998"], datetime.datetime(2026, 11, 18, 3, 6, 49))
+        self.h._log_presence_changes()
+        self.assertEqual(self.h.sent, [["3381998"]])
+
+    def drop_during_jump(self):
+        location.jump_ts = time.time()
+        location.forget("3381998")
+        self.h._log_presence_changes()
+        self.assertFalse(present("3381998"))
+        self.assertIsNone(left_at(self.h, "3381998"))
+
+    def test_return_after_a_real_gap_beeps_once(self):
+        self.drop_during_jump()
+        self.h._presence_removed_at["3381998"] = time.time() - 245
+        feed(self.h, ["3381998"], datetime.datetime(2026, 11, 18, 3, 12, 28))
+        self.assertEqual(self.h.sent, [["3381998"], ["3381998"]])
+        self.assertEqual(self.h.seen_data["3381998"]["seen_count"], 3)
+        feed(self.h, ["3381998"], datetime.datetime(2026, 11, 18, 3, 13, 36))
+        self.assertEqual(self.h.sent, [["3381998"], ["3381998"]])
+        self.assertEqual(self.h.seen_data["3381998"]["seen_count"], 3)
+
+    def test_short_relist_stays_silent(self):
+        self.drop_during_jump()
+        self.h._presence_removed_at["3381998"] = time.time() - 5
+        feed(self.h, ["3381998"], datetime.datetime(2026, 11, 18, 3, 12, 28))
+        self.assertEqual(self.h.sent, [["3381998"]])
+
+    def test_target_scan_token_is_released_after_a_gap(self):
+        self.h.note_target_silent("Leg-oh-id")
+        self.drop_during_jump()
+        self.h._presence_removed_at["3381998"] = time.time() - 245
+        feed(self.h, ["3381998"], datetime.datetime(2026, 11, 18, 3, 12, 28))
+        self.assertEqual(self.h.sent, [["3381998"], ["3381998"]])
+
+
 class RenameTimeline(unittest.TestCase):
     """Real: Shadow Amoras (id 619221) was renamed to fadedpanties on 2 Nov at 19:07.
     The journal then shows PVPKill Victim 'fadedpanties' at 19:07:13. The kill must still count."""
@@ -126,6 +171,14 @@ class RenameTimeline(unittest.TestCase):
         h.record_kill("fadedpanties")
         h._apply_kill_tally()
         self.assertEqual(h.seen_data["619221"].get("kills"), 2)
+
+    def test_old_alias_does_not_block_a_new_commander_when_its_owner_is_absent(self):
+        h = fresh_history()
+        add_row(h, "619221", "fadedpanties", aliases=["Shadow Amoras"])
+        self.assertNotIn(ch.name_key("Shadow Amoras"), h._known_name_keys())
+        location.add_instance("619221", state=0, system="Shinrarta Dezhra")
+        location.instance["619221"]["here"] = True
+        self.assertIn(ch.name_key("Shadow Amoras"), h._known_name_keys())
 
     def test_test11_kill_by_old_name_still_finds_the_renamed_commander(self):
         h = fresh_history()

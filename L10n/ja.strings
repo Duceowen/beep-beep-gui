@@ -142,6 +142,19 @@
 
 /* Hide from mouse: {MODE} */
 "Hide from mouse: {MODE}" = "マウス透過: {MODE}";
+"BeepBeep Cooldown" = "BeepBeep Cooldown";
+"FSD cooldown" = "FSD cooldown";
+"BeepBeep Kills" = "BeepBeep Kills";
+"KILL: CMDR {NAME} ({RANK}) - {DETAILS}" = "KILL: CMDR {NAME} ({RANK}) - {DETAILS}";
+"DEATH: CMDR {NAME} ({RANK}) - {DETAILS}" = "DEATH: CMDR {NAME} ({RANK}) - {DETAILS}";
+"Show PvP kills, deaths and scans in Modern Overlay" = "Show PvP kills, deaths and scans in Modern Overlay";
+"BeepBeep WhoIs" = "BeepBeep WhoIs";
+"CMDR {NAME} not known to Bot" = "CMDR {NAME} not known to Bot";
+"CMDR {NAME} @ {KILLS} K / {DEATHS} D{COMBAT}" = "CMDR {NAME} @ {KILLS} K / {DEATHS} D{COMBAT}";
+" <COMBAT LOGGER>" = " <COMBAT LOGGER>";
+"Show interdiction cooldown timer" = "Show interdiction cooldown timer";
+"Show cooldown in Modern Overlay" = "Show cooldown in Modern Overlay";
+"Starts when the interdiction target drops into normal space. Killing them clears it." = "Starts when the interdiction target drops into normal space. Killing them clears it.";
 
 /* Hide help */
 "Hide help" = "ヘルプを隠す";

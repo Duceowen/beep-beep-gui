@@ -36,12 +36,10 @@ HISTORY_POLL_SECONDS = 0.05
 # A jump that never receives FSDJump or SupercruiseEntry must not stage forever.
 PENDING_COMMIT_SECONDS = 5.0
 
-# FSD cooldown after an interdiction. Success (the minigame was lost, or the
-# outgoing interdiction reports Success) is 60 s. Submitting is 10 s.
-# Outgoing Interdiction events do not say whether the target submitted, so
-# Success uses 60 s. See the 1.1.6 notes for that ambiguity.
+# An outgoing interdiction win or loss uses the 60 s FSD cooldown. The journal
+# does not say whether the target submitted. Incoming Interdicted has an
+# explicit Submitted flag, handled by cooldown_timer.seconds_for_event.
 INTERDICTION_SUCCESS_COOLDOWN = 60.0
-INTERDICTION_SUBMIT_COOLDOWN = 10.0
 
 
 class InstanceMachine:

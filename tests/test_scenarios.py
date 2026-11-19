@@ -135,6 +135,11 @@ class Supercruise(unittest.TestCase):
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 3, 1, 28))
         self.assertEqual(self.h.sent, [])
 
+    def test_rebuilding_the_snapshot_refreshes_its_timestamp(self):
+        location.leave_snapshot_at = 0.0
+        self.h.remember_leave_snapshot()
+        self.assertGreater(location.leave_snapshot_at, 0.0)
+
     def test_new_commander_in_supercruise_beeps(self):
         add_row(self.h, "3", "Arrives")
         location.state = 1
@@ -180,6 +185,128 @@ class InterdictionDrop(unittest.TestCase):
         h.drop_supercruise_arrivals()
         self.assertTrue(present("501"))
         self.assertFalse(present("502"))
+
+
+class InterdictionCooldown(unittest.TestCase):
+    def test_win_starts_the_timer_at_the_drop(self):
+        h = fresh_history()
+        add_row(h, "501", "Target")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["501"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        calls = []
+        h.subscribe_cooldown(lambda name, cid, seconds: calls.append((name, cid, seconds)))
+        location.interdiction("Target")
+        location.interdiction_cooldown = 60.0
+        location.interdiction_win = True
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "Target")
+        self.assertEqual(calls[0][1], "501")
+        self.assertEqual(calls[0][2], 60.0)
+        self.assertFalse(location.interdiction_win)
+
+    def test_incoming_submitted_interdiction_uses_the_explicit_ten_seconds(self):
+        h = fresh_history()
+        add_row(h, "502", "Interdictor")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["502"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        calls = []
+        h.subscribe_cooldown(lambda name, cid, seconds: calls.append((name, cid, seconds)))
+        location.interdiction("Interdictor")
+        location.interdiction_cooldown = 10.0
+        location.interdiction_win = False
+        location.interdiction_self = True
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "Interdictor")
+        self.assertEqual(calls[0][2], 10.0)
+        self.assertFalse(location.interdiction_self)
+
+    def test_incoming_fought_interdiction_uses_sixty_seconds(self):
+        h = fresh_history()
+        add_row(h, "502", "Interdictor")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["502"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        calls = []
+        h.subscribe_cooldown(lambda name, cid, seconds: calls.append((name, cid, seconds)))
+        location.interdiction("Interdictor")
+        location.interdiction_cooldown = 60.0
+        location.interdiction_win = False
+        location.interdiction_self = True
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][2], 60.0)
+
+    def test_commander_following_into_supercruise_beeps_once(self):
+        h = fresh_history()
+        add_row(h, "4760318", "Max Falcon10")
+        location.system, location.state = "Sorbago", 0
+        feed(h, ["4760318"], datetime.datetime(2026, 11, 19, 1, 23))
+        h._log_presence_changes()
+        self.assertEqual(h.sent, [["4760318"]])
+
+        # StartJump stages the next listing; SupercruiseEntry commits it.
+        h.note_transition_pending("Supercruise")
+        feed(h, ["4760318"], datetime.datetime(2026, 11, 19, 1, 24))
+        h.remember_leave_snapshot()
+        location.leave_instance()
+        h.note_instance_reset()
+        self.assertEqual(h.sent, [["4760318"], ["4760318"]])
+
+    def test_relist_after_a_real_presence_gap_beeps(self):
+        h = fresh_history()
+        add_row(h, "4760318", "Max Falcon10")
+        location.system, location.state = "Sorbago", 0
+        feed(h, ["4760318"], datetime.datetime(2026, 11, 19, 0, 57))
+        h._log_presence_changes()
+        self.assertEqual(h.sent, [["4760318"]])
+
+        # Drop out of supercruise without leaving them behind.
+        location.set(1, "Sorbago", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        location.leave_snapshot.discard("4760318")
+        h.note_instance_reset()
+        location.set(0, "Sorbago", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        h._log_presence_changes()
+        self.assertFalse(present("4760318"))
+
+        # They reappear two minutes later. A supercruise drop leaves no departure
+        # record, so only the presence-gap marker tracks the real absence.
+        h._presence_removed_at["4760318"] = time.time() - 120
+        h._gone.get("4760318", {}).pop("left_at", None)
+        feed(h, ["4760318"], datetime.datetime(2026, 11, 19, 1, 0))
+        self.assertEqual(h.sent, [["4760318"], ["4760318"]])
+
+    def test_history_absence_reports_a_departed_target(self):
+        h = fresh_history()
+        departed = []
+        h.subscribe_cooldown_left(departed.append)
+        h._history_listed = {"501", "502"}
+        h._track_history_absence([{"CommanderID": 502}])
+        self.assertEqual(departed, ["501"])
+
+    def test_incoming_interdiction_does_not_start_the_timer(self):
+        h = fresh_history()
+        add_row(h, "501", "Target")
+        location.system, location.state = "Shinrarta Dezhra", 1
+        feed(h, ["501"], datetime.datetime(2026, 11, 3, 1, 28))
+        h._log_presence_changes()
+        calls = []
+        h.subscribe_cooldown(lambda name, cid, seconds: calls.append((name, cid, seconds)))
+        location.interdiction("Target")
+        location.interdiction_cooldown = 60.0
+        location.interdiction_win = False
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertEqual(calls, [])
 
 
 class KillsAndEscapes(unittest.TestCase):
@@ -304,11 +431,12 @@ class KillReturnAfterSupercruise(unittest.TestCase):
         location.leave_instance()
         self.h.remember_leave_snapshot()
         self.h.note_instance_reset()
-        self.assertEqual(self.h.sent, [])
+        # Friend followed into supercruise; the killed commander stays quiet.
+        self.assertEqual(self.h.sent, [["2"]])
         self.assertNotIn("1", self.h.machine.announced)
         self.h._gone["1"]["suppress_until"] = time.time() - 1
         feed(self.h, ["1", "2"], datetime.datetime(2026, 11, 15, 4, 24, 2))
-        self.assertEqual(self.h.sent, [["1"]])
+        self.assertEqual(self.h.sent, [["2"], ["1"]])
         self.h.sent.clear()
         feed(self.h, ["1"], datetime.datetime(2026, 11, 15, 4, 25, 0))
         self.assertEqual(self.h.sent, [])
@@ -797,7 +925,27 @@ class DroppedArrivalsStayOut(unittest.TestCase):
         self.assertFalse(present("701"))
         feed(h, ["701"], datetime.datetime(2026, 11, 3, 4, 28, 6))
         self.assertFalse(present("701"))
-        self.assertEqual(h.sent, [])
+        # One beep on the drop; the immediate re-list stays quiet.
+        self.assertEqual(h.sent, [["701"]])
+
+    def test_every_supercruise_contact_beeps_and_overlays_on_drop(self):
+        h = fresh_history()
+        for cid, name in (("701", "One"), ("702", "Two")):
+            add_row(h, cid, name)
+        location.system, location.state = "Shinrarta Dezhra", 1
+        location.set(1, "Shinrarta Dezhra", "SupercruiseEntry")
+        location.leave_instance()
+        h.remember_leave_snapshot()
+        h.note_instance_reset()
+        for cid in ("701", "702"):
+            location.supercruise_arrivals.add(cid)
+        h._presence_saved = {"701", "702"}
+        overlays = []
+        h.subscribe_overlay(lambda entries: overlays.extend(str(e.get("commander_id")) for e in entries))
+        location.set(0, "Shinrarta Dezhra", "SupercruiseExit")
+        h.drop_supercruise_arrivals()
+        self.assertEqual(sorted(cid for group in h.sent for cid in group), ["701", "702"])
+        self.assertEqual(sorted(overlays), ["701", "702"])
 
     def test_update_after_grace_period_shows_and_announces(self):
         h = fresh_history()
@@ -822,10 +970,15 @@ class ArrivalDecision(unittest.TestCase):
         h = fresh_history()
         self.assertTrue(h._decide_new_arrival("1", in_batch=False))
 
-    def test_load_batch_is_quiet(self):
+    def test_load_batch_is_quiet_for_a_saved_commander(self):
         h = fresh_history()
+        add_row(h, "1", "Known")
         self.assertFalse(h._decide_new_arrival("1", in_batch=True))
         self.assertNotIn("1", h._announced_at)
+
+    def test_load_batch_does_not_hide_an_unnamed_commander(self):
+        h = fresh_history()
+        self.assertTrue(h._decide_new_arrival("1", in_batch=True))
 
     def test_recent_announce_is_quiet_until_departed(self):
         h = fresh_history()
@@ -872,6 +1025,7 @@ class RelistRule(unittest.TestCase):
         self.h = fresh_history()
         location.leave_snapshot = {"11"}
         self.now = time.time()
+        location.leave_snapshot_at = self.now
 
     def test_supercruise_relist_of_someone_left_is_silenced(self):
         location.state = 1

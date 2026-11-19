@@ -10,6 +10,12 @@ from beep_beep_config import config
 from commander_history import backup_list_kind, describe_import_plan, history_inst, import_plan_lines, add_alias
 from beep_beep import beep_inst, sound_inst
 import clickthrough
+import cooldown_timer
+from status_flags import on_foot_from_status
+from overlay_announcer import (
+    start_cooldown as start_overlay_cooldown,
+    stop_cooldown as stop_overlay_cooldown,
+)
 from i18n import shown_error, tl
 from lifetime import lifetime
 from logutil import log
@@ -456,6 +462,16 @@ class SeenCommandersGUI:
 
         return container
 
+    def _on_cooldown_toggle(self, enabled):
+        if not enabled:
+            cooldown_timer.stop()
+            stop_overlay_cooldown()
+
+    def _on_cooldown_overlay_toggle(self, enabled):
+        if not enabled:
+            stop_overlay_cooldown()
+        elif config.get_config("cooldown_timer", True) and cooldown_timer.is_active():
+            start_overlay_cooldown()
 
     def open(self, parent):
         self.parent = parent
@@ -704,6 +720,14 @@ class SeenCommandersGUI:
             return
         self._on_foot = value
         self.refresh_clickthrough()
+
+    def set_status_on_foot(self, entry):
+        """Refine on-foot from Status.json (taxi/shuttle and multicrew)."""
+        if not isinstance(entry, dict):
+            return
+        value = on_foot_from_status(entry.get("Flags"), entry.get("Flags2"))
+        if value is not None:
+            self.set_on_foot(value)
 
     def _game_running(self):
         try:
@@ -4134,6 +4158,24 @@ class SeenCommandersGUI:
             frame, row, tl("Announce arrivals in Modern Overlay"),
             tk.BooleanVar(value=config.get_config("overlay_announce", False)),
             attr="overlay_announce",
+        )
+        row = self.add_checkbox(
+            frame, row, tl("Show interdiction cooldown timer"),
+            tk.BooleanVar(value=bool(config.get_config("cooldown_timer", True))),
+            attr="cooldown_timer",
+            callback=self._on_cooldown_toggle,
+        )
+        row = self.add_checkbox(
+            frame, row, tl("Show cooldown in Modern Overlay"),
+            tk.BooleanVar(value=bool(config.get_config("cooldown_overlay", True))),
+            attr="cooldown_overlay",
+            callback=self._on_cooldown_overlay_toggle,
+        )
+        row = self.add_hint(frame, row, tl("Starts when the interdiction target drops into normal space. Killing them clears it."))
+        row = self.add_checkbox(
+            frame, row, tl("Show PvP kills, deaths and scans in Modern Overlay"),
+            tk.BooleanVar(value=bool(config.get_config("pvp_overlay", False))),
+            attr="pvp_overlay",
         )
         row = self.add_hint(frame, row, tl("EDMC Modern Overlay Required."))
         row = self.add_checkbox(

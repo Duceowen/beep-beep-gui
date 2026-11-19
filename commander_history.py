@@ -14,7 +14,6 @@ from i18n import tl
 from session_recorder import SessionRecorder
 from instance_machine import (
     HISTORY_POLL_SECONDS,
-    INTERDICTION_SUBMIT_COOLDOWN,
     INTERDICTION_SUCCESS_COOLDOWN,
     InstanceMachine,
 )
@@ -40,7 +39,10 @@ class Location:
         # Set on supercruise drop-in after a successful interdiction: target name and drop time.
         self.interdiction_drop_target = None
         self.interdiction_drop_ts = None
-        self.interdiction_complete = False
+        # True only for an outgoing interdiction the player won. Drives the cooldown timer.
+        self.interdiction_win = False
+        # True when someone interdicted you; Submitted is explicit on that journal event.
+        self.interdiction_self = False
         self.jump_backup = {}
         self._jump_company = {}
         self._jump_company_pending = False
@@ -312,7 +314,8 @@ _ABSENCE_CREDIT_SECONDS = 120.0
 # A leave-snapshot commander whose Met epoch jumps this far is a return, not a
 # re-list. The game can keep the row listed while the commander leaves and comes
 # back, so the absence tracker never sees a gap. 15 minutes keeps the normal
-# 5-10 minute history refresh quiet; the observed missed return was 32 minutes.
+# 5-10 minute history refresh quiet. Killed or escaped commanders use
+# _KILL_RESET_SUPPRESS_SECONDS instead (see _long_relist_return).
 _RETURN_MET_GAP_SECONDS = 900.0
 _LEAVE_MEMORY_SECONDS = 600.0
 _WING_JOIN_SILENCE_SECONDS = 20.0
@@ -957,7 +960,9 @@ class CommanderHistoryManager:
         self.last_modified_timestamp: datetime.datetime = datetime.datetime.min
         self._gui_listener: Callable[[dict], None] | None = None
         self._sound_listener: Callable[[dict], None] | None = None
-        self._overlay_listener: Callable[[list], None] | None = None        
+        self._overlay_listener: Callable[[list], None] | None = None
+        self._cooldown_listener: Callable[[str, str | None, float], None] | None = None
+        self._cooldown_left_listener: Callable[[str], None] | None = None
         self.worker_thread: threading.Thread | None = None
         self.worker_stop_event = threading.Event()
         self.changed = False
@@ -972,6 +977,9 @@ class CommanderHistoryManager:
         self._session_start: datetime.datetime | None = None
         self._last_jump: datetime.datetime | None = None
         self._presence_saved: set[str] | None = None
+        # Wall time a commander dropped off the instance. A real gap releases the
+        # visit's beep token; short re-lists (the supercruise snapshot window) do not.
+        self._presence_removed_at: dict[str, float] = {}
         self._kills_lock = threading.Lock()
         self._tick = 0
         self._batch_until = 0.0
@@ -1032,6 +1040,10 @@ class CommanderHistoryManager:
         # Leaving for supercruise clears the instance too, so it is not a departure.
         jumping = jumping or location.instance_reset_pending
         for cid in sorted(previous - present):
+            # Remember every real drop, including ones during a jump or on the
+            # leave snapshot. A quick re-add is a stale re-list; a longer absence
+            # is a return and must release the old beep token.
+            self._presence_removed_at[cid] = time.time()
             # Any drop outside a jump counts as leaving, whatever the cause. A quick
             # re-add afterwards is a stale snapshot, not an arrival.
             rec = self._gone.setdefault(cid, {})
@@ -1050,6 +1062,9 @@ class CommanderHistoryManager:
             name = info.get("name", cid) if isinstance(info, dict) else cid
             log.info("Presence %s: %s (id %s)", "added" if cid in present else "removed", name, cid)
         self._presence_saved = present
+        for cid, removed_at in list(self._presence_removed_at.items()):
+            if cid not in present and time.time() - removed_at > _LEAVE_MEMORY_SECONDS:
+                self._presence_removed_at.pop(cid, None)
         self._instance_dirty = True
         try:
             self.recorder.record("presence", {
@@ -1106,12 +1121,16 @@ class CommanderHistoryManager:
         """
         if not isinstance(previous_met, datetime.datetime):
             return False
-        if isinstance(inst, dict) and inst.get("here"):
+        if isinstance(inst, dict) and inst.get("here") and not self._consume_presence_gap(cmdr_id):
             return False
         if cmdr_id not in location.leave_snapshot and not self.machine.suppresses(cmdr_id):
             return False
         gap = (ts - previous_met).total_seconds()
-        if gap < _RETURN_MET_GAP_SECONDS:
+        # A killed or escaped commander respawns quickly, so the same short window
+        # as the kill suppression applies. Everyone else needs the longer gap.
+        killed = (self._gone.get(cmdr_id) or {}).get("removed_at") is not None
+        min_gap = _KILL_RESET_SUPPRESS_SECONDS if killed else _RETURN_MET_GAP_SECONDS
+        if gap < min_gap:
             return False
         location.leave_snapshot.discard(cmdr_id)
         self._rearm_visit(cmdr_id)
@@ -1137,16 +1156,21 @@ class CommanderHistoryManager:
             return self._beep_decision(cmdr_id, False, "sc_entry_list")
         return self._should_announce(cmdr_id, time.monotonic())
 
-    def _is_interdicted_drop_in(self, cmdr_id: str) -> bool:
-        """True for the successful interdiction target, back in normal space within the window."""
-        target = location.interdiction_drop_target
-        ts = location.interdiction_drop_ts
-        if not target or ts is None or location.state != 0:
+    def _consume_presence_gap(self, cmdr_id) -> bool:
+        """Release this visit's beep token after a real absence from the instance.
+
+        The game can drop a commander during a jump without leaving a departure
+        record, so the announcement token would survive and the return would be
+        logged as a refresh. Only a gap past the leave-snapshot window counts;
+        short re-lists keep their token and stay silent.
+        """
+        cid = str(cmdr_id)
+        removed_at = self._presence_removed_at.pop(cid, None)
+        if removed_at is None or time.time() - removed_at < _LEAVE_SNAPSHOT_EXPIRY_SECONDS:
             return False
-        if time.time() - ts > _INTERDICTION_WINDOW_SECONDS:
-            return False
-        info = self.seen_data.get(str(cmdr_id))
-        return isinstance(info, dict) and row_has_name(info, name_key(target))
+        self._rearm_visit(cid)
+        return True
+
     def _should_announce(self, cmdr_id: str, now: float) -> bool:
         """Announce once per instance. A later history refresh is not another arrival.
 
@@ -1160,6 +1184,7 @@ class CommanderHistoryManager:
         if left is not None and now - left < _REANNOUNCE_SECONDS and not rec.get("departed"):
             log.info("Not announcing %s (id %s): left %.0f s ago, inside the re-add window", self._name_for(cmdr_id), cmdr_id, now - left)
             return self._beep_decision(cmdr_id, False, "reannounce_window")
+        self._consume_presence_gap(cmdr_id)
         if str(cmdr_id) in self.machine.announced and not rec.get("departed"):
             return self._beep_decision(cmdr_id, False, "refresh")
         if rec.get("departed"):
@@ -1243,6 +1268,31 @@ class CommanderHistoryManager:
             self._last_journal_event = event
             self._last_journal_ts = timestamp if isinstance(timestamp, str) else None
 
+    def _elapsed_fields(self, cmdr_id) -> dict:
+        """Seconds since the timing events the windows depend on. Logging only; never gates a beep."""
+        out = {}
+        try:
+            now = time.time()
+            cid = str(cmdr_id)
+            if location.jump_ts is not None:
+                out["since_jump"] = round(now - location.jump_ts, 1)
+            if location.last_drop_ts is not None:
+                out["since_drop"] = round(now - location.last_drop_ts, 1)
+            if location.wing_join is not None:
+                out["since_wing_join"] = round(now - location.wing_join, 1)
+            if location.leave_snapshot_at:
+                out["since_snapshot"] = round(now - location.leave_snapshot_at, 1)
+            dropped_at = location.supercruise_dropped.get(cid)
+            if dropped_at is not None:
+                out["since_sc_drop_cmdr"] = round(now - dropped_at, 1)
+            removed_at = (self._gone.get(cid) or {}).get("removed_at")
+            if removed_at is not None:
+                out["since_removed"] = round(now - removed_at, 1)
+            out["in_snapshot"] = cid in location.leave_snapshot
+        except Exception:
+            pass
+        return out
+
     def _beep_decision(self, cmdr_id, beep: bool, reason: str) -> bool:
         """Log one greppable announce/skip line and return whether to beep."""
         log.info(
@@ -1266,6 +1316,7 @@ class CommanderHistoryManager:
                 sound = info.get("sound") if isinstance(info, dict) else None
                 if isinstance(sound, str) and sound:
                     fields["sound"] = sound
+            fields.update(self._elapsed_fields(cmdr_id))
             self.recorder.record("decision", fields)
         except Exception:
             pass
@@ -1699,13 +1750,22 @@ class CommanderHistoryManager:
             fresh = self.machine.commit(set(location.leave_snapshot))
             self._emit_fresh(fresh)
             return
+        followed = []
         if hyperspace:
             # The system you left is not a leave-snapshot filter. Only people
             # who were already with you stay out of the destination beep.
             departure = set(self.machine.present_before_jump)
         else:
             departure = set(location.leave_snapshot)
+            # A commander who was in your normal-space instance and is re-listed
+            # on entering supercruise made the jump with you: beep once on entry.
+            followed = [
+                cid for cid in self.machine.staged
+                if cid in self.machine.present_before_jump
+            ]
         fresh = self.machine.commit(departure, preserve_announced=True)
+        if followed:
+            fresh = list(fresh) + [cid for cid in followed if cid not in fresh]
         if final:
             self.machine.jump_open = False
         self._emit_fresh(fresh)
@@ -1962,6 +2022,8 @@ class CommanderHistoryManager:
             return
         for cid in previous - listed:
             self._absent_since.setdefault(cid, moment)
+            if self._cooldown_left_listener:
+                self._cooldown_left_listener(cid)
         for cid in listed:
             since = self._absent_since.pop(cid, None)
             if since is None:
@@ -2092,7 +2154,13 @@ class CommanderHistoryManager:
     
     def subscribe_overlay(self, cb: Callable[[list], None]):
         self._overlay_listener = cb
-    
+
+    def subscribe_cooldown(self, cb: Callable[[str, str | None, float], None]):
+        self._cooldown_listener = cb
+
+    def subscribe_cooldown_left(self, cb: Callable[[str], None]):
+        self._cooldown_left_listener = cb
+
     def load_seen_commanders(self):
         if not os.path.isfile(self.json_file_path) or os.path.getsize(self.json_file_path) == 0:
             self.seen_data.clear()
@@ -2793,15 +2861,24 @@ class CommanderHistoryManager:
                     cmdr_id,
                 )
             elif self._is_relist_silenced(cmdr_id, now_ts):
-                # Supercruise re-lists the commanders you just left. They are not new arrivals.
-                if self.machine.suppresses(cmdr_id):
-                    location.forget(cmdr_id)
-                self._beep_decision(cmdr_id, False, "relist_silence")
-                self._remember_sighting(info, existing)
-                self.seen_data[cmdr_id] = info
-                self.last_interactions[cmdr_id] = current_flags
-                changed_entries.append(info)
-                continue
+                if self._consume_presence_gap(cmdr_id):
+                    # They left the instance and came back after a real gap.
+                    # Fall through so this is decided as a fresh arrival.
+                    log.info(
+                        "Presence-gap return for %s (id %s); announcing",
+                        info.get("name") or cmdr_id,
+                        cmdr_id,
+                    )
+                else:
+                    # Supercruise re-lists the commanders you just left. They are not new arrivals.
+                    if self.machine.suppresses(cmdr_id):
+                        location.forget(cmdr_id)
+                    self._beep_decision(cmdr_id, False, "relist_silence")
+                    self._remember_sighting(info, existing)
+                    self.seen_data[cmdr_id] = info
+                    self.last_interactions[cmdr_id] = current_flags
+                    changed_entries.append(info)
+                    continue
     
             beep_this_commander = True            
 
@@ -2941,11 +3018,15 @@ class CommanderHistoryManager:
                     if existing is not None:
                         info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                 elif was_here:
-                    # The game refreshes the record of everyone still in the instance.
-                    # A short refresh is not a departure: they stay here, silently, until a
-                    # jump, supercruise leave, death/load clear, kill or escape removes them.
-                    # Quiet timeout only fades Now display; it does not clear "here".
-                    beep_this_commander = self._beep_decision(cmdr_id, False, "refresh")
+                    if self._consume_presence_gap(cmdr_id):
+                        # They dropped off the instance long enough to be a return.
+                        beep_this_commander = self._should_announce(cmdr_id, time.monotonic())
+                    else:
+                        # The game refreshes the record of everyone still in the instance.
+                        # A short refresh is not a departure: they stay here, silently, until a
+                        # jump, supercruise leave, death/load clear, kill or escape removes them.
+                        # Quiet timeout only fades Now display; it does not clear "here".
+                        beep_this_commander = self._beep_decision(cmdr_id, False, "refresh")
                     if existing is not None:
                         info["seen_count"] = _safe_entry_int(existing, "seen_count", 1)
                 else:
@@ -3180,16 +3261,21 @@ class CommanderHistoryManager:
         }
 
     def _known_name_keys(self) -> set[str]:
-        """Every saved name, current or former. A scan or chat line must not
-        give one of these names to a different, unknown commander."""
+        """Names that must not be given to a different, unknown commander.
+
+        A current name always counts. A former name only counts while its owner
+        is in this instance: an old alias must not stop a genuinely new
+        commander from being named by a scan or chat line.
+        """
         keys = set()
-        for info in self.seen_data.values():
+        for cid, info in self.seen_data.items():
             if not isinstance(info, dict):
                 continue
             names = [info.get("name")]
-            aliases = info.get("aliases")
-            if isinstance(aliases, list):
-                names.extend(aliases)
+            if self.is_present(cid):
+                aliases = info.get("aliases")
+                if isinstance(aliases, list):
+                    names.extend(aliases)
             for name in names:
                 # Hidden characters are not a real saved name. They must not block
                 # Update Spelling or a journal name for someone else.
@@ -3424,6 +3510,7 @@ class CommanderHistoryManager:
         location.leave_snapshot = (
             kept | recent
         ) - set(location.supercruise_arrivals) - location.kill_departed
+        location.leave_snapshot_at = time.time()
 
     def forget_instance(self) -> None:
         """Death: the instance you were in is gone. Its people stay in the snapshot, so a
@@ -3485,6 +3572,7 @@ class CommanderHistoryManager:
                 location.system = current_system
                 location.state = 1
                 location.leave_snapshot = set(self._visit)
+                location.leave_snapshot_at = time.time()
                 location.instance_reset_pending = True
                 self._resume_supercruise = True
                 log.info("Restored %d commanders from the instance, in supercruise", len(self._visit))
@@ -3538,6 +3626,17 @@ class CommanderHistoryManager:
                 sorted(self._name_for(cid) for cid in dropped),
                 sorted(self._name_for(cid) for cid in kept),
             )
+        if dropped:
+            # These commanders came out of supercruise with you. Announce each
+            # once on the drop, before clearing their supercruise-only presence.
+            self._emit_fresh(sorted(dropped))
+            if self._overlay_listener:
+                infos = [
+                    self.seen_data[cid] for cid in sorted(dropped)
+                    if isinstance(self.seen_data.get(cid), dict)
+                ]
+                if infos:
+                    self._overlay_listener(infos)
         for cid in dropped:
             location.forget(cid)
         now = time.time()
@@ -3566,6 +3665,10 @@ class CommanderHistoryManager:
         if target and location.state != 1:
             seconds = getattr(location, "interdiction_cooldown", None) or INTERDICTION_SUCCESS_COOLDOWN
             self.announce_evidence("interdiction", target, cooldown=seconds)
+            if (location.interdiction_win or location.interdiction_self) and self._cooldown_listener:
+                self._cooldown_listener(target, self.resolve_commander(target), seconds)
+            location.interdiction_win = False
+            location.interdiction_self = False
         # The drop-out has been handled. The leave snapshot still silences
         # people you left behind; everyone else is an ordinary update.
         location.instance_reset_pending = False
